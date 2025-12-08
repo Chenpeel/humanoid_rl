@@ -1,0 +1,41 @@
+[project]
+name = "jiyuan_rl"
+version = "0.1.0"
+description = "JAX/MJX Reinforcement Learning Training Framework"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "jax==0.8.1",
+    "jaxlib==0.8.1",
+    "jax-cuda12-plugin==0.8.1",
+    "jax-cuda12-pjrt==0.8.1",
+    "mujoco>=3.0.0",
+    "mujoco-mjx",
+    "flax>=0.8.0",
+    "optax>=0.1.7",
+    "orbax-checkpoint>=0.4.0",
+    "tensorboardX>=2.6.0",
+    "rich>=13.0.0",
+    "numpy>=2.0.0,<2.4.0",
+    "pyyaml>=6.0",
+    "matplotlib>=3.7.0",
+    "mediapy>=1.1.0",
+    "urdf2mjcf>=0.3.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["jiyuan_rl"]
+package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+jiyuan_rl = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
