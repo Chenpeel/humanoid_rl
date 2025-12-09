@@ -28,7 +28,7 @@ orbax-checkpoint>=0.4.0
 tensorboardX>=2.6.0
 
 # 工具库
-numpy>=1.24.0,<2.0.0
+
 pyyaml>=6.0
 matplotlib>=3.7.0
 mediapy>=1.1.0
@@ -39,3 +39,5 @@ pytest-cov>=4.1.0
 black>=23.0.0
 isort>=5.12.0
 mypy>=1.5.0
+
+urdf2mjcf>=0.2.0
