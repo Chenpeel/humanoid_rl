@@ -151,11 +151,18 @@ def create_ppo_optimizer_cosine(
         Optax优化器
     """
     # 使用余弦退火调度
+    # 确保warmup_steps不超过total_steps
+    if warmup_steps >= total_steps:
+        warmup_steps = max(1, total_steps // 2)
+
+    # 确保decay_steps为正数
+    decay_steps = max(1, total_steps - warmup_steps)
+
     schedule = optax.warmup_cosine_decay_schedule(
         init_value=0.0,
         peak_value=learning_rate,
         warmup_steps=warmup_steps,
-        decay_steps=total_steps - warmup_steps,
+        decay_steps=decay_steps,
         end_value=learning_rate * final_lr_fraction,
     )
 
