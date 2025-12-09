@@ -38,10 +38,6 @@ os.environ["XLA_FLAGS"] = (
     os.environ.get("XLA_FLAGS", "")
     + " --xla_gpu_force_compilation_parallelism=32 "
     + "--xla_gpu_autotune_level=5 "  # 最高级别的自动调优
-    + "--xla_gpu_enable_cuda_graphs=true "  # 启用CUDA图优化
-    + "--xla_gpu_enable_latency_hiding_scheduler=true "  # 启用延迟隐藏调度
-    + "--xla_gpu_enable_async_all_reduce=true "  # 启用异步all-reduce
-    + "--xla_gpu_enable_pipelined_collectives=true"  # 启用流水线集体操作
 )
 
 
@@ -194,14 +190,14 @@ def main():
         final_lr_fraction=0.02,  # 极低的最终学习率，确保稳定收敛
     )
 
-    console.print(f"✓ 优化器创建完成 [bold green](高显存利用率优化版)[/bold green]")
+    console.print(f"✓ 优化器创建完成")
     console.print(f"  调度类型: 余弦退火 + Warmup")
-    console.print(f"  峰值学习率: 5e-4 [dim](增大以加速收敛)[/dim]")
+    console.print(f"  峰值学习率: 5e-4 ")
     console.print(
         f"  预热步数: {warmup_steps:,} ({warmup_steps / total_updates * 100:.1f}%)"
     )
     console.print(f"  总更新次数: {total_updates:,}")
-    console.print(f"  最终学习率: {5e-4 * 0.05:.2e} [dim](更低的最终学习率)[/dim]")
+    console.print(f"  最终学习率: {5e-4 * 0.05:.2e}")
     console.print(f"  梯度裁剪: {config.max_grad_norm}")
 
     # ==================== 创建训练状态 ====================
