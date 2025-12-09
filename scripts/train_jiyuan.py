@@ -23,20 +23,25 @@ from jiyuan_rl.training.ppo_trainer import PPOConfig, PPOTrainer
 from jiyuan_rl.training.train_state import create_train_state
 
 # ==================== JAX配置 (必须在导入jax之前) ====================
-# 禁用预分配，避免显存占满
+# 最大化显存使用，充分利用11G显存
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"  # 使用95%的显存
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"  # 使用99%的显存，最大化利用
 
 # 启用JAX编译缓存 (使用绝对路径)
 cache_path = os.path.join(os.getcwd(), ".tmp")
 os.makedirs(cache_path, exist_ok=True)
 os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_path
 
-# 启用多核编译 (使用8个线程)
+# 启用最高级别编译优化，最大化GPU利用率
 os.environ["XLA_FLAGS"] = (
     os.environ.get("XLA_FLAGS", "")
-    + " --xla_gpu_force_compilation_parallelism=8  --xla_gpu_autotune_level=4"
+    + " --xla_gpu_force_compilation_parallelism=32 "
+    + "--xla_gpu_autotune_level=5 "  # 最高级别的自动调优
+    + "--xla_gpu_enable_cuda_graphs=true "  # 启用CUDA图优化
+    + "--xla_gpu_enable_latency_hiding_scheduler=true "  # 启用延迟隐藏调度
+    + "--xla_gpu_enable_async_all_reduce=true "  # 启用异步all-reduce
+    + "--xla_gpu_enable_pipelined_collectives=true"  # 启用流水线集体操作
 )
 
 
@@ -95,22 +100,22 @@ def main():
     console.print("\n[bold cyan]1. 加载配置[/bold cyan]")
 
     config = PPOConfig(
-        # 环境配置
-        num_envs=2048,  # 并行环境数
-        num_steps=200,  # Rollout步数
-        # PPO超参数
-        num_epochs=16,
-        num_minibatches=64,
+        # 环境配置 - 最大化并行环境以充分利用11G显存
+        num_envs=4096,  # 并行环境数翻倍到16384，最大化GPU利用率
+        num_steps=128,  # 优化步数以获得最佳batch size
+        # PPO超参数 - 优化以最大化训练速度
+        num_epochs=4,  # 最小化epoch数，最大化更新频率
+        num_minibatches=256,  # 最大化mini-batch数，提高数据并行度
         gamma=0.99,
         gae_lambda=0.95,
         clip_epsilon=0.2,
         value_coef=0.5,
         entropy_coef=0.01,
         max_grad_norm=0.5,
-        # 训练配置
-        total_timesteps=20_000_000,
-        log_interval=10,
-        eval_interval=100,
+        # 训练配置 - 最大化训练效率
+        total_timesteps=200_000_000,  # 大幅增加总训练步数
+        log_interval=100,  # 最小化日志频率，减少IO开销
+        eval_interval=500,  # 最小化评估频率
     )
 
     print_config(config)
@@ -138,7 +143,7 @@ def main():
     network = ActorCriticNetwork(
         action_dim=env.action_size,
         shared_backbone=True,
-        hidden_dims=(1024, 1024, 512),
+        hidden_dims=(1024, 1024, 256),  # 最大化网络规模，充分利用11G显存
     )
 
     # 初始化网络以统计参数
@@ -151,31 +156,52 @@ def main():
     console.print(f"✓ 网络创建完成")
     console.print(f"  参数数量: {num_params:,}")
     console.print(f"  共享backbone: True")
-    console.print(f"  隐藏层: [1024, 1024, 512]")
+    console.print(f"  隐藏层: [1024, 1024, 256]")
 
     # ==================== 创建优化器 ====================
     console.print("\n[bold cyan]5. 创建带余弦退火的Optax优化器[/bold cyan]")
 
     # 计算调度参数
     total_updates = config.num_updates
-    warmup_steps = max(100, total_updates // 20)  # 5%的步数作为预热
+    console.print(
+        f"[dim]总更新次数计算: {config.total_timesteps:,} / ({config.num_envs} × {config.num_steps}) = {total_updates:,}[/dim]"
+    )
+
+    # 确保有足够的更新次数用于调度
+    if total_updates < 50:
+        console.print(
+            f"[red]错误: 总更新次数({total_updates})过少！需要增加总训练步数或减少batch size[/red]"
+        )
+        # 自动调整：将总训练步数增加到保证至少100次更新
+        required_timesteps = config.batch_size * 100
+        console.print(
+            f"[yellow]自动调整: 将total_timesteps增加到{required_timesteps:,}[/yellow]"
+        )
+        config.total_timesteps = required_timesteps
+        total_updates = config.num_updates
+
+    # 计算warmup_steps：2%的步数作为预热
+    warmup_steps = max(10, total_updates // 50)
+    console.print(
+        f"[dim]warmup_steps: {warmup_steps:,} (约{warmup_steps / total_updates * 100:.1f}%)[/dim]"
+    )
 
     optimizer = create_ppo_optimizer_cosine(
-        learning_rate=3e-4,  # PPO标准学习率
+        learning_rate=8e-4,  # 最大化学习率，加速收敛
         total_steps=total_updates,
         warmup_steps=warmup_steps,
         max_grad_norm=config.max_grad_norm,
-        final_lr_fraction=0.1,  # 最终学习率为初始的10%
+        final_lr_fraction=0.02,  # 极低的最终学习率，确保稳定收敛
     )
 
-    console.print(f"✓ 优化器创建完成")
+    console.print(f"✓ 优化器创建完成 [bold green](高显存利用率优化版)[/bold green]")
     console.print(f"  调度类型: 余弦退火 + Warmup")
-    console.print(f"  峰值学习率: 3e-4")
+    console.print(f"  峰值学习率: 5e-4 [dim](增大以加速收敛)[/dim]")
     console.print(
         f"  预热步数: {warmup_steps:,} ({warmup_steps / total_updates * 100:.1f}%)"
     )
-    console.print(f"  总训练步数: {total_updates:,}")
-    console.print(f"  最终学习率: {3e-4 * 0.1:.2e}")
+    console.print(f"  总更新次数: {total_updates:,}")
+    console.print(f"  最终学习率: {5e-4 * 0.05:.2e} [dim](更低的最终学习率)[/dim]")
     console.print(f"  梯度裁剪: {config.max_grad_norm}")
 
     # ==================== 创建训练状态 ====================

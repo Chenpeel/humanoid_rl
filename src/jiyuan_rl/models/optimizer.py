@@ -155,8 +155,12 @@ def create_ppo_optimizer_cosine(
     if warmup_steps >= total_steps:
         warmup_steps = max(1, total_steps // 2)
 
-    # 确保decay_steps为正数
-    decay_steps = max(1, total_steps - warmup_steps)
+    # 确保decay_steps为正数且大于0
+    decay_steps = total_steps - warmup_steps
+    if decay_steps <= 0:
+        # 如果decay_steps为0或负数，调整warmup_steps
+        warmup_steps = max(1, total_steps - 1)
+        decay_steps = total_steps - warmup_steps
 
     schedule = optax.warmup_cosine_decay_schedule(
         init_value=0.0,
