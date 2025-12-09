@@ -17,7 +17,7 @@ from rich.panel import Panel
 
 from jiyuan_rl.envs.jiyuan_mjx_env import JiyuanMJXEnv, create_jiyuan_env
 from jiyuan_rl.models.networks import ActorCriticNetwork, count_parameters
-from jiyuan_rl.models.optimizer import create_ppo_optimizer
+from jiyuan_rl.models.optimizer import create_ppo_optimizer_cosine
 from jiyuan_rl.training.logger import Logger, MetricsLogger
 from jiyuan_rl.training.ppo_trainer import PPOConfig, PPOTrainer
 from jiyuan_rl.training.train_state import create_train_state
@@ -35,8 +35,8 @@ os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_path
 
 # 启用多核编译 (使用8个线程)
 os.environ["XLA_FLAGS"] = (
-    os.environ.get("XLA_FLAGS", "") +
-    " --xla_gpu_force_compilation_parallelism=8  --xla_gpu_autotune_level=4"
+    os.environ.get("XLA_FLAGS", "")
+    + " --xla_gpu_force_compilation_parallelism=8  --xla_gpu_autotune_level=4"
 )
 
 
@@ -96,7 +96,7 @@ def main():
 
     config = PPOConfig(
         # 环境配置
-        num_envs=1024,  # 并行环境数
+        num_envs=2048,  # 并行环境数
         num_steps=200,  # Rollout步数
         # PPO超参数
         num_epochs=16,
@@ -108,7 +108,7 @@ def main():
         entropy_coef=0.01,
         max_grad_norm=0.5,
         # 训练配置
-        total_timesteps=10_000_000,
+        total_timesteps=20_000_000,
         log_interval=10,
         eval_interval=100,
     )
@@ -138,7 +138,7 @@ def main():
     network = ActorCriticNetwork(
         action_dim=env.action_size,
         shared_backbone=True,
-        hidden_dims=(512, 512),
+        hidden_dims=(1024, 1024, 512),
     )
 
     # 初始化网络以统计参数
@@ -151,19 +151,31 @@ def main():
     console.print(f"✓ 网络创建完成")
     console.print(f"  参数数量: {num_params:,}")
     console.print(f"  共享backbone: True")
-    console.print(f"  隐藏层: [256, 256]")
+    console.print(f"  隐藏层: [1024, 1024, 512]")
 
     # ==================== 创建优化器 ====================
-    console.print("\n[bold cyan]5. 创建Optax优化器[/bold cyan]")
+    console.print("\n[bold cyan]5. 创建带余弦退火的Optax优化器[/bold cyan]")
 
-    optimizer = create_ppo_optimizer(
-        learning_rate=1e-5,
+    # 计算调度参数
+    total_updates = config.num_updates
+    warmup_steps = max(100, total_updates // 20)  # 5%的步数作为预热
+
+    optimizer = create_ppo_optimizer_cosine(
+        learning_rate=3e-4,  # PPO标准学习率
+        total_steps=total_updates,
+        warmup_steps=warmup_steps,
         max_grad_norm=config.max_grad_norm,
+        final_lr_fraction=0.1,  # 最终学习率为初始的10%
     )
 
     console.print(f"✓ 优化器创建完成")
-    console.print(f"  类型: Adam")
-    console.print(f"  学习率: 1e-5")
+    console.print(f"  调度类型: 余弦退火 + Warmup")
+    console.print(f"  峰值学习率: 3e-4")
+    console.print(
+        f"  预热步数: {warmup_steps:,} ({warmup_steps / total_updates * 100:.1f}%)"
+    )
+    console.print(f"  总训练步数: {total_updates:,}")
+    console.print(f"  最终学习率: {3e-4 * 0.1:.2e}")
     console.print(f"  梯度裁剪: {config.max_grad_norm}")
 
     # ==================== 创建训练状态 ====================
@@ -245,8 +257,19 @@ def main():
             # 从第二次更新开始循环 (因为第一次已经作为编译预热运行了)
             for update in range(1, config.num_updates):
                 # 执行训练步
-                train_state, env_state, info = train_step_jit(
-                    train_state, env_state)
+                train_state, env_state, info = train_step_jit(train_state, env_state)
+
+                # 计算当前学习率（近似值）
+                current_step = update
+                if current_step < warmup_steps:
+                    current_lr = 3e-4 * (current_step / warmup_steps)
+                else:
+                    progress = (current_step - warmup_steps) / (
+                        total_updates - warmup_steps
+                    )
+                    current_lr = 0.5 * 3e-4 * (1 + jp.cos(jp.pi * progress))
+
+                info["learning_rate"] = float(current_lr)
 
                 # 记录指标
                 metrics_logger.log_dict(info)
