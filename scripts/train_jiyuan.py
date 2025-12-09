@@ -2,37 +2,42 @@
 机器人PPO训练主脚本
 """
 
+import os
+import sys
+import time
+import warnings
+from datetime import datetime
+from pathlib import Path
+
+import jax
+import jax.numpy as jp
+from rich import box
+from rich.console import Console
+from rich.panel import Panel
+
 from jiyuan_rl.envs.jiyuan_mjx_env import JiyuanMJXEnv, create_jiyuan_env
 from jiyuan_rl.models.networks import ActorCriticNetwork, count_parameters
 from jiyuan_rl.models.optimizer import create_ppo_optimizer
-from jiyuan_rl.training.train_state import create_train_state
-from jiyuan_rl.training.ppo_trainer import PPOTrainer, PPOConfig
 from jiyuan_rl.training.logger import Logger, MetricsLogger
-from datetime import datetime
-import warnings
-import time
-from rich import box
-from rich.panel import Panel
-from rich.console import Console
-import jax.numpy as jp
-import jax
-import os
-import sys
-from pathlib import Path
+from jiyuan_rl.training.ppo_trainer import PPOConfig, PPOTrainer
+from jiyuan_rl.training.train_state import create_train_state
 
 # ==================== JAX配置 (必须在导入jax之前) ====================
 # 禁用预分配，避免显存占满
-os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
-os.environ['XLA_PYTHON_CLIENT_ALLOCATOR'] = 'platform'
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"  # 使用95%的显存
 
 # 启用JAX编译缓存 (使用绝对路径)
-cache_path = os.path.join(os.getcwd(), '.tmp')
+cache_path = os.path.join(os.getcwd(), ".tmp")
 os.makedirs(cache_path, exist_ok=True)
-os.environ['JAX_COMPILATION_CACHE_DIR'] = cache_path
+os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_path
 
 # 启用多核编译 (使用8个线程)
-os.environ['XLA_FLAGS'] = os.environ.get(
-    'XLA_FLAGS', '') + ' --xla_gpu_force_compilation_parallelism=8'
+os.environ["XLA_FLAGS"] = (
+    os.environ.get("XLA_FLAGS", "") +
+    " --xla_gpu_force_compilation_parallelism=8  --xla_gpu_autotune_level=4"
+)
 
 
 warnings.filterwarnings("ignore", category=Warning)
@@ -79,30 +84,29 @@ def print_config(config: PPOConfig):
 
 def main():
     """主训练函数"""
-    console.print(Panel.fit(
-        "[bold green]机器人 PPO 训练[/bold green]\n"
-        "[dim]JAX + MJX + Flax实现[/dim]",
-        border_style="green"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold green]机器人 PPO 训练[/bold green]\n[dim]JAX + MJX + Flax实现[/dim]",
+            border_style="green",
+        )
+    )
 
     # ==================== 配置 ====================
     console.print("\n[bold cyan]1. 加载配置[/bold cyan]")
 
     config = PPOConfig(
         # 环境配置
-        num_envs=2048,  # 并行环境数
-        num_steps=100,  # Rollout步数
-
+        num_envs=1024,  # 并行环境数
+        num_steps=200,  # Rollout步数
         # PPO超参数
-        num_epochs=4,
-        num_minibatches=8,
+        num_epochs=16,
+        num_minibatches=64,
         gamma=0.99,
         gae_lambda=0.95,
         clip_epsilon=0.2,
         value_coef=0.5,
         entropy_coef=0.01,
         max_grad_norm=0.5,
-
         # 训练配置
         total_timesteps=10_000_000,
         log_interval=10,
@@ -134,7 +138,7 @@ def main():
     network = ActorCriticNetwork(
         action_dim=env.action_size,
         shared_backbone=True,
-        hidden_dims=(256, 256),
+        hidden_dims=(512, 512),
     )
 
     # 初始化网络以统计参数
@@ -227,8 +231,7 @@ def main():
     metrics_logger = MetricsLogger()
 
     progress = logger.create_progress_bar(
-        total=config.num_updates,
-        description="PPO训练"
+        total=config.num_updates, description="PPO训练"
     )
 
     try:
@@ -254,7 +257,7 @@ def main():
                 # 定期日志
                 if (update + 1) % config.log_interval == 0:
                     avg_metrics = metrics_logger.get_averages()
-                    avg_metrics['steps_since_last_log'] = config.log_interval
+                    avg_metrics["steps_since_last_log"] = config.log_interval
 
                     # TensorBoard日志
                     logger.log_scalars(
@@ -279,21 +282,16 @@ def main():
             "✓ 训练完成！\n"
             f"总步数: {train_state.step}\n"
             f"总环境步数: {train_state.env_steps:,}",
-            style="green"
+            style="green",
         )
 
     except KeyboardInterrupt:
-        logger.print_summary(
-            "训练被用户中断",
-            style="yellow"
-        )
+        logger.print_summary("训练被用户中断", style="yellow")
 
     except Exception as e:
-        logger.print_summary(
-            f"训练出错: {e}",
-            style="red"
-        )
+        logger.print_summary(f"训练出错: {e}", style="red")
         import traceback
+
         console.print(traceback.format_exc())
 
     finally:

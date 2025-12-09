@@ -2,22 +2,23 @@
 机器人MJX环境实现
 """
 
+from pathlib import Path
+from typing import Any, Dict
+
 import jax
 import jax.numpy as jp
-from typing import Any, Dict
-from .mjx_base_env import MJXBaseEnv, EnvState
-from mujoco import mjx
 import mujoco
 from etils import epath
-from pathlib import Path
+from mujoco import mjx
 from rich.console import Console
+
+from .mjx_base_env import EnvState, MJXBaseEnv
 
 console = Console()
 
 
 class JiyuanMJXEnv(MJXBaseEnv):
     """机器人手柄控制环境
-
     任务：跟踪手柄命令（线速度x/y和角速度yaw）
     观测：机器人关节位置、速度、IMU数据等
     动作：12个关节的位置控制目标
@@ -62,11 +63,11 @@ class JiyuanMJXEnv(MJXBaseEnv):
         # 奖励权重（默认值）
         if reward_weights is None:
             reward_weights = {
-                'tracking_lin_vel': 1.0,
-                'tracking_ang_vel': 0.5,
-                'alive': 0.1,
-                'action_rate': -0.01,
-                'torques': -0.0001,
+                "tracking_lin_vel": 1.0,
+                "tracking_ang_vel": 0.5,
+                "alive": 0.1,
+                "action_rate": -0.01,
+                "torques": -0.0001,
             }
         self.reward_weights = reward_weights
 
@@ -81,7 +82,8 @@ class JiyuanMJXEnv(MJXBaseEnv):
             console.print(f"  观测维度: {self.observation_size}")
             console.print(f"  动作维度: {self.action_size}")
             console.print(
-                f"  命令范围: x={cmd_x_range}, y={cmd_y_range}, yaw={cmd_yaw_range}")
+                f"  命令范围: x={cmd_x_range}, y={cmd_y_range}, yaw={cmd_yaw_range}"
+            )
 
     def _load_mujoco_model(self, xml_path: Path) -> mujoco.MjModel:
         """加载MuJoCo模型（支持Open_Duck_Playground的资源加载）"""
@@ -89,6 +91,7 @@ class JiyuanMJXEnv(MJXBaseEnv):
         try:
             # 如果在Open_Duck_Playground目录下
             from playground.open_duck_mini_v2 import base
+
             assets = base.get_assets()
 
             # 使用from_xml_string加载（支持assets字典）
@@ -107,8 +110,7 @@ class JiyuanMJXEnv(MJXBaseEnv):
 
         # 找到IMU传感器
         sensor_names = [
-            mujoco.mj_id2name(
-                model, mujoco.mjtObj.mjOBJ_SENSOR, i) or f"sensor_{i}"
+            mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_SENSOR, i) or f"sensor_{i}"
             for i in range(model.nsensor)
         ]
 
@@ -118,11 +120,11 @@ class JiyuanMJXEnv(MJXBaseEnv):
         self.velocimeter_idx = None
 
         for i, name in enumerate(sensor_names):
-            if 'gyro' in name.lower():
+            if "gyro" in name.lower():
                 self.gyro_idx = i
-            elif 'accelerometer' in name.lower():
+            elif "accelerometer" in name.lower():
                 self.accelerometer_idx = i
-            elif 'velocimeter' in name.lower() or 'linvel' in name.lower():
+            elif "velocimeter" in name.lower() or "linvel" in name.lower():
                 self.velocimeter_idx = i
 
         # 找到浮动基座的地址（freejoint）
@@ -155,19 +157,21 @@ class JiyuanMJXEnv(MJXBaseEnv):
                 self.actuator_qpos_indices.append(qpos_addr)
                 self.actuator_qvel_indices.append(dof_addr)
 
-        self.actuator_qpos_indices = jp.array(self.actuator_qpos_indices)
-        self.actuator_qvel_indices = jp.array(self.actuator_qvel_indices)
+        self.actuator_qpos_indices = self.actuator_qpos_indices  # 保持为Python列表
+        self.actuator_qvel_indices = self.actuator_qvel_indices  # 保持为Python列表
 
         # 默认关节位置（从"home" keyframe获取，如果存在）
         self.default_qpos = jp.array(model.qpos0)
 
         # 尝试获取home keyframe
         try:
-            home_key_id = mujoco.mj_name2id(
-                model, mujoco.mjtObj.mjOBJ_KEY, "home")
+            home_key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
                 self.default_qpos = jp.array(
-                    model.key_qpos[home_key_id * model.nq:(home_key_id + 1) * model.nq])
+                    model.key_qpos[
+                        home_key_id * model.nq : (home_key_id + 1) * model.nq
+                    ]
+                )
         except:
             pass  # 没有home keyframe，使用qpos0
 
@@ -203,27 +207,34 @@ class JiyuanMJXEnv(MJXBaseEnv):
 
             # 随机化xy位置: ±0.05m
             dxy = jax.random.uniform(key1, (2,), minval=-0.05, maxval=0.05)
-            base_xy = qpos[self.floating_base_qpos_addr:self.floating_base_qpos_addr+2]
-            qpos = qpos.at[self.floating_base_qpos_addr:
-                           self.floating_base_qpos_addr+2].set(base_xy + dxy)
+            base_xy = qpos[
+                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
+            ]
+            qpos = qpos.at[
+                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
+            ].set(base_xy + dxy)
 
             # 随机化yaw角度: ±π
             yaw = jax.random.uniform(key2, minval=-jp.pi, maxval=jp.pi)
             # 将yaw转换为quaternion (qw, qx, qy, qz)
-            quat = jp.array([jp.cos(yaw/2), 0.0, 0.0, jp.sin(yaw/2)])
-            qpos = qpos.at[self.floating_base_qpos_addr +
-                           3:self.floating_base_qpos_addr+7].set(quat)
+            quat = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
+            # 归一化四元数
+            quat = quat / jp.linalg.norm(quat)
+            # freejoint的四元数从索引3开始 (位置: 0-2, 四元数: 3-6)
+            qpos = qpos.at[
+                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+            ].set(quat)
 
         # 随机化关节位置: ±0.1 rad
         rng, key4 = jax.random.split(rng)
         if self.nu > 0:
-            joint_noise = jax.random.uniform(
-                key4, (self.nu,), minval=-0.1, maxval=0.1)
+            joint_noise = jax.random.uniform(key4, (self.nu,), minval=-0.1, maxval=0.1)
 
             # 使用actuator索引更新关节位置
-            joint_pos = qpos[self.actuator_qpos_indices]
-            qpos = qpos.at[self.actuator_qpos_indices].set(
-                joint_pos + joint_noise)
+            # 将Python列表转换为JAX数组进行索引
+            indices = jp.array(self.actuator_qpos_indices)
+            joint_pos = qpos[indices]
+            qpos = qpos.at[indices].set(joint_pos + joint_noise)
 
         # 设置qvel为0
         qvel = jp.zeros(self.nv)
@@ -243,37 +254,48 @@ class JiyuanMJXEnv(MJXBaseEnv):
 
         # 1. 浮动基座姿态 (quaternion)
         if self.floating_base_qpos_addr is not None:
-            base_quat = qpos[self.floating_base_qpos_addr +
-                             3:self.floating_base_qpos_addr+7]
+            base_quat = qpos[
+                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+            ]
+            # 确保四元数归一化
+            base_quat = base_quat / jp.linalg.norm(base_quat)
         else:
             base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
 
         # 2. 浮动基座速度
         if self.floating_base_qvel_addr is not None:
-            base_linvel = qvel[self.floating_base_qvel_addr:self.floating_base_qvel_addr+3]
-            base_angvel = qvel[self.floating_base_qvel_addr +
-                               3:self.floating_base_qvel_addr+6]
+            base_linvel = qvel[
+                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
+            ]
+            base_angvel = qvel[
+                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
+            ]
         else:
             base_linvel = jp.zeros(3)
             base_angvel = jp.zeros(3)
 
         # 3. 关节位置和速度（执行器对应的关节）
-        joint_pos = qpos[self.actuator_qpos_indices]
-        joint_vel = qvel[self.actuator_qvel_indices]
+        # 将Python列表转换为JAX数组进行索引
+        qpos_indices = jp.array(self.actuator_qpos_indices)
+        qvel_indices = jp.array(self.actuator_qvel_indices)
+        joint_pos = qpos[qpos_indices]
+        joint_vel = qvel[qvel_indices]
 
         # 4. 命令（此处为随机命令，后续可以从state.info中获取）
         command = jp.array([0.0, 0.0, 0.0])  # 将在reset时设置
 
         # 组合观测
-        obs = jp.concatenate([
-            base_quat,       # 4
-            base_linvel,     # 3
-            base_angvel,     # 3
-            joint_pos,       # nu
-            joint_vel,       # nu
-            action,          # nu
-            command,         # 3
-        ])
+        obs = jp.concatenate(
+            [
+                base_quat,  # 4
+                base_linvel,  # 3
+                base_angvel,  # 3
+                joint_pos,  # nu
+                joint_vel,  # nu
+                action,  # nu
+                command,  # 3
+            ]
+        )
 
         return obs
 
@@ -285,14 +307,17 @@ class JiyuanMJXEnv(MJXBaseEnv):
     ) -> jax.Array:
         """计算奖励"""
         # 从info中获取命令（如果存在）
-        command = prev_state.info.get('command', jp.zeros(3))
+        command = prev_state.info.get("command", jp.zeros(3))
 
         # 获取当前速度
         qvel = pipeline_state.qvel
         if self.floating_base_qvel_addr is not None:
-            base_linvel = qvel[self.floating_base_qvel_addr:self.floating_base_qvel_addr+3]
-            base_angvel = qvel[self.floating_base_qvel_addr +
-                               3:self.floating_base_qvel_addr+6]
+            base_linvel = qvel[
+                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
+            ]
+            base_angvel = qvel[
+                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
+            ]
         else:
             base_linvel = jp.zeros(3)
             base_angvel = jp.zeros(3)
@@ -318,11 +343,11 @@ class JiyuanMJXEnv(MJXBaseEnv):
 
         # 组合奖励
         reward = (
-            self.reward_weights['tracking_lin_vel'] * reward_lin_vel +
-            self.reward_weights['tracking_ang_vel'] * reward_ang_vel +
-            self.reward_weights['alive'] * reward_alive +
-            self.reward_weights['action_rate'] * cost_action_rate +
-            self.reward_weights['torques'] * cost_torques
+            self.reward_weights["tracking_lin_vel"] * reward_lin_vel
+            + self.reward_weights["tracking_ang_vel"] * reward_ang_vel
+            + self.reward_weights["alive"] * reward_alive
+            + self.reward_weights["action_rate"] * cost_action_rate
+            + self.reward_weights["torques"] * cost_torques
         )
 
         return reward
@@ -350,8 +375,8 @@ class JiyuanMJXEnv(MJXBaseEnv):
         """获取额外信息"""
         # 保留命令信息（如果存在）
         info = {}
-        if 'command' in state.info:
-            info['command'] = state.info['command']
+        if "command" in state.info:
+            info["command"] = state.info["command"]
 
         return info
 
@@ -366,7 +391,7 @@ class JiyuanMJXEnv(MJXBaseEnv):
 
         # 更新info
         info = state.info.copy()
-        info['command'] = command
+        info["command"] = command
 
         # 重新计算obs（包含命令）
         obs = state.obs.at[-3:].set(command)
@@ -385,20 +410,23 @@ class JiyuanMJXEnv(MJXBaseEnv):
         rng, key1, key2, key3 = jax.random.split(rng, 4)
 
         cmd_x = jax.random.uniform(
-            key1, minval=self.cmd_x_range[0], maxval=self.cmd_x_range[1])
+            key1, minval=self.cmd_x_range[0], maxval=self.cmd_x_range[1]
+        )
         cmd_y = jax.random.uniform(
-            key2, minval=self.cmd_y_range[0], maxval=self.cmd_y_range[1])
+            key2, minval=self.cmd_y_range[0], maxval=self.cmd_y_range[1]
+        )
         cmd_yaw = jax.random.uniform(
-            key3, minval=self.cmd_yaw_range[0], maxval=self.cmd_yaw_range[1])
+            key3, minval=self.cmd_yaw_range[0], maxval=self.cmd_yaw_range[1]
+        )
 
         return jp.array([cmd_x, cmd_y, cmd_yaw])
 
 
 # ==================== 便捷的创建函数 ====================
 
+
 def create_jiyuan_env(
-    xml_path: str = "playground/open_duck_mini_v2/xmls/scene_flat_terrain.xml",
-    **kwargs
+    xml_path: str = "playground/open_duck_mini_v2/xmls/scene_flat_terrain.xml", **kwargs
 ) -> JiyuanMJXEnv:
     """创建机器人环境（便捷函数）"""
     return JiyuanMJXEnv(xml_path=xml_path, **kwargs)
