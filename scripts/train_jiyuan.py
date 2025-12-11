@@ -21,12 +21,12 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.85"  # 使用85%的显存，最大化利用
 
-# 启用最高级别编译优化，最大化GPU利用率
+# 启用编译优化，平衡编译时间和GPU利用率
 os.environ["XLA_FLAGS"] = (
     os.environ.get("XLA_FLAGS", "")
     + " --xla_gpu_enable_latency_hiding_scheduler=true"
     + " --xla_gpu_enable_highest_priority_async_stream=true"
-    + " --xla_gpu_autotune_level=4"  # 最高级别的自动调优
+    + " --xla_gpu_autotune_level=2"  # 级别2：平衡编译速度和性能（级别4太慢）
 )
 
 warnings.filterwarnings("ignore", category=Warning)
@@ -100,7 +100,7 @@ def main():
 
     config = PPOConfig(
         # 环境配置 - 最大化并行环境以充分利用11G显存
-        num_envs=4096,  # 增加并行环境数，充分利用显存
+        num_envs=6144,  # 增加并行环境数，充分利用显存（约80-90%显存）
         num_steps=64,  # 优化步数以获得最佳batch size
         # PPO超参数 - 优化以最大化训练速度
         num_epochs=4,  # 保持4个epoch

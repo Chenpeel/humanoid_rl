@@ -31,3 +31,9 @@ env/
 *.tmp
 .DS_Store
 *.egg-info
+
+# cython编译文件
+build/
+*.html
+*.cpp
+*.so
