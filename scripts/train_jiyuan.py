@@ -9,43 +9,46 @@ import warnings
 from datetime import datetime
 from pathlib import Path
 
-import jax
-import jax.numpy as jp
-from rich import box
-from rich.console import Console
-from rich.panel import Panel
-
-from jiyuan_rl.envs.jiyuan_mjx_env import JiyuanMJXEnv, create_jiyuan_env
-from jiyuan_rl.models.networks import ActorCriticNetwork, count_parameters
-from jiyuan_rl.models.optimizer import create_ppo_optimizer_cosine
-from jiyuan_rl.training.logger import Logger, MetricsLogger
-from jiyuan_rl.training.ppo_trainer import PPOConfig, PPOTrainer
-from jiyuan_rl.training.train_state import create_train_state
-
 # ==================== JAX配置 (必须在导入jax之前) ====================
-# 最大化显存使用，充分利用11G显存
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"  # 使用99%的显存，最大化利用
-
-# 启用JAX编译缓存 (使用绝对路径)
-cache_path = os.path.join(os.getcwd(), ".tmp")
+# 启用JAX编译缓存 (使用绝对路径，确保持久化)
+cache_path = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "..", ".jax_cache"))
 os.makedirs(cache_path, exist_ok=True)
 os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_path
+
+# 最大化显存使用
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.85"  # 使用85%的显存，最大化利用
 
 # 启用最高级别编译优化，最大化GPU利用率
 os.environ["XLA_FLAGS"] = (
     os.environ.get("XLA_FLAGS", "")
-    + " --xla_gpu_force_compilation_parallelism=32 "
-    + "--xla_gpu_autotune_level=5 "  # 最高级别的自动调优
+    + " --xla_gpu_enable_latency_hiding_scheduler=true"
+    + " --xla_gpu_enable_highest_priority_async_stream=true"
+    + " --xla_gpu_autotune_level=4"  # 最高级别的自动调优
 )
-
 
 warnings.filterwarnings("ignore", category=Warning)
 
-
 # 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+if os.path.exists(os.path.join(os.path.dirname(__file__), "../.jax_cache")):
+    # 导入JAX和其他依赖
+    import jax
+    import jax.numpy as jp
+    from rich import box
+    from rich.console import Console
+    from rich.panel import Panel
+
+    from jiyuan_rl.envs.jiyuan_mjx_env import JiyuanMJXEnv, create_jiyuan_env
+    from jiyuan_rl.models.networks import ActorCriticNetwork, count_parameters
+    from jiyuan_rl.models.optimizer import create_ppo_optimizer_cosine
+    from jiyuan_rl.training.logger import Logger, MetricsLogger
+    from jiyuan_rl.training.ppo_trainer import PPOConfig, PPOTrainer
+    from jiyuan_rl.training.train_state import create_train_state
+    from jiyuan_rl.utils.performance_monitor import PerformanceMonitor, benchmark_train_step
 
 
 console = Console()
@@ -97,11 +100,11 @@ def main():
 
     config = PPOConfig(
         # 环境配置 - 最大化并行环境以充分利用11G显存
-        num_envs=4096,  # 并行环境数翻倍到16384，最大化GPU利用率
-        num_steps=128,  # 优化步数以获得最佳batch size
+        num_envs=4096,  # 增加并行环境数，充分利用显存
+        num_steps=64,  # 优化步数以获得最佳batch size
         # PPO超参数 - 优化以最大化训练速度
-        num_epochs=4,  # 最小化epoch数，最大化更新频率
-        num_minibatches=256,  # 最大化mini-batch数，提高数据并行度
+        num_epochs=4,  # 保持4个epoch
+        num_minibatches=4,  # 增加mini-batch大小，提高GPU利用率
         gamma=0.99,
         gae_lambda=0.95,
         clip_epsilon=0.2,
@@ -139,7 +142,7 @@ def main():
     network = ActorCriticNetwork(
         action_dim=env.action_size,
         shared_backbone=True,
-        hidden_dims=(1024, 1024, 256),  # 最大化网络规模，充分利用11G显存
+        hidden_dims=(512, 512, 256),
     )
 
     # 初始化网络以统计参数
@@ -248,6 +251,14 @@ def main():
 
     # ==================== JIT编译 ====================
     console.print("\n[bold cyan]10. JIT编译[/bold cyan]")
+
+    # 检查缓存状态
+    cache_files = list(Path(cache_path).glob("*.cache"))
+    if cache_files:
+        console.print(f"[dim]找到 {len(cache_files)} 个缓存文件，将加速编译[/dim]")
+    else:
+        console.print("[dim]首次编译，将创建缓存以加速后续训练[/dim]")
+
     console.print("正在编译 JAX 计算图，第一次运行可能需要几分钟...")
 
     # 使用jax.jit加速训练步
@@ -256,13 +267,35 @@ def main():
     # 触发一次编译
     t0 = time.time()
     train_state, env_state, info = train_step_jit(train_state, env_state)
+    jax.block_until_ready(train_state)  # 确保编译完成
     compile_time = time.time() - t0
     console.print(f"✓ 编译完成 (耗时: {compile_time:.2f}s)")
+
+    # ==================== 性能基准测试 ====================
+    console.print("\n[bold cyan]11. 性能基准测试[/bold cyan]")
+    console.print("运行性能基准测试（10次迭代）...")
+
+    perf_stats = benchmark_train_step(
+        train_step_jit, train_state, env_state, num_warmup=2, num_iterations=10
+    )
+
+    console.print(f"✓ 基准测试完成")
+    console.print(f"  平均步时间: {perf_stats['mean_time']:.3f}s")
+    console.print(f"  标准差: {perf_stats['std_time']:.3f}s")
+    console.print(f"  最小时间: {perf_stats['min_time']:.3f}s")
+    console.print(f"  最大时间: {perf_stats['max_time']:.3f}s")
+    console.print(
+        f"  环境步数/秒: {config.batch_size / perf_stats['mean_time']:.0f}")
+
+    # 创建性能监控器
+    perf_monitor = PerformanceMonitor()
+    perf_monitor.set_compile_time(compile_time)
 
     # ==================== 开始训练 ====================
     logger.print_section("开始训练")
 
     metrics_logger = MetricsLogger()
+    perf_monitor.start()  # 启动性能监控
 
     progress = logger.create_progress_bar(
         total=config.num_updates, description="PPO训练"
@@ -279,17 +312,26 @@ def main():
             # 从第二次更新开始循环 (因为第一次已经作为编译预热运行了)
             for update in range(1, config.num_updates):
                 # 执行训练步
-                train_state, env_state, info = train_step_jit(train_state, env_state)
+                train_state, env_state, info = train_step_jit(
+                    train_state, env_state)
+
+                # 确保计算完成（用于准确的性能测量）
+                jax.block_until_ready(train_state)
+
+                # 记录性能指标
+                perf_metrics = perf_monitor.step(config.batch_size)
+                info.update(perf_metrics)
 
                 # 计算当前学习率（近似值）
                 current_step = update
                 if current_step < warmup_steps:
                     current_lr = 3e-4 * (current_step / warmup_steps)
                 else:
-                    progress = (current_step - warmup_steps) / (
+                    progress_ratio = (current_step - warmup_steps) / (
                         total_updates - warmup_steps
                     )
-                    current_lr = 0.5 * 3e-4 * (1 + jp.cos(jp.pi * progress))
+                    current_lr = 0.5 * 3e-4 * \
+                        (1 + jp.cos(jp.pi * progress_ratio))
 
                 info["learning_rate"] = float(current_lr)
 

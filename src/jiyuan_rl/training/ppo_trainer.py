@@ -3,11 +3,10 @@ PPO训练器
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import jax
 import jax.numpy as jp
-from flax import struct
 
 from ..envs.mjx_base_env import EnvState
 from ..models.ppo import PPOBatch, compute_gae_scan, ppo_loss
@@ -186,7 +185,7 @@ class PPOTrainer:
         train_state: TrainState,
         batch: PPOBatch,
     ) -> Tuple[TrainState, Dict[str, Any]]:
-        """更新策略（多个epoch + mini-batch）
+        """更新策略（多个epoch + mini-batch）- 使用JAX优化循环
 
         Args:
             train_state: 训练状态
@@ -196,66 +195,72 @@ class PPOTrainer:
             (更新后的train_state, info字典)
         """
 
-        def loss_fn(params):
+        def loss_fn(params, mb_batch):
             """损失函数"""
             loss, info = ppo_loss(
                 params,
                 self.network,
-                batch,
+                mb_batch,
                 clip_epsilon=self.config.clip_epsilon,
                 value_coef=self.config.value_coef,
                 entropy_coef=self.config.entropy_coef,
             )
             return loss, info
 
-        # 累积指标
-        total_info = {}
+        def update_minibatch(carry, mb_indices):
+            """单个mini-batch的更新 - 用于scan"""
+            state = carry
 
-        # 多个epoch
-        for epoch in range(self.config.num_epochs):
+            # 提取mini-batch
+            mb_batch = PPOBatch(
+                obs=batch.obs[mb_indices],
+                actions=batch.actions[mb_indices],
+                old_log_probs=batch.old_log_probs[mb_indices],
+                advantages=batch.advantages[mb_indices],
+                returns=batch.returns[mb_indices],
+                values=batch.values[mb_indices],
+            )
+
+            # 计算梯度并更新
+            (loss, info), grads = jax.value_and_grad(
+                lambda p: loss_fn(p, mb_batch), has_aux=True
+            )(state.params)
+
+            # 应用梯度
+            state = state.apply_gradients(grads=grads, optimizer=self.optimizer)
+
+            return state, info
+
+        def update_epoch(carry, _):
+            """单个epoch的更新 - 用于scan"""
+            state = carry
+
             # 打乱数据
-            # perm_rng, train_state = train_state.split_rng()
-            rng, new_rng = jax.random.split(train_state.rng)
-            train_state = train_state.replace(rng=new_rng)
-            perm_rng = rng
-            perm = jax.random.permutation(perm_rng, self.config.batch_size)
+            rng, new_rng = jax.random.split(state.rng)
+            state = state.replace(rng=new_rng)
+            perm = jax.random.permutation(rng, self.config.batch_size)
 
-            # Mini-batch更新
-            for i in range(self.config.num_minibatches):
-                start = i * self.config.minibatch_size
-                end = start + self.config.minibatch_size
-                mb_indices = perm[start:end]
+            # 将索引分成mini-batches
+            mb_indices = perm.reshape(self.config.num_minibatches, self.config.minibatch_size)
 
-                # 提取mini-batch
-                mb_batch = PPOBatch(
-                    obs=batch.obs[mb_indices],
-                    actions=batch.actions[mb_indices],
-                    old_log_probs=batch.old_log_probs[mb_indices],
-                    advantages=batch.advantages[mb_indices],
-                    returns=batch.returns[mb_indices],
-                    values=batch.values[mb_indices],
-                )
+            # 使用scan更新所有mini-batches
+            state, infos = jax.lax.scan(update_minibatch, state, mb_indices)
 
-                # 计算梯度
-                (loss, info), grads = jax.value_and_grad(loss_fn, has_aux=True)(
-                    train_state.params
-                )
+            # 平均所有mini-batch的指标
+            avg_info = jax.tree.map(lambda x: jp.mean(x, axis=0), infos)
 
-                # 应用梯度
-                train_state = train_state.apply_gradients(
-                    grads=grads, optimizer=self.optimizer
-                )
+            return state, avg_info
 
-                # 累积信息
-                if not total_info:
-                    total_info = {k: v for k, v in info.items()}
-                else:
-                    for k, v in info.items():
-                        total_info[k] += v
+        # 使用scan执行多个epochs
+        train_state, infos = jax.lax.scan(
+            update_epoch,
+            train_state,
+            None,
+            length=self.config.num_epochs
+        )
 
-        # 平均指标
-        num_updates = self.config.num_epochs * self.config.num_minibatches
-        avg_info = {k: v / num_updates for k, v in total_info.items()}
+        # 平均所有epoch的指标
+        avg_info = jax.tree.map(lambda x: jp.mean(x, axis=0), infos)
 
         return train_state, avg_info
 
