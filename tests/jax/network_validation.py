@@ -4,11 +4,11 @@
 使用rich进度条提供清晰反馈
 """
 
-from src.jiyuan_rl.models.optimizer import create_ppo_optimizer
-from src.jiyuan_rl.models.ppo import (
+from src.rl.models.optimizer import create_ppo_optimizer
+from src.rl.models.ppo import (
     compute_gae_scan, ppo_loss, PPOBatch, prepare_ppo_batch
 )
-from src.jiyuan_rl.models.networks import (
+from src.rl.models.networks import (
     ActorNetwork, CriticNetwork, ActorCriticNetwork,
     create_actor_critic, count_parameters
 )
