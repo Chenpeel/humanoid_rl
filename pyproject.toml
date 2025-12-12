@@ -1,5 +1,5 @@
 [project]
-name = "jiyuan_rl"
+name = "rl"
 version = "0.1.0"
 description = "JAX/MJX Reinforcement Learning Training Framework"
 readme = "README.md"
@@ -28,11 +28,11 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["jiyuan_rl"]
+packages = ["rl"]
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
-jiyuan_rl = ["py.typed"]
+rl = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
