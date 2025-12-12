@@ -351,11 +351,6 @@
                                         <geom name="right_foot_link_visual" pos="0 0 0"
                                             quat="1.0 0.0 0.0 0.0" type="mesh"
                                             mesh="right_foot_link.STL" class="visual" />
-
-                                        <!-- 足底接触检测点（用于压力传感器） -->
-                                        <site name="right_foot_contact_site" pos="0 -0.04 0"
-                                            size="0.01" type="sphere" rgba="1 0 0 0.3" />
-
                                         <body name="right_toe_link"
                                             pos="0 -0.0758129417355203 0.0950624781069581"
                                             quat="1.0 0.0 0.0 0.0">
@@ -718,11 +713,6 @@
                                             pos="-0.00000000 0.00000000 0.00000000"
                                             quat="1.00000000 0.00000000 -0.00000000 -0.00000000"
                                             type="mesh" mesh="left_foot_link.STL" class="visual" />
-
-                                        <!-- 足底接触检测点（用于压力传感器） -->
-                                        <site name="left_foot_contact_site" pos="0 -0.04 0"
-                                            size="0.01" type="sphere" rgba="0 1 0 0.3" />
-
                                         <body name="left_toe_link"
                                             pos="-0.00000000 -0.07581294 0.09506248"
                                             quat="1.00000000 0.00000000 -0.00000000 -0.00000000">
@@ -889,44 +879,10 @@
     </contact>
 
     <sensor>
-        <!-- ============================================= -->
-        <!-- 真实硬件传感器配置（可部署到实体机器人）      -->
-        <!-- ============================================= -->
-
-        <!-- IMU 传感器组（真实硬件：MPU6050/ICM-20948） -->
-        <!-- 陀螺仪：测量三轴角速度 (rad/s) -->
-        <gyro name="imu_gyro" site="base_link_site" noise="0.001" />
-
-        <!-- 加速度计：测量三轴加速度 + 重力 (m/s²) -->
-        <accelerometer name="imu_accel" site="base_link_site" noise="0.01" />
-
-        <!-- 磁力计：测量磁场方向（可选，用于绝对朝向） -->
-        <magnetometer name="imu_mag" site="base_link_site" noise="0.005" />
-
-        <!-- 足底接触传感器（真实硬件：FSR 压力传感器） -->
-        <!-- 右脚接触检测 -->
-        <touch name="right_foot_contact" site="right_foot_contact_site" />
-        <force name="right_foot_force" site="right_foot_contact_site" />
-
-        <!-- 左脚接触检测 -->
-        <touch name="left_foot_contact" site="left_foot_contact_site" />
-        <force name="left_foot_force" site="left_foot_contact_site" />
-
-        <!-- ============================================= -->
-        <!-- 仿真辅助传感器（仅用于调试/奖励计算，不作为观测） -->
-        <!-- 真实机器人无法获取，部署时会被移除            -->
-        <!-- ============================================= -->
-
-        <!-- 绝对位置（仿真专用，用于评估） -->
-        <framepos name="base_pos_sim" objtype="site" objname="base_link_site" />
-
-        <!-- 绝对姿态（仿真专用，用于评估） -->
-        <framequat name="base_quat_sim" objtype="site" objname="base_link_site" />
-
-        <!-- 绝对线速度（仿真专用，用于评估） -->
-        <framelinvel name="base_linvel_sim" objtype="site" objname="base_link_site" />
-
-        <!-- 绝对角速度（仿真专用，用于评估） -->
-        <frameangvel name="base_angvel_sim" objtype="site" objname="base_link_site" />
+        <framepos name="base_link_site_pos" objtype="site" objname="base_link_site" />
+        <framequat name="base_link_site_quat" objtype="site" objname="base_link_site" />
+        <framelinvel name="base_link_site_linvel" objtype="site" objname="base_link_site" />
+        <frameangvel name="base_link_site_angvel" objtype="site" objname="base_link_site" />
+        <velocimeter name="base_link_site_vel" site="base_link_site" />
     </sensor>
 </mujoco>

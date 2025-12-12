@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="assets">
+  <compiler angle="radian" />
+  <!-- === Parameters === -->
+  <include file="params/default_classes.xml" />
+  <include file="params/materials.xml" />
+  <!-- === Geometry === -->
+  <include file="geometry/meshes.xml" />
+  <include file="geometry/world.xml" />
+  <include file="geometry/robot.xml" />
+  <!-- === Constraints === -->
+  <include file="equality.xml" />
+  <include file="tendon.xml" />
+  <!-- === Modules === -->
+  <include file="actuators.xml" />
+  <include file="sensors.xml" />
+  <include file="contact_exclude.xml" />
+</mujoco>

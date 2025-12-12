@@ -1,0 +1,26 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco>
+  <!-- Default classes -->
+  <visual>
+    <quality shadowsize="4096" />
+  </visual>
+
+  <default>
+    <default class="robot">
+      <default class="motor">
+        <!-- damping: 关节阻尼; armature: 电机转子惯性; stiffness: 弹簧刚度 -->
+        <joint />
+        <motor />
+      </default>
+      <default class="visual">
+        <geom contype="0" conaffinity="0" group="2" />
+      </default>
+      <default class="collision">
+        <geom condim="3" contype="0" conaffinity="1" priority="1" group="1" solref="0.005 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
+      </default>
+      <default class="thigh_equality">
+        <equality solref="0.001 1" solimp="0.99 0.999 0.0001" />
+      </default>
+    </default>
+  </default>
+</mujoco>

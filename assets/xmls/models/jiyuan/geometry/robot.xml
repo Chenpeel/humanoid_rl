@@ -1,0 +1,14 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco>
+  <worldbody>
+    <body name="base_link" pos="0.00000000 0.00000000 0.99150000" quat="0.70710678 0.70710678 0.00000000 0.00000000" childclass="robot">
+      <freejoint name="floating_base" />
+      <!-- Base -->
+      <include file="geometry/base.xml" />
+      <!-- Right leg -->
+      <include file="geometry/right_leg.xml" />
+      <!-- Left leg -->
+      <include file="geometry/left_leg.xml" />
+    </body>
+  </worldbody>
+</mujoco>
