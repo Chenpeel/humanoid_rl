@@ -2,7 +2,8 @@
 <mujoco>
   <!-- Actuators -->
   <actuator>
-    <motor name="right_hip_pitch_engine_joint_ctrl" joint="right_hip_pitch_engine_joint" class="motor" />
+    <motor name="right_hip_pitch_engine_joint_ctrl" joint="right_hip_pitch_engine_joint"
+      class="motor" />
     <motor name="right_hip_yaw_engine_joint_ctrl" joint="right_hip_yaw_engine_joint" class="motor" />
     <motor name="right_hip_roll_joint_ctrl" joint="right_hip_roll_joint" class="motor" />
     <motor name="right_knee_joint_ctrl" joint="right_knee_joint" class="motor" />

@@ -2,9 +2,13 @@
 <mujoco>
   <!-- Equality constraints -->
   <equality>
-    <joint joint1="right_hip_pitch_engine_joint" joint2="right_hip_cube_joint" polycoef="0 1 0 0 0" class="thigh_equality" />
-    <joint joint1="right_hip_yaw_engine_joint" joint2="right_thigh_joint" polycoef="0 1 0 0 0" class="thigh_equality" />
-    <joint joint1="left_hip_pitch_engine_joint" joint2="left_hip_cube_joint" polycoef="0 1 0 0 0" class="thigh_equality" />
-    <joint joint1="left_hip_yaw_engine_joint" joint2="left_thigh_joint" polycoef="0 1 0 0 0" class="thigh_equality" />
+    <joint joint1="right_hip_pitch_engine_joint" joint2="right_hip_cube_joint" polycoef="0 1 0 0 0"
+      class="thigh_equality" />
+    <joint joint1="right_hip_yaw_engine_joint" joint2="right_thigh_joint" polycoef="0 1 0 0 0"
+      class="thigh_equality" />
+    <joint joint1="left_hip_pitch_engine_joint" joint2="left_hip_cube_joint" polycoef="0 1 0 0 0"
+      class="thigh_equality" />
+    <joint joint1="left_hip_yaw_engine_joint" joint2="left_thigh_joint" polycoef="0 1 0 0 0"
+      class="thigh_equality" />
   </equality>
 </mujoco>
