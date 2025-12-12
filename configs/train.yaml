@@ -1,0 +1,32 @@
+# PPO训练配置文件
+# 优先级：命令行参数 > YAML配置 > 代码默认值
+
+# ==================== 场景配置 ====================
+scene: flat_terrain # 训练场景 (flat_terrain / rough_terrain)
+
+# ==================== 环境配置 ====================
+num_envs: 7680 # 并行环境数（GTX 1080 Ti 11GB的安全值）
+num_steps: 64 # 每次rollout的步数
+
+# ==================== PPO超参数 ====================
+num_epochs: 4 # 每次update的epoch数
+num_minibatches: 4 # mini-batch数量
+gamma: 0.99 # 折扣因子
+gae_lambda: 0.95 # GAE lambda
+clip_epsilon: 0.2 # PPO裁剪系数
+value_coef: 0.5 # 价值损失系数
+entropy_coef: 0.01 # 熵正则化系数
+max_grad_norm: 0.5 # 梯度裁剪阈值
+
+# ==================== 训练配置 ====================
+total_timesteps: 200000000 # 总训练步数 (2亿)
+log_interval: 100 # 日志记录间隔
+eval_interval: 500 # 评估间隔
+
+# ==================== 优化器配置 ====================
+learning_rate: 8.0e-4 # 峰值学习率（batch=262k，约为7680时的80%）
+final_lr_fraction: 0.02 # 最终学习率相对峰值的比例
+
+# ==================== 网络配置 ====================
+hidden_dims: [512, 512, 256] # 隐藏层维度列表
+shared_backbone: true # 是否使用共享backbone

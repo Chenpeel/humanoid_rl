@@ -6,6 +6,8 @@ import os
 import sys
 import time
 import warnings
+import argparse
+import yaml
 from datetime import datetime
 from pathlib import Path
 
@@ -18,13 +20,17 @@ import io
 _original_stderr = sys.stderr
 
 # 临时屏蔽 stderr（仅在导入 mujoco 时）
+
+
 def _suppress_mujoco_warnings():
     """临时屏蔽 MuJoCo 的 warp 警告"""
     sys.stderr = io.StringIO()
 
+
 def _restore_stderr():
     """恢复 stderr"""
     sys.stderr = _original_stderr
+
 
 # ==================== JAX配置 (必须在导入jax之前) ====================
 # 启用JAX编译缓存 (使用绝对路径，确保持久化)
@@ -36,14 +42,14 @@ os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_path
 # 最大化显存使用
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"  # 使用95%的显存，最大化利用
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.98"  # 使用98%的显存
 
-# 启用编译优化，平衡编译时间和GPU利用率
+# 启用编译优化，优先减少编译时间
 os.environ["XLA_FLAGS"] = (
     os.environ.get("XLA_FLAGS", "")
     + " --xla_gpu_enable_latency_hiding_scheduler=true"
     + " --xla_gpu_enable_highest_priority_async_stream=true"
-    + " --xla_gpu_autotune_level=2"  # 级别2：平衡编译速度和性能（级别4太慢）
+    + " --xla_gpu_autotune_level=1"  # 级别1：更快的编译速度，稍微牺牲运行时性能
 )
 
 warnings.filterwarnings("ignore", category=Warning)
@@ -112,11 +118,134 @@ def print_config(config: PPOConfig):
     console.print(table)
 
 
+def load_config_from_yaml(config_path: str) -> dict:
+    """从YAML文件加载配置
+
+    Args:
+        config_path: YAML配置文件路径
+
+    Returns:
+        配置字典
+    """
+    if not os.path.exists(config_path):
+        console.print(f"[yellow]警告: 配置文件不存在: {config_path}[/yellow]")
+        return {}
+
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+
+    if config is None:
+        return {}
+
+    console.print(f"[green]✓ 从 {config_path} 加载配置[/green]")
+    return config
+
+
 def main():
     """主训练函数"""
+    # 第一阶段：解析 --config 参数
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/train.yaml",
+        help="YAML配置文件路径"
+    )
+    pre_args, remaining_argv = pre_parser.parse_known_args()
+
+    # 加载YAML配置
+    yaml_config = load_config_from_yaml(pre_args.config)
+
+    # 第二阶段：解析所有参数，使用YAML中的值作为默认值
+    parser = argparse.ArgumentParser(
+        description="PPO训练脚本",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        parents=[pre_parser]
+    )
+
+    # 场景配置
+    parser.add_argument(
+        "--scene",
+        type=str,
+        default=yaml_config.get("scene", "flat_terrain"),
+        choices=["flat_terrain", "rough_terrain"],
+        help="选择训练场景"
+    )
+
+    # 环境配置
+    parser.add_argument("--num-envs", type=int,
+                        default=yaml_config.get("num_envs", 7680),
+                        help="并行环境数")
+    parser.add_argument("--num-steps", type=int,
+                        default=yaml_config.get("num_steps", 64),
+                        help="每次rollout的步数")
+
+    # PPO超参数
+    parser.add_argument("--num-epochs", type=int,
+                        default=yaml_config.get("num_epochs", 4),
+                        help="每次update的epoch数")
+    parser.add_argument("--num-minibatches", type=int,
+                        default=yaml_config.get("num_minibatches", 4),
+                        help="mini-batch数量")
+    parser.add_argument("--gamma", type=float,
+                        default=yaml_config.get("gamma", 0.99),
+                        help="折扣因子")
+    parser.add_argument("--gae-lambda", type=float,
+                        default=yaml_config.get("gae_lambda", 0.95),
+                        help="GAE lambda")
+    parser.add_argument("--clip-epsilon", type=float,
+                        default=yaml_config.get("clip_epsilon", 0.2),
+                        help="PPO裁剪系数")
+    parser.add_argument("--value-coef", type=float,
+                        default=yaml_config.get("value_coef", 0.5),
+                        help="价值损失系数")
+    parser.add_argument("--entropy-coef", type=float,
+                        default=yaml_config.get("entropy_coef", 0.01),
+                        help="熵正则化系数")
+    parser.add_argument("--max-grad-norm", type=float,
+                        default=yaml_config.get("max_grad_norm", 0.5),
+                        help="梯度裁剪阈值")
+
+    # 训练配置
+    parser.add_argument("--total-timesteps", type=int,
+                        default=yaml_config.get(
+                            "total_timesteps", 200_000_000),
+                        help="总训练步数")
+    parser.add_argument("--log-interval", type=int,
+                        default=yaml_config.get("log_interval", 100),
+                        help="日志记录间隔")
+    parser.add_argument("--eval-interval", type=int,
+                        default=yaml_config.get("eval_interval", 500),
+                        help="评估间隔")
+
+    # 优化器配置
+    parser.add_argument("--learning-rate", type=float,
+                        default=yaml_config.get("learning_rate", 1e-3),
+                        help="峰值学习率")
+    parser.add_argument("--final-lr-fraction", type=float,
+                        default=yaml_config.get("final_lr_fraction", 0.02),
+                        help="最终学习率相对峰值的比例")
+
+    # 网络配置
+    parser.add_argument("--hidden-dims", type=int, nargs="+",
+                        default=yaml_config.get(
+                            "hidden_dims", [512, 512, 256]),
+                        help="隐藏层维度列表")
+    parser.add_argument("--shared-backbone", action="store_true",
+                        default=yaml_config.get("shared_backbone", True),
+                        help="是否使用共享backbone")
+    parser.add_argument("--no-shared-backbone", dest="shared_backbone",
+                        action="store_false",
+                        help="不使用共享backbone")
+
+    args = parser.parse_args()
+
     console.print(
         Panel.fit(
-            "[bold green]PPO 训练[/bold green]\n[dim]JAX + MJX + Flax实现[/dim]",
+            f"[bold green]PPO 训练[/bold green]\n"
+            f"[dim]JAX + MJX + Flax实现[/dim]\n"
+            f"[yellow]场景: {args.scene}[/yellow]\n"
+            f"[dim]配置: {pre_args.config}[/dim]",
             border_style="green",
         )
     )
@@ -126,21 +255,21 @@ def main():
 
     config = PPOConfig(
         # 环境配置
-        num_envs=7680,  # 并行环境数
-        num_steps=64,  # 每次rollout的步数
+        num_envs=args.num_envs,
+        num_steps=args.num_steps,
         # PPO超参数
-        num_epochs=4,  # 每次update的epoch数
-        num_minibatches=4,  # mini-batch数量
-        gamma=0.99,  # 折扣因子
-        gae_lambda=0.95,  # GAE lambda
-        clip_epsilon=0.2,  # PPO裁剪系数
-        value_coef=0.5,  # 价值损失系数
-        entropy_coef=0.01,  # 熵正则化系数
-        max_grad_norm=0.5,  # 梯度裁剪
+        num_epochs=args.num_epochs,
+        num_minibatches=args.num_minibatches,
+        gamma=args.gamma,
+        gae_lambda=args.gae_lambda,
+        clip_epsilon=args.clip_epsilon,
+        value_coef=args.value_coef,
+        entropy_coef=args.entropy_coef,
+        max_grad_norm=args.max_grad_norm,
         # 训练配置
-        total_timesteps=200_000_000,  # 总训练步数
-        log_interval=100,  # 日志频率
-        eval_interval=500,  # 评估频率
+        total_timesteps=args.total_timesteps,
+        log_interval=args.log_interval,
+        eval_interval=args.eval_interval,
     )
 
     print_config(config)
@@ -154,7 +283,7 @@ def main():
     # ==================== 创建环境 ====================
     console.print("\n[bold cyan]3. 创建MJX环境[/bold cyan]")
 
-    scene_path = "../assets/xmls/scene.xml"
+    scene_path = f"assets/xmls/scenes/{args.scene}.xml"
     if not os.path.exists(os.path.join(os.path.dirname(__file__), scene_path)):
         pass
     env = create_velocity_tracking_env(xml_path=scene_path)
@@ -167,8 +296,8 @@ def main():
 
     network = ActorCriticNetwork(
         action_dim=env.action_size,
-        shared_backbone=True,
-        hidden_dims=(512, 512, 256),
+        shared_backbone=args.shared_backbone,
+        hidden_dims=tuple(args.hidden_dims),
     )
 
     # 初始化网络以统计参数
@@ -180,8 +309,8 @@ def main():
 
     console.print(f"✓ 网络创建完成")
     console.print(f"  参数数量: {num_params:,}")
-    console.print(f"  共享backbone: True")
-    console.print(f"  隐藏层: [1024, 1024, 256]")
+    console.print(f"  共享backbone: {args.shared_backbone}")
+    console.print(f"  隐藏层: {args.hidden_dims}")
 
     # ==================== 创建优化器 ====================
     console.print("\n[bold cyan]5. 创建带余弦退火的Optax优化器[/bold cyan]")
@@ -212,21 +341,22 @@ def main():
     )
 
     optimizer = create_ppo_optimizer_cosine(
-        learning_rate=8e-4,  # 最大化学习率，加速收敛
+        learning_rate=args.learning_rate,
         total_steps=total_updates,
         warmup_steps=warmup_steps,
         max_grad_norm=config.max_grad_norm,
-        final_lr_fraction=0.02,  # 极低的最终学习率，确保稳定收敛
+        final_lr_fraction=args.final_lr_fraction,
     )
 
     console.print(f"✓ 优化器创建完成")
     console.print(f"  调度类型: 余弦退火 + Warmup")
-    console.print(f"  峰值学习率: 5e-4 ")
+    console.print(f"  峰值学习率: {args.learning_rate:.2e}")
     console.print(
         f"  预热步数: {warmup_steps:,} ({warmup_steps / total_updates * 100:.1f}%)"
     )
     console.print(f"  总更新次数: {total_updates:,}")
-    console.print(f"  最终学习率: {5e-4 * 0.05:.2e}")
+    console.print(
+        f"  最终学习率: {args.learning_rate * args.final_lr_fraction:.2e}")
     console.print(f"  梯度裁剪: {config.max_grad_norm}")
 
     # ==================== 创建训练状态 ====================
@@ -338,12 +468,14 @@ def main():
                 # 计算当前学习率（近似值）
                 current_step = update
                 if current_step < warmup_steps:
-                    current_lr = 3e-4 * (current_step / warmup_steps)
+                    current_lr = args.learning_rate * \
+                        (current_step / warmup_steps)
+
                 else:
                     progress_ratio = (current_step - warmup_steps) / (
                         total_updates - warmup_steps
                     )
-                    current_lr = 0.5 * 3e-4 * \
+                    current_lr = 0.5 * args.learning_rate * \
                         (1 + jp.cos(jp.pi * progress_ratio))
 
                 info["learning_rate"] = float(current_lr)
