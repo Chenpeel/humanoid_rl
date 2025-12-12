@@ -4,8 +4,19 @@
 """
 
 import argparse
+import os
+import sys
+import io
+
+# 屏蔽 MuJoCo warp 警告
+_original_stderr = sys.stderr
+sys.stderr = io.StringIO()
+
 import jax
 import jax.numpy as jp
+
+# 恢复 stderr
+sys.stderr = _original_stderr
 from pathlib import Path
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
@@ -14,9 +25,9 @@ from rich.table import Table
 from rich import box
 import time
 
-from jiyuan_rl.envs import create_jiyuan_env
-from jiyuan_rl.models import ActorCriticNetwork
-from jiyuan_rl.utils import MujocoRenderer, InteractiveViewer, create_video_writer, save_frame_to_video
+from rl.envs import create_velocity_tracking_env
+from rl.models import ActorCriticNetwork
+from rl.utils import MujocoRenderer, InteractiveViewer, create_video_writer, save_frame_to_video
 
 console = Console()
 
@@ -201,7 +212,7 @@ def evaluate_policy(
 
 
 def main():
-    parser = argparse.ArgumentParser(description='评估机器人强化学习策略')
+    parser = argparse.ArgumentParser(description='评估强化学习策略')
     parser.add_argument('--checkpoint', type=str, required=True, help='检查点路径')
     parser.add_argument('--xml-path', type=str, default=None,
                         help='MuJoCo XML路径（默认使用Open_Duck_Playground）')
@@ -223,7 +234,7 @@ def main():
     args = parser.parse_args()
 
     console.print(Panel.fit(
-        "[bold green]机器人策略评估[/bold green]\n"
+        "[bold green]策略评估[/bold green]\n"
         "[dim]加载检查点并评估策略性能[/dim]",
         border_style="green"
     ))
@@ -235,17 +246,17 @@ def main():
     xml_path = args.xml_path
     if args.use_local_urdf:
         console.print("[cyan]使用本地URDF模型...[/cyan]")
-        from jiyuan_rl.utils import setup_jiyuan_urdf
-        xml_path = setup_jiyuan_urdf()
+        from rl.utils import setup_urdf
+        xml_path = setup_urdf()
     elif xml_path is None:
-        # 默认使用Open_Duck_Playground
-        xml_path = "/home/chenpeel/Desktop/duck/Open_Duck_Playground/playground/open_duck_mini_v2/xmls/scene_flat_terrain.xml"
+        # 默认使用场景文件
+        xml_path = "../assets/xmls/scene.xml"
 
     console.print(f"[cyan]模型文件: {xml_path}[/cyan]")
 
     # 创建环境
     console.print("\n[bold cyan]创建环境[/bold cyan]")
-    env = create_jiyuan_env(xml_path=xml_path, verbose=False)
+    env = create_velocity_tracking_env(xml_path=xml_path, verbose=False)
     console.print(f"  ✓ obs={env.observation_size}, act={env.action_size}")
 
     # 创建网络

@@ -1,5 +1,5 @@
 """
-机器人PPO训练主脚本
+PPO训练主脚本
 """
 
 import os
@@ -8,6 +8,23 @@ import time
 import warnings
 from datetime import datetime
 from pathlib import Path
+
+# ==================== 屏蔽 MuJoCo warp 警告 ====================
+# MuJoCo 会在导入时输出 warp 相关警告，这些是可选功能，不影响使用
+import contextlib
+import io
+
+# 保存原始 stderr
+_original_stderr = sys.stderr
+
+# 临时屏蔽 stderr（仅在导入 mujoco 时）
+def _suppress_mujoco_warnings():
+    """临时屏蔽 MuJoCo 的 warp 警告"""
+    sys.stderr = io.StringIO()
+
+def _restore_stderr():
+    """恢复 stderr"""
+    sys.stderr = _original_stderr
 
 # ==================== JAX配置 (必须在导入jax之前) ====================
 # 启用JAX编译缓存 (使用绝对路径，确保持久化)
@@ -19,7 +36,7 @@ os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_path
 # 最大化显存使用
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.85"  # 使用85%的显存，最大化利用
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"  # 使用95%的显存，最大化利用
 
 # 启用编译优化，平衡编译时间和GPU利用率
 os.environ["XLA_FLAGS"] = (
@@ -31,10 +48,16 @@ os.environ["XLA_FLAGS"] = (
 
 warnings.filterwarnings("ignore", category=Warning)
 
+# 屏蔽 MuJoCo warp 相关的导入警告
+warnings.filterwarnings("ignore", message=".*warp.*")
+
 # 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 if os.path.exists(os.path.join(os.path.dirname(__file__), "../.jax_cache")):
+    # 临时屏蔽 MuJoCo warp 警告
+    _suppress_mujoco_warnings()
+
     # 导入JAX和其他依赖
     import jax
     import jax.numpy as jp
@@ -42,13 +65,16 @@ if os.path.exists(os.path.join(os.path.dirname(__file__), "../.jax_cache")):
     from rich.console import Console
     from rich.panel import Panel
 
-    from jiyuan_rl.envs.jiyuan_mjx_env import JiyuanMJXEnv, create_jiyuan_env
-    from jiyuan_rl.models.networks import ActorCriticNetwork, count_parameters
-    from jiyuan_rl.models.optimizer import create_ppo_optimizer_cosine
-    from jiyuan_rl.training.logger import Logger, MetricsLogger
-    from jiyuan_rl.training.ppo_trainer import PPOConfig, PPOTrainer
-    from jiyuan_rl.training.train_state import create_train_state
-    from jiyuan_rl.utils.performance_monitor import PerformanceMonitor, benchmark_train_step
+    from rl.envs import VelocityTrackingEnv, create_velocity_tracking_env
+    from rl.models.networks import ActorCriticNetwork, count_parameters
+    from rl.models.optimizer import create_ppo_optimizer_cosine
+    from rl.training.logger import Logger, MetricsLogger
+    from rl.training.ppo_trainer import PPOConfig, PPOTrainer
+    from rl.training.train_state import create_train_state
+    from rl.utils.performance_monitor import PerformanceMonitor, benchmark_train_step
+
+    # 恢复 stderr
+    _restore_stderr()
 
 
 console = Console()
@@ -90,7 +116,7 @@ def main():
     """主训练函数"""
     console.print(
         Panel.fit(
-            "[bold green]机器人 PPO 训练[/bold green]\n[dim]JAX + MJX + Flax实现[/dim]",
+            "[bold green]PPO 训练[/bold green]\n[dim]JAX + MJX + Flax实现[/dim]",
             border_style="green",
         )
     )
@@ -99,22 +125,22 @@ def main():
     console.print("\n[bold cyan]1. 加载配置[/bold cyan]")
 
     config = PPOConfig(
-        # 环境配置 - 最大化并行环境以充分利用11G显存
-        num_envs=6144,  # 增加并行环境数，充分利用显存（约80-90%显存）
-        num_steps=64,  # 优化步数以获得最佳batch size
-        # PPO超参数 - 优化以最大化训练速度
-        num_epochs=4,  # 保持4个epoch
-        num_minibatches=4,  # 增加mini-batch大小，提高GPU利用率
-        gamma=0.99,
-        gae_lambda=0.95,
-        clip_epsilon=0.2,
-        value_coef=0.5,
-        entropy_coef=0.01,
-        max_grad_norm=0.5,
-        # 训练配置 - 最大化训练效率
-        total_timesteps=200_000_000,  # 大幅增加总训练步数
-        log_interval=100,  # 最小化日志频率，减少IO开销
-        eval_interval=500,  # 最小化评估频率
+        # 环境配置
+        num_envs=7680,  # 并行环境数
+        num_steps=64,  # 每次rollout的步数
+        # PPO超参数
+        num_epochs=4,  # 每次update的epoch数
+        num_minibatches=4,  # mini-batch数量
+        gamma=0.99,  # 折扣因子
+        gae_lambda=0.95,  # GAE lambda
+        clip_epsilon=0.2,  # PPO裁剪系数
+        value_coef=0.5,  # 价值损失系数
+        entropy_coef=0.01,  # 熵正则化系数
+        max_grad_norm=0.5,  # 梯度裁剪
+        # 训练配置
+        total_timesteps=200_000_000,  # 总训练步数
+        log_interval=100,  # 日志频率
+        eval_interval=500,  # 评估频率
     )
 
     print_config(config)
@@ -131,7 +157,7 @@ def main():
     scene_path = "../assets/xmls/scene.xml"
     if not os.path.exists(os.path.join(os.path.dirname(__file__), scene_path)):
         pass
-    env = create_jiyuan_env(xml_path=scene_path)
+    env = create_velocity_tracking_env(xml_path=scene_path)
     console.print(f"✓ 环境创建完成")
     console.print(f"  观测维度: {env.observation_size}")
     console.print(f"  动作维度: {env.action_size}")
@@ -231,7 +257,7 @@ def main():
     console.print("\n[bold cyan]8. 创建日志系统[/bold cyan]")
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_dir = f"logs/jiyuan_ppo_{timestamp}"
+    log_dir = f"logs/ppo_{timestamp}"
     logger = Logger(log_dir=log_dir, use_tensorboard=True, use_rich=True)
 
     console.print(f"✓ 日志系统创建完成")
@@ -271,21 +297,8 @@ def main():
     compile_time = time.time() - t0
     console.print(f"✓ 编译完成 (耗时: {compile_time:.2f}s)")
 
-    # ==================== 性能基准测试 ====================
-    console.print("\n[bold cyan]11. 性能基准测试[/bold cyan]")
-    console.print("运行性能基准测试（10次迭代）...")
-
-    perf_stats = benchmark_train_step(
-        train_step_jit, train_state, env_state, num_warmup=2, num_iterations=10
-    )
-
-    console.print(f"✓ 基准测试完成")
-    console.print(f"  平均步时间: {perf_stats['mean_time']:.3f}s")
-    console.print(f"  标准差: {perf_stats['std_time']:.3f}s")
-    console.print(f"  最小时间: {perf_stats['min_time']:.3f}s")
-    console.print(f"  最大时间: {perf_stats['max_time']:.3f}s")
-    console.print(
-        f"  环境步数/秒: {config.batch_size / perf_stats['mean_time']:.0f}")
+    # ==================== 性能基准测试（已跳过） ====================
+    # console.print("\n[bold cyan]11. 跳过性能基准测试（直接开始训练）[/bold cyan]")
 
     # 创建性能监控器
     perf_monitor = PerformanceMonitor()
@@ -309,7 +322,7 @@ def main():
             metrics_logger.log_dict(info)
             progress.update(task, advance=1)
 
-            # 从第二次更新开始循环 (因为第一次已经作为编译预热运行了)
+            # 从第二次更新开始循环
             for update in range(1, config.num_updates):
                 # 执行训练步
                 train_state, env_state, info = train_step_jit(

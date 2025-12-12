@@ -35,27 +35,84 @@ def visualize_mjcf(xml_path: str, interactive: bool = True):
     可视化MJCF模型
 
     Args:
-        xml_path: MJCF文件路径
+        xml_path: MJCF文件路径（支持相对于项目根或当前目录的路径）
         interactive: 是否启用交互式查看器
     """
     # 加载模型
-    print(f"正在加载模型: {xml_path}")
-    # MuJoCo会相对于工作目录解析mesh路径
-    # XML中使用 assets_jiyuan_right/meshes/ 格式
-    # 需要切换到 rl 目录，并使用相对路径传递XML
-    xml_path_obj = Path(xml_path).resolve()
+    print(f"📂 正在加载模型: {xml_path}")
 
-    # 从 mjcf 目录往上三级到达 rl 目录
-    rl_dir = xml_path_obj.parent.parent.parent
+    # 首先尝试相对于当前工作目录解析
+    xml_path_obj = Path(xml_path)
+
+    # 如果是相对路径，先尝试相对于当前目录
+    if not xml_path_obj.is_absolute():
+        cwd_path = Path.cwd() / xml_path_obj
+        if cwd_path.exists():
+            xml_path_obj = cwd_path.resolve()
+            print(f"✓ 相对于当前目录找到文件: {xml_path_obj}")
+        else:
+            # 尝试相对于项目根目录
+            current = Path.cwd()
+            project_root = None
+            while current != current.parent:
+                if (current / "assets").exists():
+                    project_root = current
+                    break
+                current = current.parent
+
+            if project_root:
+                root_path = project_root / xml_path_obj
+                if root_path.exists():
+                    xml_path_obj = root_path.resolve()
+                    print(f"✓ 相对于项目根目录找到文件: {xml_path_obj}")
+                else:
+                    print(f"❌ 错误: 文件不存在")
+                    print(f"   尝试的路径:")
+                    print(f"   1. {cwd_path}")
+                    print(f"   2. {root_path}")
+                    return
+            else:
+                print(f"❌ 错误: 无法找到文件 {xml_path}")
+                print(f"   当前目录: {Path.cwd()}")
+                print(f"   尝试的路径: {cwd_path}")
+                return
+    else:
+        xml_path_obj = xml_path_obj.resolve()
+
+    if not xml_path_obj.exists():
+        print(f"❌ 错误: 文件不存在: {xml_path_obj}")
+        return
+
+    # 找到项目根目录（包含 assets/ 的目录）
+    # 从 XML 文件向上查找，直到找到包含 assets/ 的目录
+    current = xml_path_obj.parent
+    rl_dir = None
+
+    while current != current.parent:  # 避免到达根目录
+        if (current / "assets").exists():
+            rl_dir = current
+            break
+        current = current.parent
+
+    if rl_dir is None:
+        # 降级：假设在当前工作目录
+        rl_dir = Path.cwd()
+        print(f"⚠️  警告: 无法找到项目根目录（包含 assets/ 的目录）")
+        print(f"   使用当前目录: {rl_dir}")
+
     original_dir = os.getcwd()
-    os.chdir(rl_dir)
 
-    # 计算XML文件相对于rl目录的路径
-    xml_relative = xml_path_obj.relative_to(rl_dir)
+    # 切换到 XML 文件所在目录，这样相对路径才能正确解析
+    os.chdir(xml_path_obj.parent)
+
+    # 使用文件名加载（因为已经切换到了XML所在目录）
+    xml_relative = xml_path_obj.name
 
     try:
-        print(f"工作目录: {os.getcwd()}")
-        # 使用相对路径加载，这样MuJoCo会从工作目录解析mesh路径
+        print(f"📁 工作目录: {os.getcwd()}")
+        print(f"📄 加载文件: {xml_relative}")
+
+        # 使用相对路径加载，这样 MuJoCo 会从工作目录解析 mesh 路径
         model = mujoco.MjModel.from_xml_path(str(xml_relative))
         data = mujoco.MjData(model)
 
@@ -175,6 +232,38 @@ def visualize_mjcf(xml_path: str, interactive: bool = True):
         else:
             print("\n非交互模式 - 仅显示模型信息")
 
+    except ValueError as e:
+        error_msg = str(e)
+        print(f"\n❌ 错误: MuJoCo 加载失败")
+        print(f"   {error_msg}")
+
+        # 提取路径信息（如果错误信息包含路径）
+        if "Error opening file" in error_msg:
+            # 提取引号中的文件路径
+            import re
+            match = re.search(r"'([^']+)'", error_msg)
+            if match:
+                failed_path = match.group(1)
+                print(f"\n🔍 问题分析:")
+                print(f"   找不到文件: {failed_path}")
+                print(f"   当前工作目录: {os.getcwd()}")
+                print(f"\n💡 可能的原因:")
+                print(f"   1. XML 中的 <include> 路径不正确")
+                print(f"   2. Mesh 文件路径不正确")
+                print(f"   3. 工作目录设置不正确")
+                print(f"\n🔧 建议:")
+                print(f"   1. 检查 {xml_relative} 中的 <include> 标签")
+                print(f"   2. 确保 mesh 文件在 assets/meshes/ 目录下")
+                print(f"   3. 确保所有路径使用相对于项目根的格式")
+
+    except Exception as e:
+        print(f"\n❌ 错误: 发生未知错误")
+        print(f"   错误类型: {type(e).__name__}")
+        print(f"   错误信息: {str(e)}")
+        import traceback
+        print(f"\n🔍 详细错误堆栈:")
+        traceback.print_exc()
+
     finally:
         # 恢复原工作目录
         os.chdir(original_dir)
@@ -276,7 +365,7 @@ def main():
         "--xml",
         type=str,
         default="../assets_jiyuan_right/mjcf/jiyuan.xml",
-        help="MJCF文件路径（相对于scripts目录）"
+        help="MJCF文件路径（支持相对于当前目录或项目根目录的路径）"
     )
     parser.add_argument(
         "--no-interactive",
@@ -296,32 +385,23 @@ def main():
 
     args = parser.parse_args()
 
-    # 解析路径
-    script_dir = Path(__file__).parent
-    xml_path = (script_dir / args.xml).resolve()
-
-    if not xml_path.exists():
-        print(f"错误: 找不到文件 {xml_path}")
-        return
-
     print("=" * 60)
-    print("机器人MJCF模型可视化工具")
+    print("🤖 机器人MJCF模型可视化工具")
     print("=" * 60)
-    print(f"文件路径: {xml_path}")
 
     # 检查模型
     if args.check:
-        check_model_validity(str(xml_path))
+        check_model_validity(args.xml)
 
     # 测试正向运动学
     if args.test_fk:
-        test_forward_kinematics(str(xml_path))
+        test_forward_kinematics(args.xml)
 
-    # 可视化
+    # 可视化（默认行为或明确请求）
     if not args.no_interactive:
-        visualize_mjcf(str(xml_path), interactive=True)
+        visualize_mjcf(args.xml, interactive=True)
     else:
-        visualize_mjcf(str(xml_path), interactive=False)
+        visualize_mjcf(args.xml, interactive=False)
 
 
 if __name__ == "__main__":
