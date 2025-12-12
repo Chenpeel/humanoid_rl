@@ -31,6 +31,7 @@ env/
 *.tmp
 .DS_Store
 *.egg-info
+.abandoned/
 
 # cython编译文件
 build/
