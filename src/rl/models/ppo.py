@@ -12,8 +12,8 @@ from flax import struct
 @struct.dataclass
 class PPOBatch:
     """PPO训练批次数据
-    
-    所有字段都是JAX数组，可被JIT编译
+
+    JAX数组，可JIT编译
     """
     obs: jax.Array          # 观测 (batch, obs_dim)
     actions: jax.Array      # 动作 (batch, action_dim)
@@ -31,17 +31,17 @@ def compute_gae(
     gae_lambda: float = 0.95,
 ) -> Tuple[jax.Array, jax.Array]:
     """计算广义优势估计（GAE）
-    
+
     GAE(δ_t) = δ_t + (γλ)δ_{t+1} + (γλ)^2δ_{t+2} + ...
     其中 δ_t = r_t + γV(s_{t+1}) - V(s_t)
-    
+
     Args:
         rewards: 奖励序列 (T,)
         values: 价值估计序列 (T+1,) - 包含最后一个next_value
         dones: 终止标志序列 (T,)
         gamma: 折扣因子
         gae_lambda: GAE的lambda参数
-        
+
     Returns:
         advantages: 优势函数 (T,)
         returns: 回报 (T,)
@@ -49,20 +49,20 @@ def compute_gae(
     T = len(rewards)
     advantages = jp.zeros(T)
     last_gae = 0.0
-    
+
     # 反向计算GAE
     for t in reversed(range(T)):
         # TD误差: δ_t = r_t + γV(s_{t+1})(1-done) - V(s_t)
         next_value = values[t + 1] * (1.0 - dones[t])
         delta = rewards[t] + gamma * next_value - values[t]
-        
+
         # GAE: A_t = δ_t + (γλ)A_{t+1}(1-done)
         last_gae = delta + gamma * gae_lambda * last_gae * (1.0 - dones[t])
         advantages = advantages.at[t].set(last_gae)
-    
+
     # 回报 = 优势 + 价值
     returns = advantages + values[:-1]
-    
+
     return advantages, returns
 
 
@@ -74,14 +74,14 @@ def compute_gae_scan(
     gae_lambda: float = 0.95,
 ) -> Tuple[jax.Array, jax.Array]:
     """使用jax.lax.scan计算GAE（更高效）
-    
+
     Args:
         rewards: 奖励序列 (T,)
         values: 价值估计序列 (T+1,)
         dones: 终止标志序列 (T,)
         gamma: 折扣因子
         gae_lambda: GAE的lambda参数
-        
+
     Returns:
         advantages: 优势函数 (T,)
         returns: 回报 (T,)
@@ -90,18 +90,18 @@ def compute_gae_scan(
         """scan函数：从后往前计算GAE"""
         last_gae = carry
         reward, value, next_value, done = inp
-        
+
         # TD误差
         delta = reward + gamma * next_value * (1.0 - done) - value
-        
+
         # GAE
         gae = delta + gamma * gae_lambda * last_gae * (1.0 - done)
-        
+
         return gae, gae
-    
+
     # 准备输入：(reward, value, next_value, done)
     inputs = (rewards, values[:-1], values[1:], dones)
-    
+
     # 反向扫描
     _, advantages = jax.lax.scan(
         scan_fn,
@@ -109,13 +109,13 @@ def compute_gae_scan(
         xs=jax.tree.map(lambda x: x[::-1], inputs),
         reverse=False,
     )
-    
+
     # 反转回来
     advantages = advantages[::-1]
-    
+
     # 回报 = 优势 + 价值
     returns = advantages + values[:-1]
-    
+
     return advantages, returns
 
 
@@ -128,14 +128,14 @@ def ppo_loss(
     entropy_coef: float = 0.01,
 ) -> Tuple[jax.Array, Dict[str, jax.Array]]:
     """计算PPO损失函数
-    
+
     L = L^CLIP + c_1 * L^VF - c_2 * S[π](s)
-    
+
     其中：
     - L^CLIP: PPO裁剪的策略损失
     - L^VF: 价值函数损失（MSE）
     - S[π]: 策略熵（探索奖励）
-    
+
     Args:
         params: 网络参数
         network: Actor-Critic网络
@@ -143,7 +143,7 @@ def ppo_loss(
         clip_epsilon: PPO裁剪参数（通常0.1-0.3）
         value_coef: 价值函数损失系数
         entropy_coef: 熵正则化系数
-        
+
     Returns:
         total_loss: 总损失
         info: 各项损失的详细信息字典
@@ -151,60 +151,63 @@ def ppo_loss(
     # 前向传播：获取新策略的log_prob和value
     mean, log_std, values_pred = network.apply(params, batch.obs)
     std = jp.exp(log_std)
-    
+
     # 计算新策略的对数概率
     log_probs = -0.5 * jp.sum(
         ((batch.actions - mean) / std) ** 2 + 2 * log_std + jp.log(2 * jp.pi),
         axis=-1
     )
-    
+
     # 1. PPO裁剪的策略损失
     # ratio = π_new / π_old = exp(log π_new - log π_old)
     ratio = jp.exp(log_probs - batch.old_log_probs)
-    
+
     # 优势标准化（可选，但通常有帮助）
     advantages_normalized = (batch.advantages - batch.advantages.mean()) / (
         batch.advantages.std() + 1e-8
     )
-    
+
     # PPO裁剪目标
     surr1 = ratio * advantages_normalized
-    surr2 = jp.clip(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon) * advantages_normalized
+    surr2 = jp.clip(ratio, 1.0 - clip_epsilon, 1.0 +
+                    clip_epsilon) * advantages_normalized
     policy_loss = -jp.mean(jp.minimum(surr1, surr2))
-    
+
     # 2. 价值函数损失（MSE）
     value_loss = jp.mean((values_pred - batch.returns) ** 2)
-    
+
     # 3. 策略熵（鼓励探索）
     # H[π] = E[-log π] = E[0.5 * (log(2πσ^2) + 1)]
-    entropy = 0.5 * jp.mean(jp.sum(log_std + 0.5 * jp.log(2 * jp.pi * jp.e), axis=-1))
-    
+    entropy = 0.5 * jp.mean(jp.sum(log_std + 0.5 *
+                            jp.log(2 * jp.pi * jp.e), axis=-1))
+
     # 总损失
     total_loss = policy_loss + value_coef * value_loss - entropy_coef * entropy
-    
+
     # 返回详细信息
     info = {
         'total_loss': total_loss,
         'policy_loss': policy_loss,
         'value_loss': value_loss,
         'entropy': entropy,
-        'approx_kl': jp.mean((log_probs - batch.old_log_probs) ** 2) / 2,  # 近似KL散度
+        # 近似KL散度
+        'approx_kl': jp.mean((log_probs - batch.old_log_probs) ** 2) / 2,
         'clip_fraction': jp.mean(jp.abs(ratio - 1.0) > clip_epsilon),  # 被裁剪的比例
         'ratio_mean': jp.mean(ratio),
         'ratio_std': jp.std(ratio),
         'advantages_mean': jp.mean(batch.advantages),
         'advantages_std': jp.std(batch.advantages),
     }
-    
+
     return total_loss, info
 
 
 def normalize_advantages(advantages: jax.Array) -> jax.Array:
     """标准化优势函数
-    
+
     Args:
         advantages: 优势函数 (batch,)
-        
+
     Returns:
         标准化后的优势函数 (batch,)
     """
@@ -213,13 +216,13 @@ def normalize_advantages(advantages: jax.Array) -> jax.Array:
 
 def explained_variance(y_pred: jax.Array, y_true: jax.Array) -> jax.Array:
     """计算解释方差（用于评估价值函数的拟合质量）
-    
+
     EV = 1 - Var(y_true - y_pred) / Var(y_true)
-    
+
     Args:
         y_pred: 预测值 (batch,)
         y_true: 真实值 (batch,)
-        
+
     Returns:
         解释方差（接近1表示拟合好）
     """
@@ -249,7 +252,7 @@ def prepare_ppo_batch(
     gae_lambda: float = 0.95,
 ) -> PPOBatch:
     """准备PPO训练批次
-    
+
     Args:
         obs: 观测序列 (T, obs_dim)
         actions: 动作序列 (T, action_dim)
@@ -259,7 +262,7 @@ def prepare_ppo_batch(
         old_log_probs: 旧策略对数概率 (T,)
         gamma: 折扣因子
         gae_lambda: GAE lambda
-        
+
     Returns:
         PPOBatch数据
     """
@@ -271,7 +274,7 @@ def prepare_ppo_batch(
         gamma=gamma,
         gae_lambda=gae_lambda,
     )
-    
+
     # 创建batch
     batch = PPOBatch(
         obs=obs,
@@ -281,5 +284,5 @@ def prepare_ppo_batch(
         returns=returns,
         values=values[:-1],  # 去掉最后一个next_value
     )
-    
+
     return batch
