@@ -373,13 +373,14 @@ class VelocityTrackingEnv(MJXBaseEnv):
         # 3. 存活奖励
         reward_alive = 1.0
 
-        # 4. 动作变化率惩罚
+        # 4. 动作变化率惩罚（添加裁剪防止数值爆炸）
         action_rate = jp.sum(jp.square(action - prev_state.last_action))
-        cost_action_rate = action_rate
+        cost_action_rate = jp.clip(action_rate, 0.0, 10.0)  # 限制最大惩罚
 
-        # 5. 扭矩惩罚
+        # 5. 扭矩惩罚（添加裁剪防止数值爆炸）
         torques = pipeline_state.qfrc_actuator
-        cost_torques = jp.sum(jp.square(torques))
+        torques_squared = jp.sum(jp.square(torques))
+        cost_torques = jp.clip(torques_squared, 0.0, 1000.0)  # 限制最大惩罚
 
         # 组合奖励
         reward = (
@@ -389,6 +390,9 @@ class VelocityTrackingEnv(MJXBaseEnv):
             + self.reward_weights["action_rate"] * cost_action_rate
             + self.reward_weights["torques"] * cost_torques
         )
+
+        # 总奖励裁剪（确保在合理范围内）
+        reward = jp.clip(reward, -10.0, 10.0)
 
         return reward
 

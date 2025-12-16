@@ -334,8 +334,8 @@ def main():
         config.total_timesteps = required_timesteps
         total_updates = config.num_updates
 
-    # 计算warmup_steps：2%的步数作为预热
-    warmup_steps = max(10, total_updates // 50)
+    # 计算warmup_steps：5%的步数作为预热（增强稳定性）
+    warmup_steps = max(10, total_updates // 20)
     console.print(
         f"[dim]warmup_steps: {warmup_steps:,} (约{warmup_steps / total_updates * 100:.1f}%)[/dim]"
     )
@@ -440,74 +440,102 @@ def main():
     metrics_logger = MetricsLogger()
     perf_monitor.start()  # 启动性能监控
 
-    progress = logger.create_progress_bar(
+    # ==================== 纯函数训练循环（隔离UI代码） ====================
+    def pure_train_loop(
+        train_state, env_state, info,
+        update_callback=None  # 回调函数用于UI更新
+    ):
+        """纯函数训练循环，不依赖UI对象（避免触发JIT重新编译）
+
+        Args:
+            train_state: 训练状态
+            env_state: 环境状态
+            info: 初始信息
+            update_callback: 可选的回调函数，签名为 callback(update, info)
+
+        Returns:
+            (train_state, env_state, info): 最终训练状态
+        """
+        # 记录第一次更新
+        metrics_logger.log_dict(info)
+        if update_callback:
+            update_callback(0, info)
+
+        # 训练循环
+        for update in range(1, config.num_updates):
+            # ✅ 纯函数调用，无UI依赖
+            train_state, env_state, info = train_step_jit(
+                train_state, env_state)
+
+            # 确保计算完成（用于准确的性能测量）
+            jax.block_until_ready(train_state)
+
+            # 记录性能指标
+            perf_metrics = perf_monitor.step(config.batch_size)
+            info.update(perf_metrics)
+
+            # 计算当前学习率（近似值）
+            current_step = update
+            if current_step < warmup_steps:
+                current_lr = args.learning_rate * \
+                    (current_step / warmup_steps)
+            else:
+                progress_ratio = (current_step - warmup_steps) / (
+                    total_updates - warmup_steps
+                )
+                current_lr = 0.5 * args.learning_rate * \
+                    (1 + jp.cos(jp.pi * progress_ratio))
+
+            info["learning_rate"] = float(current_lr)
+
+            # 记录指标
+            metrics_logger.log_dict(info)
+
+            # ✅ 通过回调更新UI（隔离UI逻辑）
+            if update_callback:
+                update_callback(update, info)
+
+            # 定期日志
+            if (update + 1) % config.log_interval == 0:
+                avg_metrics = metrics_logger.get_averages()
+                avg_metrics["steps_since_last_log"] = config.log_interval
+
+                # TensorBoard日志
+                logger.log_scalars(
+                    metrics=avg_metrics,
+                    step=train_state.step,
+                    prefix="train",
+                )
+
+                # 终端输出
+                logger.print_training_status(
+                    step=train_state.step,
+                    total_steps=config.num_updates,
+                    env_steps=train_state.env_steps,
+                    metrics=avg_metrics,
+                )
+
+                # 重置指标累积器
+                metrics_logger.reset()
+
+        return train_state, env_state, info
+
+    # ==================== UI层：创建显示并绑定回调 ====================
+    training_display = logger.create_training_display(
         total=config.num_updates, description="PPO训练"
     )
 
     try:
-        with progress:
-            task = progress.add_task("[cyan]训练中...", total=config.num_updates)
+        with training_display:
+            # 定义UI更新回调（与训练逻辑完全分离）
+            def on_update(update, info):
+                training_display.update(advance=1, metrics=info)
 
-            # 记录第一次更新的指标
-            metrics_logger.log_dict(info)
-            progress.update(task, advance=1)
-
-            # 从第二次更新开始循环
-            for update in range(1, config.num_updates):
-                # 执行训练步
-                train_state, env_state, info = train_step_jit(
-                    train_state, env_state)
-
-                # 确保计算完成（用于准确的性能测量）
-                jax.block_until_ready(train_state)
-
-                # 记录性能指标
-                perf_metrics = perf_monitor.step(config.batch_size)
-                info.update(perf_metrics)
-
-                # 计算当前学习率（近似值）
-                current_step = update
-                if current_step < warmup_steps:
-                    current_lr = args.learning_rate * \
-                        (current_step / warmup_steps)
-
-                else:
-                    progress_ratio = (current_step - warmup_steps) / (
-                        total_updates - warmup_steps
-                    )
-                    current_lr = 0.5 * args.learning_rate * \
-                        (1 + jp.cos(jp.pi * progress_ratio))
-
-                info["learning_rate"] = float(current_lr)
-
-                # 记录指标
-                metrics_logger.log_dict(info)
-
-                # 更新进度条
-                progress.update(task, advance=1)
-
-                # 定期日志
-                if (update + 1) % config.log_interval == 0:
-                    avg_metrics = metrics_logger.get_averages()
-                    avg_metrics["steps_since_last_log"] = config.log_interval
-
-                    # TensorBoard日志
-                    logger.log_scalars(
-                        metrics=avg_metrics,
-                        step=train_state.step,
-                        prefix="train",
-                    )
-
-                    # 终端输出
-                    logger.print_training_status(
-                        step=train_state.step,
-                        total_steps=config.num_updates,
-                        env_steps=train_state.env_steps,
-                        metrics=avg_metrics,
-                    )
-
-                    # 重置指标累积器
-                    metrics_logger.reset()
+            # 执行纯函数训练循环
+            train_state, env_state, info = pure_train_loop(
+                train_state, env_state, info,
+                update_callback=on_update
+            )
 
         # ==================== 训练完成 ====================
         logger.print_summary(
