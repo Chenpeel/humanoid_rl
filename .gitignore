@@ -40,3 +40,4 @@ build/
 *.so
 .TODOs
 CLAUDE.md
+.claude/

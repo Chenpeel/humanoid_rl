@@ -1,6 +1,4 @@
 # 摔倒恢复环境配置
-# TensorFlow重写Open_Duck_Playground项目
-
 # 环境配置
 env:
     name: "FallToStandEnv"
