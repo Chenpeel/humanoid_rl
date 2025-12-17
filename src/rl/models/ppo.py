@@ -150,22 +150,35 @@ def ppo_loss(
     """
     # 前向传播：获取新策略的log_prob和value
     mean, log_std, values_pred = network.apply(params, batch.obs)
-    std = jp.exp(log_std)
 
-    # 计算新策略的对数概率
+    # 安全裁剪log_std（防止极端值）
+    log_std = jp.clip(log_std, -5.0, 2.0)  # 缩小范围提高稳定性
+    std = jp.exp(log_std)
+    std = jp.maximum(std, 1e-6)  # 防止除零
+
+    # 计算新策略的对数概率（数值稳定版本）
     log_probs = -0.5 * jp.sum(
         ((batch.actions - mean) / std) ** 2 + 2 * log_std + jp.log(2 * jp.pi),
         axis=-1
     )
+    # 裁剪对数概率防止极端值
+    log_probs = jp.clip(log_probs, -100.0, 100.0)
 
     # 1. PPO裁剪的策略损失
     # ratio = π_new / π_old = exp(log π_new - log π_old)
-    ratio = jp.exp(log_probs - batch.old_log_probs)
+    log_ratio = log_probs - batch.old_log_probs
+    # 裁剪log_ratio防止exp溢出
+    log_ratio = jp.clip(log_ratio, -20.0, 20.0)
+    ratio = jp.exp(log_ratio)
 
-    # 优势标准化（可选，但通常有帮助）
-    advantages_normalized = (batch.advantages - batch.advantages.mean()) / (
-        batch.advantages.std() + 1e-8
-    )
+    # 优势标准化（改进数值稳定性）
+    advantages_mean = batch.advantages.mean()
+    advantages_std = batch.advantages.std()
+    # 使用更大的epsilon防止除零
+    advantages_std = jp.maximum(advantages_std, 1e-4)
+    advantages_normalized = (batch.advantages - advantages_mean) / advantages_std
+    # 裁剪标准化后的优势值
+    advantages_normalized = jp.clip(advantages_normalized, -10.0, 10.0)
 
     # PPO裁剪目标
     surr1 = ratio * advantages_normalized
