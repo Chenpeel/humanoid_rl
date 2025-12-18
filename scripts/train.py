@@ -33,23 +33,32 @@ def _restore_stderr():
 
 
 # ==================== JAX配置 (必须在导入jax之前) ====================
+# 🔧 指定使用 GPU device:1（第二张显卡）
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 # 启用JAX编译缓存 (使用绝对路径，确保持久化)
 cache_path = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", ".jax_cache"))
 os.makedirs(cache_path, exist_ok=True)
 os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_path
 
-# 最大化显存使用
+# 🔧 增强缓存配置
+os.environ["JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES"] = "0"  # 缓存所有编译结果
+os.environ["JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS"] = "0"  # 缓存所有编译
+
+# 最大化显存使用（V100 32GB 可以用 0.95-0.98）
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.98"  # 使用98%的显存
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"  # V100 32GB 用 95%
 
-# 启用编译优化，优先减少编译时间
+# 启用编译优化（V100 用最高级别）
 os.environ["XLA_FLAGS"] = (
     os.environ.get("XLA_FLAGS", "")
     + " --xla_gpu_enable_latency_hiding_scheduler=true"
     + " --xla_gpu_enable_highest_priority_async_stream=true"
-    + " --xla_gpu_autotune_level=1"  # 级别1：更快的编译速度，稍微牺牲运行时性能
+    + " --xla_gpu_autotune_level=1"  # V100 用最高级别1
+    + " --xla_gpu_deterministic_ops=false"  # 非确定性换取速度
 )
 
 warnings.filterwarnings("ignore", category=Warning)
@@ -75,7 +84,7 @@ if os.path.exists(os.path.join(os.path.dirname(__file__), "../.jax_cache")):
     from rl.models.networks import ActorCriticNetwork, count_parameters
     from rl.models.optimizer import create_ppo_optimizer_cosine
     from rl.training.logger import Logger, MetricsLogger
-    from rl.training.ppo_trainer import PPOConfig, PPOTrainer
+    from rl.training.ppo_trainer import PPOConfig, PPOTrainer, create_train_step_fn
     from rl.training.train_state import create_train_state
     from rl.utils.performance_monitor import PerformanceMonitor, benchmark_train_step
 
@@ -417,8 +426,14 @@ def main():
 
     console.print("正在编译 JAX 计算图，第一次运行可能需要几分钟...")
 
-    # 使用jax.jit加速训练步
-    train_step_jit = jax.jit(trainer.train_step)
+    # ✅ 使用纯函数版本（支持持久化缓存）
+    train_step_fn = create_train_step_fn(
+        config=config,
+        env=env,
+        network=network,
+        optimizer=optimizer,
+    )
+    train_step_jit = jax.jit(train_step_fn)
 
     # 触发一次编译
     t0 = time.time()
@@ -522,14 +537,16 @@ def main():
 
     # ==================== UI层：创建显示并绑定回调 ====================
     training_display = logger.create_training_display(
-        total=config.num_updates, description="PPO训练"
+        total=config.num_updates,
+        steps_per_epoch=1,  # 每个update作为一个epoch
+        description="PPO训练"
     )
 
     try:
         with training_display:
             # 定义UI更新回调（与训练逻辑完全分离）
             def on_update(update, info):
-                training_display.update(advance=1, metrics=info)
+                training_display.update(epoch=update, step=1, metrics=info)
 
             # 执行纯函数训练循环
             train_state, env_state, info = pure_train_loop(
