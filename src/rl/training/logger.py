@@ -235,14 +235,17 @@ class Logger:
             console=self.console,
         )
 
-    def create_training_display(self, total: int, description: str = "PPO训练"):
-        """创建训练进度显示（两行刷新显示）
+    def create_training_display(self, total: int, steps_per_epoch: int = 1, description: str = "PPO训练"):
+        """创建训练进度显示（多区域丰富布局）
 
-        第一行：进度条 + epoch/steps + 时间
-        第二行：训练指标（reward, loss, FPS等）- 动态刷新
+        第一区：总轮次进度 + 当前步数进度 + 时间信息
+        第二区：奖励与回合信息
+        第三区：训练损失指标
+        第四区：性能指标
 
         Args:
-            total: 总训练步数
+            total: 总训练轮次（epochs）
+            steps_per_epoch: 每轮的步数
             description: 描述文本
 
         Returns:
@@ -254,6 +257,7 @@ class Logger:
         return TrainingDisplay(
             console=self.console,
             total=total,
+            steps_per_epoch=steps_per_epoch,
             description=description,
         )
 
@@ -331,170 +335,287 @@ class MetricsLogger:
 
 
 class TrainingDisplay:
-    """训练进度显示（两行动态刷新）
+    """训练进度显示（多区域丰富布局）
 
-    第一行：进度条 + step/steps + 时间估计
-    第二行：训练指标表格（动态刷新，不重复打印）
+    使用Panel + Layout + Progress + Table实现分区显示：
+    - 进度区：总轮次进度 + 当前步数进度 + 时间信息
+    - 奖励区：回合奖励、回合长度等
+    - 损失区：策略损失、价值损失、熵等
+    - 性能区：FPS、SPS、学习率等
     """
 
-    def __init__(self, console: Console, total: int, description: str = "PPO训练"):
+    def __init__(self, console: Console, total: int, steps_per_epoch: int = 1, description: str = "PPO训练"):
         """初始化训练显示
 
         Args:
             console: Rich Console对象
-            total: 总训练步数
+            total: 总训练轮次（epochs）
+            steps_per_epoch: 每轮的步数
             description: 任务描述
         """
         self.console = console
         self.total = total
+        self.steps_per_epoch = steps_per_epoch
         self.description = description
-        self.current = 0
-        self.start_time = None  # 用于计算准确的ETA
-        self.warmup_steps = 2   # 跳过前2步（包含JIT编译）
+        self.current_epoch = 0
+        self.current_step = 0
+        self.start_time = None
+        self.warmup_steps = 2  # 跳过前2步（包含JIT编译）
 
-        # 创建进度条（第一行）
-        self.progress = Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
+        # 创建总轮次进度条
+        self.epoch_progress = Progress(
+            TextColumn("[bold cyan]总进度[/bold cyan]"),
+            BarColumn(bar_width=30),
             TextColumn("[progress.percentage]{task.percentage:>3.1f}%"),
-            TextColumn("[cyan]{task.completed}/{task.total}[/cyan]"),
-            TimeElapsedColumn(),
-            TimeRemainingColumn(),
+            TextColumn("[cyan]Epoch {task.completed}/{task.total}[/cyan]"),
             console=console,
-            transient=False,  # 训练结束后保留进度条
         )
 
-        # 创建指标表格（第二行）
-        self.metrics_table = Table(
+        # 创建当前步数进度条
+        self.step_progress = Progress(
+            TextColumn("[bold green]步进度[/bold green]"),
+            BarColumn(bar_width=30),
+            TextColumn("[progress.percentage]{task.percentage:>3.1f}%"),
+            TextColumn("[green]Step {task.completed}/{task.total}[/green]"),
+            console=console,
+        )
+
+        # 创建时间信息表格
+        self.time_table = Table(
             show_header=False,
             show_edge=False,
             box=None,
             padding=(0, 1),
         )
-        self.metrics_table.add_column("", style="dim", no_wrap=True)
-        self.metrics_table.add_column("", justify="right", style="bold")
+        self.time_table.add_column("", style="dim", no_wrap=True)
 
-        # 使用Layout组合两个组件
-        from rich.layout import Layout
+        # 创建各个指标表格
+        self.reward_table = self._create_metrics_table("奖励与回合")
+        self.loss_table = self._create_metrics_table("训练损失")
+        self.perf_table = self._create_metrics_table("性能指标")
+
+        # 使用Layout组合所有组件
         self.layout = Layout()
         self.layout.split_column(
-            Layout(self.progress, name="progress", size=1),
-            Layout(self.metrics_table, name="metrics", size=1),
+            Layout(name="progress", size=3),
+            Layout(name="time", size=1),
+            Layout(name="reward", size=3),
+            Layout(name="loss", size=4),
+            Layout(name="perf", size=3),
+        )
+
+        # 分配组件到各个区域
+        self.layout["progress"].split_column(
+            Layout(self.epoch_progress, size=1),
+            Layout(self.step_progress, size=1),
+        )
+        self.layout["time"].update(self.time_table)
+        self.layout["reward"].update(self.reward_table)
+        self.layout["loss"].update(self.loss_table)
+        self.layout["perf"].update(self.perf_table)
+
+        # 创建外层Panel
+        self.panel = Panel(
+            self.layout,
+            title=f"[bold magenta]{description} 监控面板[/bold magenta]",
+            border_style="magenta",
+            box=box.DOUBLE,
         )
 
         # 创建Live显示
         self.live = Live(
-            self.layout,
+            self.panel,
             console=console,
-            refresh_per_second=4,  # 每秒刷新4次
-            transient=False,  # 训练结束后保留显示
+            refresh_per_second=4,
+            transient=False,
         )
 
-        self.task_id = None
+        self.epoch_task_id = None
+        self.step_task_id = None
         self.started = False
+
+    def _create_metrics_table(self, title: str) -> Table:
+        """创建指标表格
+
+        Args:
+            title: 表格标题
+
+        Returns:
+            Table对象
+        """
+        table = Table(
+            title=f"[bold]{title}[/bold]",
+            show_header=False,
+            show_edge=False,
+            box=box.SIMPLE,
+            padding=(0, 1),
+        )
+        table.add_column("", style="dim", no_wrap=True, width=20)
+        table.add_column("", justify="right", style="bold cyan", width=10)
+        table.add_column("", style="dim", no_wrap=True, width=20)
+        table.add_column("", justify="right", style="bold green", width=10)
+        return table
 
     def start(self):
         """启动显示"""
         if not self.started:
             self.live.start()
-            self.task_id = self.progress.add_task(
-                f"[cyan]{self.description}",
+            self.epoch_task_id = self.epoch_progress.add_task(
+                "",
                 total=self.total
             )
+            self.step_task_id = self.step_progress.add_task(
+                "",
+                total=self.steps_per_epoch
+            )
             self.started = True
+            import time
+            self.start_time = time.time()
 
-    def update(self, advance: int = 1, metrics: Optional[Dict[str, Any]] = None):
+    def update(self, epoch: Optional[int] = None, step: Optional[int] = None, metrics: Optional[Dict[str, Any]] = None):
         """更新显示
 
         Args:
-            advance: 进度增加量
+            epoch: 当前轮次（如果提供，会更新总进度）
+            step: 当前步数（如果提供，会更新步进度）
             metrics: 当前训练指标字典
         """
         if not self.started:
             self.start()
 
-        # 更新进度条
-        self.current += advance
+        # 更新轮次进度
+        if epoch is not None:
+            advance_epoch = epoch - self.current_epoch
+            if advance_epoch > 0:
+                self.current_epoch = epoch
+                self.epoch_progress.update(self.epoch_task_id, completed=epoch)
 
-        # ✅ 修复ETA：跳过warmup步骤，从第3步开始计时
-        if self.current == self.warmup_steps:
-            # 重置进度条的时间基准（排除编译时间）
-            import time
-            self.start_time = time.time()
-            # 重新创建task，重置起始时间
-            self.progress.remove_task(self.task_id)
-            self.task_id = self.progress.add_task(
-                f"[cyan]{self.description}",
-                total=self.total,
-                completed=self.current
-            )
-        else:
-            self.progress.update(self.task_id, advance=advance)
+        # 更新步数进度
+        if step is not None:
+            # 如果step回到0，说明新的epoch开始，重置step进度
+            if step < self.current_step:
+                self.step_progress.reset(self.step_task_id)
+            self.current_step = step
+            self.step_progress.update(self.step_task_id, completed=step)
+
+        # 更新时间信息
+        self._update_time_table()
 
         # 更新指标表格
         if metrics:
-            self._update_metrics_table(metrics)
+            self._update_metrics_tables(metrics)
 
         # 刷新显示
         self.live.refresh()
 
-    def _update_metrics_table(self, metrics: Dict[str, Any]):
-        """更新指标表格
+    def _update_time_table(self):
+        """更新时间信息表格"""
+        if self.start_time is None:
+            return
 
-        Args:
-            metrics: 指标字典
-        """
-        # 清空表格
-        self.metrics_table = Table(
+        import time
+        current_time = time.time()
+        elapsed = current_time - self.start_time
+
+        # 计算预计剩余时间
+        if self.current_epoch > self.warmup_steps and self.total > 0:
+            time_per_epoch = elapsed / max(1, self.current_epoch - self.warmup_steps)
+            remaining = time_per_epoch * (self.total - self.current_epoch)
+            eta_seconds = int(current_time + remaining)
+            eta_time = time.strftime("%H:%M:%S", time.localtime(eta_seconds))
+            time_info = f"[dim]已用[/dim] {self._format_time(elapsed)} [dim]|[/dim] [dim]剩余[/dim] {self._format_time(remaining)} [dim]| ETA[/dim] {eta_time}"
+        else:
+            time_info = f"[dim]已用[/dim] {self._format_time(elapsed)} [dim]| 预热中...[/dim]"
+
+        # 重建表格
+        self.time_table = Table(
             show_header=False,
             show_edge=False,
             box=None,
             padding=(0, 1),
         )
-        self.metrics_table.add_column("", style="dim", no_wrap=True)
-        self.metrics_table.add_column("", justify="right", style="bold")
+        self.time_table.add_column("", style="dim", no_wrap=True)
+        self.time_table.add_row(time_info)
+        self.layout["time"].update(self.time_table)
 
-        # 定义显示顺序和格式
-        display_keys = [
-            ("episode_reward", "回合奖励", ".3f"),
-            ("episode_length", "回合长度", ".0f"),
-            ("policy_loss", "策略损失", ".4f"),
-            ("value_loss", "价值损失", ".4f"),
-            ("entropy", "熵", ".4f"),
-            ("approx_kl", "近似KL", ".4f"),
-            ("clip_fraction", "裁剪比例", ".2%"),
-            ("learning_rate", "学习率", ".2e"),
-            ("fps", "FPS", ".0f"),
-            ("sps", "SPS", ".0f"),
-        ]
+    def _update_metrics_tables(self, metrics: Dict[str, Any]):
+        """更新所有指标表格
 
-        # 构建表格行
-        row_items = []
-        for key, label, fmt in display_keys:
-            if key in metrics:
-                value = metrics[key]
-                if fmt.endswith('%'):
-                    # 百分比格式
-                    formatted = f"{value:{fmt}}"
-                else:
-                    formatted = f"{value:{fmt}}"
-                row_items.append(f"[dim]{label}:[/dim] [green]{formatted}[/green]")
+        Args:
+            metrics: 指标字典
+        """
+        # 更新奖励表格
+        self.reward_table = self._create_metrics_table("奖励与回合")
+        if "episode_reward" in metrics:
+            self.reward_table.add_row(
+                "回合奖励:", f"{metrics['episode_reward']:.2f}",
+                "回合长度:", f"{int(metrics.get('episode_length', 0))}"
+            )
+        if "best_reward" in metrics:
+            self.reward_table.add_row(
+                "最佳奖励:", f"{metrics['best_reward']:.2f}",
+                "平均长度:", f"{int(metrics.get('avg_length', 0))}"
+            )
+        self.layout["reward"].update(self.reward_table)
 
-        # 每行显示4个指标，分成多行
-        items_per_row = 4
-        for i in range(0, len(row_items), items_per_row):
-            row = row_items[i:i+items_per_row]
-            self.metrics_table.add_row(" | ".join(row))
+        # 更新损失表格
+        self.loss_table = self._create_metrics_table("训练损失")
+        if "policy_loss" in metrics:
+            self.loss_table.add_row(
+                "策略损失:", f"{metrics['policy_loss']:.4f}",
+                "价值损失:", f"{metrics.get('value_loss', 0):.4f}"
+            )
+        if "entropy" in metrics:
+            self.loss_table.add_row(
+                "熵:", f"{metrics['entropy']:.4f}",
+                "近似KL:", f"{metrics.get('approx_kl', 0):.4f}"
+            )
+        if "clip_fraction" in metrics:
+            self.loss_table.add_row(
+                "裁剪比例:", f"{metrics['clip_fraction']:.2%}",
+                "解释方差:", f"{metrics.get('explained_variance', 0):.2f}"
+            )
+        self.layout["loss"].update(self.loss_table)
 
-        # 更新Layout中的metrics部分
-        self.layout["metrics"].update(self.metrics_table)
+        # 更新性能表格
+        self.perf_table = self._create_metrics_table("性能指标")
+        if "fps" in metrics:
+            self.perf_table.add_row(
+                "FPS:", f"{int(metrics['fps'])}",
+                "SPS:", f"{int(metrics.get('sps', 0))}"
+            )
+        if "learning_rate" in metrics:
+            self.perf_table.add_row(
+                "学习率:", f"{metrics['learning_rate']:.2e}",
+                "梯度范数:", f"{metrics.get('grad_norm', 0):.3f}"
+            )
+        self.layout["perf"].update(self.perf_table)
 
     def stop(self):
         """停止显示"""
         if self.started:
             self.live.stop()
             self.started = False
+
+    def _format_time(self, seconds: float) -> str:
+        """格式化时间
+
+        Args:
+            seconds: 秒数
+
+        Returns:
+            格式化的时间字符串
+        """
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+
+        if hours > 0:
+            return f"{hours}h {minutes}m {secs}s"
+        elif minutes > 0:
+            return f"{minutes}m {secs}s"
+        else:
+            return f"{secs}s"
 
     def __enter__(self):
         """上下文管理器入口"""

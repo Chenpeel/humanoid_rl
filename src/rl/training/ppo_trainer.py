@@ -291,3 +291,203 @@ class PPOTrainer:
         info = {**collect_info, **update_info}
 
         return train_state, env_state, info
+
+
+# ==================== 纯函数版本（用于 JIT 持久化缓存） ====================
+
+def create_train_step_fn(config: PPOConfig, env, network, optimizer):
+    """创建纯函数版本的 train_step（支持持久化缓存）
+
+    通过闭包捕获配置和环境，避免对象 ID 变化导致缓存失效。
+
+    Args:
+        config: PPO 配置
+        env: MJX 环境
+        network: Actor-Critic 网络
+        optimizer: Optax 优化器
+
+    Returns:
+        train_step_fn: 纯函数，签名为 (train_state, env_state) -> (train_state, env_state, info)
+    """
+
+    def collect_trajectory(train_state: TrainState, env_state: EnvState):
+        """收集轨迹数据（rollout）"""
+
+        def scan_fn(carry, _):
+            """单步环境交互"""
+            state, e_state, rng = carry
+
+            # 获取动作和价值
+            rng, action_rng = jax.random.split(rng)
+            mean, log_std, value = network.apply(state.params, e_state.obs)
+            std = jp.exp(log_std)
+            action = mean + std * jax.random.normal(action_rng, mean.shape)
+
+            # 计算 log 概率
+            log_prob = -0.5 * jp.sum(
+                ((action - mean) / std) ** 2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
+            )
+
+            # 环境步进
+            new_e_state = env.batch_step(e_state, action)
+
+            # 收集转移数据
+            transition = {
+                "obs": e_state.obs,
+                "action": action,
+                "log_prob": log_prob,
+                "value": value,
+                "reward": new_e_state.reward,
+                "done": new_e_state.done,
+            }
+
+            return (state, new_e_state, rng), transition
+
+        # 执行 rollout
+        rng, _ = train_state.split_rng()
+        _, transitions = jax.lax.scan(
+            scan_fn,
+            init=(train_state, env_state, rng),
+            xs=None,
+            length=config.num_steps,
+        )
+
+        # 提取数据 (num_steps, num_envs, ...)
+        obs = transitions["obs"]
+        actions = transitions["action"]
+        log_probs = transitions["log_prob"]
+        values = transitions["value"]
+        rewards = transitions["reward"]
+        dones = transitions["done"]
+
+        # 计算最后一步的价值（bootstrap）
+        _, _, last_value = network.apply(train_state.params, env_state.obs)
+
+        # 拼接价值序列
+        values_with_last = jp.concatenate([values, last_value[None, :]], axis=0)
+
+        # 计算 GAE（对每个环境分别计算）
+        advantages, returns = jax.vmap(
+            lambda r, v, d: compute_gae_scan(
+                r, v, d, config.gamma, config.gae_lambda
+            ),
+            in_axes=1,
+            out_axes=1,
+        )(rewards, values_with_last, dones)
+
+        # Flatten batch (num_steps * num_envs, ...)
+        obs_flat = obs.reshape(-1, *obs.shape[2:])
+        actions_flat = actions.reshape(-1, *actions.shape[2:])
+        log_probs_flat = log_probs.reshape(-1)
+        advantages_flat = advantages.reshape(-1)
+        returns_flat = returns.reshape(-1)
+        values_flat = values.reshape(-1)
+
+        # 创建 PPOBatch
+        batch = PPOBatch(
+            obs=obs_flat,
+            actions=actions_flat,
+            old_log_probs=log_probs_flat,
+            advantages=advantages_flat,
+            returns=returns_flat,
+            values=values_flat,
+        )
+
+        # 统计信息
+        info = {
+            "mean_reward": jp.mean(rewards),
+            "mean_value": jp.mean(values),
+            "mean_advantage": jp.mean(advantages),
+        }
+
+        return batch, env_state, info
+
+    def update_policy(train_state: TrainState, batch: PPOBatch):
+        """更新策略（多个 epoch + mini-batch）"""
+
+        def loss_fn(params, mb_batch):
+            """损失函数"""
+            loss, info = ppo_loss(
+                params,
+                network,
+                mb_batch,
+                clip_epsilon=config.clip_epsilon,
+                value_coef=config.value_coef,
+                entropy_coef=config.entropy_coef,
+            )
+            return loss, info
+
+        def update_minibatch(carry, mb_indices):
+            """单个 mini-batch 的更新 - 用于 scan"""
+            state = carry
+
+            # 提取 mini-batch
+            mb_batch = PPOBatch(
+                obs=batch.obs[mb_indices],
+                actions=batch.actions[mb_indices],
+                old_log_probs=batch.old_log_probs[mb_indices],
+                advantages=batch.advantages[mb_indices],
+                returns=batch.returns[mb_indices],
+                values=batch.values[mb_indices],
+            )
+
+            # 计算梯度并更新
+            (loss, info), grads = jax.value_and_grad(
+                lambda p: loss_fn(p, mb_batch), has_aux=True
+            )(state.params)
+
+            # 应用梯度
+            state = state.apply_gradients(grads=grads, optimizer=optimizer)
+
+            return state, info
+
+        def update_epoch(carry, _):
+            """单个 epoch 的更新 - 用于 scan"""
+            state = carry
+
+            # 打乱数据
+            rng, new_rng = jax.random.split(state.rng)
+            state = state.replace(rng=new_rng)
+            perm = jax.random.permutation(rng, config.batch_size)
+
+            # 将索引分成 mini-batches
+            mb_indices = perm.reshape(config.num_minibatches, config.minibatch_size)
+
+            # 使用 scan 更新所有 mini-batches
+            state, infos = jax.lax.scan(update_minibatch, state, mb_indices)
+
+            # 平均所有 mini-batch 的指标
+            avg_info = jax.tree.map(lambda x: jp.mean(x, axis=0), infos)
+
+            return state, avg_info
+
+        # 使用 scan 执行多个 epochs
+        train_state, infos = jax.lax.scan(
+            update_epoch,
+            train_state,
+            None,
+            length=config.num_epochs
+        )
+
+        # 平均所有 epoch 的指标
+        avg_info = jax.tree.map(lambda x: jp.mean(x, axis=0), infos)
+
+        return train_state, avg_info
+
+    def train_step_fn(train_state: TrainState, env_state: EnvState):
+        """完整训练步（collect + update）- 纯函数"""
+        # 收集轨迹
+        batch, env_state, collect_info = collect_trajectory(train_state, env_state)
+
+        # 更新策略
+        train_state, update_info = update_policy(train_state, batch)
+
+        # 增加环境步数
+        train_state = train_state.increment_env_steps(config.batch_size)
+
+        # 合并信息
+        info = {**collect_info, **update_info}
+
+        return train_state, env_state, info
+
+    return train_step_fn
