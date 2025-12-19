@@ -2,6 +2,8 @@
 日志系统：TensorBoard + Rich终端展示
 """
 
+import os
+import time
 import jax.numpy as jp
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -13,18 +15,20 @@ from rich.text import Text
 from rich.live import Live
 from rich.layout import Layout
 from rich import box
-import time
 
-try:
-    from tensorboardX import SummaryWriter
-    HAS_TENSORBOARD = True
-except ImportError:
+# TensorBoard 支持（默认禁用，避免 torch 依赖冲突）
+# 如需启用，设置环境变量: export ENABLE_TENSORBOARD=1
+# 并安装: pip install torch --index-url https://download.pytorch.org/whl/cpu
+HAS_TENSORBOARD = False
+SummaryWriter = None
+
+if os.environ.get("ENABLE_TENSORBOARD", "0") == "1":
     try:
         from torch.utils.tensorboard import SummaryWriter
         HAS_TENSORBOARD = True
     except ImportError:
-        HAS_TENSORBOARD = False
-        print("警告: 未安装tensorboardX或torch，TensorBoard日志将被禁用")
+        print("警告: ENABLE_TENSORBOARD=1 但未安装 torch，TensorBoard 日志已禁用")
+        print("安装方法: pip install torch --index-url https://download.pytorch.org/whl/cpu")
 
 
 class MetricsColumn(ProgressColumn):

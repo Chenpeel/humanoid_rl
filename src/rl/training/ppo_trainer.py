@@ -97,13 +97,22 @@ class PPOTrainer:
             # 获取动作和价值（一次前向传播）
             rng, action_rng = jax.random.split(rng)
             mean, log_std, value = self.network.apply(state.params, e_state.obs)
-            std = jp.exp(log_std)
-            action = mean + std * jax.random.normal(action_rng, mean.shape)
 
-            # 计算log概率
+            # 数值稳定性保护
+            log_std = jp.clip(log_std, -5.0, 2.0)
+            std = jp.exp(log_std)
+            std = jp.maximum(std, 1e-6)  # 防止除零
+
+            # 采样动作
+            action = mean + std * jax.random.normal(action_rng, mean.shape)
+            action = jp.clip(action, -10.0, 10.0)  # 裁剪动作防止极端值
+
+            # 计算log概率（增强数值稳定性）
+            action_diff = jp.clip((action - mean) / std, -100.0, 100.0)
             log_prob = -0.5 * jp.sum(
-                ((action - mean) / std) ** 2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
+                action_diff ** 2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
             )
+            log_prob = jp.clip(log_prob, -1000.0, 100.0)  # 裁剪 log_prob
 
             # 环境步进（e_state已经是批量状态）
             new_e_state = self.env.batch_step(e_state, action)
@@ -226,6 +235,13 @@ class PPOTrainer:
                 lambda p: loss_fn(p, mb_batch), has_aux=True
             )(state.params)
 
+            # ✅ 梯度NaN保护：防止NaN梯度污染参数
+            # 将梯度中的NaN/Inf替换为0（相当于跳过这次更新）
+            grads = jax.tree.map(
+                lambda g: jp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0),
+                grads
+            )
+
             # 应用梯度
             state = state.apply_gradients(grads=grads, optimizer=self.optimizer)
 
@@ -320,13 +336,22 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
             # 获取动作和价值
             rng, action_rng = jax.random.split(rng)
             mean, log_std, value = network.apply(state.params, e_state.obs)
-            std = jp.exp(log_std)
-            action = mean + std * jax.random.normal(action_rng, mean.shape)
 
-            # 计算 log 概率
+            # 数值稳定性保护
+            log_std = jp.clip(log_std, -5.0, 2.0)
+            std = jp.exp(log_std)
+            std = jp.maximum(std, 1e-6)  # 防止除零
+
+            # 采样动作
+            action = mean + std * jax.random.normal(action_rng, mean.shape)
+            action = jp.clip(action, -10.0, 10.0)  # 裁剪动作防止极端值
+
+            # 计算 log 概率（增强数值稳定性）
+            action_diff = jp.clip((action - mean) / std, -100.0, 100.0)
             log_prob = -0.5 * jp.sum(
-                ((action - mean) / std) ** 2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
+                action_diff ** 2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
             )
+            log_prob = jp.clip(log_prob, -1000.0, 100.0)  # 裁剪 log_prob
 
             # 环境步进
             new_e_state = env.batch_step(e_state, action)
@@ -362,6 +387,22 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
 
         # 计算最后一步的价值（bootstrap）
         _, _, last_value = network.apply(train_state.params, env_state.obs)
+
+        # 调试日志：检查 obs 和 value 是否包含 NaN/Inf
+        jax.debug.print(
+            "[DEBUG] obs: min={min}, max={max}, has_nan={nan}, has_inf={inf}",
+            min=env_state.obs.min(),
+            max=env_state.obs.max(),
+            nan=jp.isnan(env_state.obs).any(),
+            inf=jp.isinf(env_state.obs).any()
+        )
+        jax.debug.print(
+            "[DEBUG] last_value: min={min}, max={max}, has_nan={nan}, has_inf={inf}",
+            min=last_value.min(),
+            max=last_value.max(),
+            nan=jp.isnan(last_value).any(),
+            inf=jp.isinf(last_value).any()
+        )
 
         # 拼接价值序列
         values_with_last = jp.concatenate([values, last_value[None, :]], axis=0)
@@ -435,6 +476,13 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
             (loss, info), grads = jax.value_and_grad(
                 lambda p: loss_fn(p, mb_batch), has_aux=True
             )(state.params)
+
+            # ✅ 梯度NaN保护：防止NaN梯度污染参数
+            # 将梯度中的NaN/Inf替换为0（相当于跳过这次更新）
+            grads = jax.tree.map(
+                lambda g: jp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0),
+                grads
+            )
 
             # 应用梯度
             state = state.apply_gradients(grads=grads, optimizer=optimizer)

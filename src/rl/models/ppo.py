@@ -91,11 +91,20 @@ def compute_gae_scan(
         last_gae = carry
         reward, value, next_value, done = inp
 
+        # NaN 保护：确保输入有效
+        reward = jp.nan_to_num(reward, nan=0.0, posinf=10.0, neginf=-10.0)
+        value = jp.nan_to_num(value, nan=0.0, posinf=100.0, neginf=-100.0)
+        next_value = jp.nan_to_num(next_value, nan=0.0, posinf=100.0, neginf=-100.0)
+        done = jp.clip(done, 0.0, 1.0)  # 确保 done 是 0 或 1
+
         # TD误差
         delta = reward + gamma * next_value * (1.0 - done) - value
 
         # GAE
         gae = delta + gamma * gae_lambda * last_gae * (1.0 - done)
+
+        # NaN 保护：确保输出有效
+        gae = jp.nan_to_num(gae, nan=0.0, posinf=100.0, neginf=-100.0)
 
         return gae, gae
 
@@ -174,8 +183,11 @@ def ppo_loss(
     # 优势标准化（改进数值稳定性）
     advantages_mean = batch.advantages.mean()
     advantages_std = batch.advantages.std()
-    # 使用更大的epsilon防止除零
-    advantages_std = jp.maximum(advantages_std, 1e-4)
+    # 使用更大的 epsilon 防止除零，并考虑均值的绝对值
+    advantages_std = jp.maximum(
+        advantages_std,
+        jp.maximum(jp.abs(advantages_mean) * 0.01, 1e-3)
+    )
     advantages_normalized = (batch.advantages - advantages_mean) / advantages_std
     # 裁剪标准化后的优势值
     advantages_normalized = jp.clip(advantages_normalized, -10.0, 10.0)
@@ -196,6 +208,13 @@ def ppo_loss(
 
     # 总损失
     total_loss = policy_loss + value_coef * value_loss - entropy_coef * entropy
+
+    # NaN/Inf 检测和保护（用大惩罚替代 NaN）
+    total_loss = jp.where(
+        jp.isnan(total_loss) | jp.isinf(total_loss),
+        jp.array(1e6),  # 如果是 NaN/Inf，返回大惩罚
+        total_loss
+    )
 
     # 返回详细信息
     info = {

@@ -242,8 +242,13 @@ class VelocityTrackingEnv(MJXBaseEnv):
             yaw = jax.random.uniform(key2, minval=-jp.pi, maxval=jp.pi)
             # 将yaw转换为quaternion (qw, qx, qy, qz)
             quat = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
-            # 归一化四元数
-            quat = quat / jp.linalg.norm(quat)
+            # 归一化四元数（防止除零）
+            quat_norm = jp.linalg.norm(quat)
+            quat = jp.where(
+                quat_norm > 1e-8,
+                quat / quat_norm,
+                jp.array([1.0, 0.0, 0.0, 0.0])
+            )
             # freejoint的四元数从索引3开始 (位置: 0-2, 四元数: 3-6)
             qpos = qpos.at[
                 self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
@@ -285,8 +290,13 @@ class VelocityTrackingEnv(MJXBaseEnv):
             base_quat = qpos[
                 self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
-            # 确保四元数归一化
-            base_quat = base_quat / jp.linalg.norm(base_quat)
+            # 确保四元数归一化（防止除零）
+            quat_norm = jp.linalg.norm(base_quat)
+            base_quat = jp.where(
+                quat_norm > 1e-8,
+                base_quat / quat_norm,
+                jp.array([1.0, 0.0, 0.0, 0.0])  # 默认四元数（无旋转）
+            )
         else:
             base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
 
@@ -336,6 +346,9 @@ class VelocityTrackingEnv(MJXBaseEnv):
                 command,  # 3
             ]
         )
+
+        # NaN/Inf 检测和替换（防止训练初期数值问题）
+        obs = jp.nan_to_num(obs, nan=0.0, posinf=1e6, neginf=-1e6)
 
         return obs
 
@@ -391,8 +404,9 @@ class VelocityTrackingEnv(MJXBaseEnv):
             + self.reward_weights["torques"] * cost_torques
         )
 
-        # 总奖励裁剪（确保在合理范围内）
+        # 总奖励裁剪（确保在合理范围内）+ NaN 保护
         reward = jp.clip(reward, -10.0, 10.0)
+        reward = jp.nan_to_num(reward, nan=0.0, posinf=10.0, neginf=-10.0)
 
         return reward
 
@@ -416,11 +430,23 @@ class VelocityTrackingEnv(MJXBaseEnv):
         action: jax.Array,
         pipeline_state: Any,
     ) -> Dict[str, jax.Array]:
-        """获取额外信息"""
-        # 保留命令信息（如果存在）
+        """获取额外信息（包含命令和实际速度）"""
         info = {}
+
+        # 保留命令信息（如果存在）
         if "command" in state.info:
             info["command"] = state.info["command"]
+
+        # 提取实际速度（基座线速度和角速度）
+        # qvel: [base_vx, base_vy, base_vz, base_wx, base_wy, base_wz, joint_vels...]
+        base_lin_vel = pipeline_state.qvel[:3]   # [vx, vy, vz]
+        base_ang_vel = pipeline_state.qvel[3:6]  # [wx, wy, wz]
+
+        info["actual_velocity"] = jp.array([
+            base_lin_vel[0],   # actual_vx
+            base_lin_vel[1],   # actual_vy
+            base_ang_vel[2],   # actual_vyaw (wz)
+        ])
 
         return info
 
@@ -433,9 +459,11 @@ class VelocityTrackingEnv(MJXBaseEnv):
         rng, cmd_rng = jax.random.split(state.rng)
         command = self._sample_command(cmd_rng)
 
-        # 更新info
+        # 更新info（包含命令和初始速度）
         info = state.info.copy()
         info["command"] = command
+        # 初始化 actual_velocity（初始值为零，保持 pytree 结构一致）
+        info["actual_velocity"] = jp.zeros(3)
 
         # 重新计算obs（包含命令）
         obs = state.obs.at[-3:].set(command)
@@ -618,7 +646,13 @@ class StandingEnv(MJXBaseEnv):
             # 随机化yaw: ±0.1 rad
             yaw = jax.random.uniform(key2, minval=-0.1, maxval=0.1)
             quat = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
-            quat = quat / jp.linalg.norm(quat)
+            # 归一化四元数（防止除零）
+            quat_norm = jp.linalg.norm(quat)
+            quat = jp.where(
+                quat_norm > 1e-8,
+                quat / quat_norm,
+                jp.array([1.0, 0.0, 0.0, 0.0])
+            )
             qpos = qpos.at[self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7].set(
                 quat
             )
@@ -655,7 +689,13 @@ class StandingEnv(MJXBaseEnv):
         if self.floating_base_qpos_addr is not None:
             base_quat = qpos[self.floating_base_qpos_addr +
                              3: self.floating_base_qpos_addr + 7]
-            base_quat = base_quat / jp.linalg.norm(base_quat)
+            # 归一化四元数（防止除零）
+            quat_norm = jp.linalg.norm(base_quat)
+            base_quat = jp.where(
+                quat_norm > 1e-8,
+                base_quat / quat_norm,
+                jp.array([1.0, 0.0, 0.0, 0.0])
+            )
         else:
             base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
 
@@ -682,6 +722,9 @@ class StandingEnv(MJXBaseEnv):
             joint_vel,      # nu
             action,         # nu
         ])
+
+        # NaN/Inf 检测和替换（防止训练初期数值问题）
+        obs = jp.nan_to_num(obs, nan=0.0, posinf=1e6, neginf=-1e6)
 
         return obs
 

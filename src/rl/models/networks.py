@@ -56,7 +56,7 @@ class ActorNetwork(nn.Module):
     action_dim: int
     hidden_dims: Sequence[int] = (256, 256)
     activation: Callable = nn.tanh
-    log_std_min: float = -20.0
+    log_std_min: float = -5.0  # exp(-5) ≈ 0.0067，防止数值溢出
     log_std_max: float = 2.0
     
     @nn.compact
@@ -179,7 +179,7 @@ class ActorCriticNetwork(nn.Module):
     shared_backbone: bool = True
     hidden_dims: Sequence[int] = (256, 256)
     activation: Callable = nn.tanh
-    log_std_min: float = -20.0
+    log_std_min: float = -5.0  # exp(-5) ≈ 0.0067，防止数值溢出
     log_std_max: float = 2.0
     
     def setup(self):
