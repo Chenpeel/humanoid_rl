@@ -1,13 +1,14 @@
-# JAX/MJX强化学习训练框架依赖
-# 安装方法: pip install -r requirements.txt
-
-# JAX核心（CPU优先，先保证可用，后续再启用GPU插件）
+# JAX核心
 jax==0.8.1
 jaxlib==0.8.1
 
-# 可选：JAX CUDA 插件（GPU 后端）
 jax-cuda12-plugin==0.8.1
 jax-cuda12-pjrt==0.8.1
+
+# CUDA 运行时库
+nvidia-cuda-runtime-cu12>=12.1.0
+nvidia-cublas-cu12>=12.1.0
+nvidia-cudnn-cu12>=8.9.0
 
 # MuJoCo物理引擎
 mujoco>=3.0.0
@@ -24,10 +25,7 @@ optax>=0.1.7
 rich>=13.0.0
 
 # 检查点和日志
-orbax-checkpoint>=0.4.0
-tensorboardX>=2.6.0
-
-# 工具库
+orbax-checkpoint>=0.11.31
 
 pyyaml>=6.0
 matplotlib>=3.7.0

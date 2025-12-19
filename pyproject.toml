@@ -4,23 +4,45 @@ version = "0.1.0"
 description = "JAX/MJX Reinforcement Learning Training Framework"
 readme = "README.md"
 requires-python = ">=3.11"
+
+# ==================== 核心依赖 ====================
+# CUDA 配置：需要系统安装 CUDA 12.x 驱动和库
 dependencies = [
+    # JAX 核心（CPU 版本）
     "jax==0.8.1",
     "jaxlib==0.8.1",
+
+    # JAX CUDA 插件（GPU 加速）
+    # 包含 CUDA 运行时库，无需系统安装 CUDA
     "jax-cuda12-plugin==0.8.1",
     "jax-cuda12-pjrt==0.8.1",
+
+    # CUDA 运行时库（通过 pip 安装，无需系统 CUDA）
+    "nvidia-cuda-runtime-cu12>=12.1.0",
+    "nvidia-cublas-cu12>=12.1.0",
+    "nvidia-cudnn-cu12>=8.9.0",
+
+    # 物理仿真
     "mujoco>=3.0.0",
     "mujoco-mjx",
+
+    # 深度学习
     "flax>=0.8.0",
     "optax>=0.1.7",
-    "orbax-checkpoint>=0.4.0",
-    "tensorboardX>=2.6.0",
+    "orbax-checkpoint>=0.11.31",
+
+    # 工具库
     "rich>=13.0.0",
     "numpy>=2.0.0,<2.4.0",
     "pyyaml>=6.0",
     "matplotlib>=3.7.0",
     "mediapy>=1.1.0",
     "urdf2mjcf>=0.2.0",
+]
+
+[project.optional-dependencies]
+tensorboard = [
+    "torch",  # 用于 TensorBoard 日志，建议安装 CPU 版本
 ]
 
 [build-system]
