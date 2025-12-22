@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "isaaclab_rl"
+version = "0.1.0"
+description = "Jiyuan 双足机器人强化学习（Isaac Lab + RSL_RL）"
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Jiyuan Robotics Team"}
+]
+keywords = ["reinforcement learning", "robotics", "isaac lab", "biped", "locomotion"]
+
+dependencies = [
+    # 核心依赖由 Isaac Lab 环境提供
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+viz = [
+    "tensorboard>=2.11.0",
+    "wandb>=0.15.0",
+]
+
+[project.urls]
+Homepage = ""
+Repository = ""
+Documentation = ""
+
+[tool.setuptools]
+packages = ["isaaclab_rl"]
+
+[tool.setuptools.package-data]
+isaaclab_rl = ["py.typed"]
+
+# Black 配置
+[tool.black]
+line-length = 120
+target-version = ['py310']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+# isort 配置
+[tool.isort]
+profile = "black"
+line_length = 120
+multi_line_output = 3
+
+# mypy 配置
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+# pytest 配置
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --cov=isaaclab_rl --cov-report=term-missing"
+testpaths = ["tests"]

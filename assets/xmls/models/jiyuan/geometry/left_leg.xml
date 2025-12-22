@@ -61,7 +61,7 @@
         <inertial pos="0.03535073 -0.24789484 0.00178441"
           quat="1.00000000 0.00000000 -0.00000000 -0.00000000" mass="0.807844023825405"
           diaginertia="0.00262872199337436 0.00181775503594599 0.00258154933740886" />
-        <geom name="left_thigh_link_collision" pos="-0.035 -0.215 0" quat="0.7071 0 0.7071 0"
+        <geom name="left_thigh_link_collision" pos="0.035 -0.248 0.002" quat="0.7071 0.7071 0 0"
           type="capsule" class="left_leg_collision" size="0.045 0.215" />
         <geom name="left_thigh_link_visual" pos="-0.00000000 0.00000000 0.00000000"
           quat="1.00000000 0.00000000 -0.00000000 -0.00000000" type="mesh"
@@ -73,7 +73,7 @@
           <inertial pos="-0.00524377 -0.20562717 0.00732813"
             quat="1.00000000 0.00000000 -0.00000000 -0.00000000" mass="0.364323955321575"
             diaginertia="0.00132460554133456 0.000315850437296788 0.00134334443677415" />
-          <geom name="left_shin_link_collision" pos="0.005 -0.218 0.007" quat="0.7071 0 0.7071 0"
+          <geom name="left_shin_link_collision" pos="-0.005 -0.206 0.007" quat="0.7071 0.7071 0 0"
             type="capsule" class="left_leg_collision" size="0.035 0.218" />
           <geom name="left_shin_link_visual" pos="-0.00000000 0.00000000 0.00000000"
             quat="1.00000000 0.00000000 -0.00000000 -0.00000000" type="mesh"
