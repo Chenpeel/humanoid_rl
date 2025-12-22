@@ -5,11 +5,17 @@
 
 模块:
 - math_utils.py: 数学工具函数（四元数、欧拉角等）
+- sim2real.py: Sim2Real 映射层（并联脚踝映射）
+- imitation.py: 模仿学习框架（BVH/FBX 支持）
 - visualization.py: 可视化辅助函数（计划中）
 """
 
 from . import math_utils
+from . import sim2real
+from . import imitation
 
 __all__ = [
     "math_utils",
+    "sim2real",
+    "imitation",
 ]

@@ -1,7 +1,6 @@
 """
 RSL_RL PPO 超参数配置
 
-为 Jiyuan 机器人速度跟踪和站立任务定制的 PPO 配置。
 
 参考:
 - RSL_RL: https://github.com/leggedrobotics/rsl_rl
