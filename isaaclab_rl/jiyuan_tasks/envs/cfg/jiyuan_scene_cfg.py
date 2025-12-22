@@ -6,9 +6,25 @@ Jiyuan 机器人场景配置
 - 定义初始状态（位置、姿态、关节角度）
 - 配置执行器参数（刚度、阻尼等）
 
+## 如何适配其他机器人
+
+### 方法1：复制并修改本文件（当前阶段）
+```bash
+cp jiyuan_scene_cfg.py unitree_go2_scene_cfg.py
+```
+然后修改：
+1. `MjcfFileCfg.asset_path` → 指向新机器人的MJCF文件
+2. `init_state` → 调整初始位置、姿态、关节角度
+3. `actuators` → 调整执行器参数（刚度、阻尼、力矩限制）
+4. `joint_names_expr` → 匹配新机器人的关节命名
+
+### 方法2：创建机器人配置库（未来阶段）
+详见 `.migrate/08-multi-robot-architecture.md` 的长期规划。
+
 参考:
 - Isaac Lab 官方文档: https://isaac-sim.github.io/IsaacLab/main/
 - MJCF 支持: omni.isaac.lab.sim.spawners.from_files.MjcfFileCfg
+- 多机器人架构: ../.migrate/08-multi-robot-architecture.md
 """
 
 from __future__ import annotations

@@ -79,6 +79,37 @@ ${ISAACLAB_PATH}/isaaclab.sh -p scripts/play.py \
 - ⏸️ 奖励函数迁移（计划中）
 - ⏸️ 训练脚本（计划中）
 
+## 扩展性和多机器人支持
+
+### 当前架构
+- 专注于 Jiyuan 双足机器人
+- 清晰的模块化设计，易于理解和维护
+
+### 添加新机器人
+**简单方式（当前）**:
+```bash
+# 复制jiyuan_tasks目录
+cp -r jiyuan_tasks/ new_robot_tasks/
+# 修改配置文件中的机器人参数
+```
+
+**长期规划**:
+- 配置参数化：机器人配置库 + 通用任务
+- 详见 `../.migrate/08-multi-robot-architecture.md`
+
+### 集成其他RL库
+当前架构完全兼容主流RL库：
+```python
+# RSL_RL
+from rsl_rl.runners import OnPolicyRunner
+
+# Stable-Baselines3
+from stable_baselines3 import PPO
+
+# Ray RLlib
+from ray.rllib.algorithms.ppo import PPOConfig
+```
+
 ## 许可证
 
 MIT

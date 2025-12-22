@@ -32,6 +32,7 @@ git branch
 | [05-testing-strategy.md](./05-testing-strategy.md) | 测试和验证策略 | ⭐⭐⭐ 建议阅读 |
 | [06-optimization-guide.md](./06-optimization-guide.md) | 性能优化指南 | ⭐⭐⭐ 建议阅读 |
 | [07-troubleshooting.md](./07-troubleshooting.md) | 常见问题和解决方案 | ⭐⭐ 参考文档 |
+| [08-multi-robot-architecture.md](./08-multi-robot-architecture.md) | 多机器人架构与长期规划 | ⭐⭐⭐ 架构设计 |
 
 ### 阶段验收清单
 

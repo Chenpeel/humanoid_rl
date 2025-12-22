@@ -199,9 +199,48 @@ JAX/MJX 架构（原）                 Isaac Lab 架构（目标）
 3. 广泛验证：多篇论文验证
 4. 官方集成：与 Isaac Lab 无缝集成
 
+## 多机器人支持
+
+### 长期架构规划
+
+当前架构专注于 Jiyuan 单机器人，但已考虑未来扩展性。详细的多机器人架构演进规划见：
+
+📄 **[08-multi-robot-architecture.md](./08-multi-robot-architecture.md)**
+
+**核心策略**:
+- **阶段1（当前）**: 单机器人专用结构（Jiyuan）
+- **阶段2（2-3个机器人）**: 配置参数化 + 共享代码提取
+- **阶段3（3+机器人）**: 通用任务架构，机器人配置库
+
+### 如何添加新机器人
+
+**当前阶段（简单复制）**:
+```bash
+# 1. 复制jiyuan_tasks目录
+cp -r isaaclab_rl/jiyuan_tasks/ isaaclab_rl/new_robot_tasks/
+
+# 2. 修改机器人配置
+vim isaaclab_rl/new_robot_tasks/envs/cfg/new_robot_scene_cfg.py
+
+# 3. 更新MJCF路径和执行器参数
+```
+
+**未来阶段（配置复用）**:
+```python
+# 创建机器人配置库
+from isaaclab_rl.robots import JIYUAN_CFG, NEW_ROBOT_CFG
+
+@configclass
+class VelocityTaskCfg(ManagerBasedRLEnvCfg):
+    robot = JIYUAN_CFG  # 或 NEW_ROBOT_CFG
+```
+
+详见 [08-multi-robot-architecture.md](./08-multi-robot-architecture.md)。
+
 ## 下一步
 
 了解架构设计后：
 
 1. 阅读 [03-code-mapping.md](./03-code-mapping.md) 学习具体的代码转换
-2. 开始阶段 1：环境搭建（见 [checklists/phase1-checklist.md](./checklists/phase1-checklist.md)）
+2. （可选）阅读 [08-multi-robot-architecture.md](./08-multi-robot-architecture.md) 了解长期规划
+3. 开始阶段 1：环境搭建（见 [checklists/phase1-checklist.md](./checklists/phase1-checklist.md)）
