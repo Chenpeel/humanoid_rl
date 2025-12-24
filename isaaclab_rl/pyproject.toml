@@ -1,0 +1,152 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "isaaclab-biped-rl"
+version = "0.3.0"
+description = "机器人强化学习训练框架（基于 Isaac Lab + RSL_RL）"
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Chenpeel", email = "chenpeel@foxmail.com"}
+]
+keywords = ["robotics", "reinforcement-learning", "isaac-lab", "rsl-rl", "biped", "locomotion", "sim2real"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Robotics",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+# 核心依赖
+# 注意：torch, numpy, gymnasium 由 Isaac Lab 提供，不在这里列出
+dependencies = [
+    "pyyaml>=6.0",
+    "tensorboard>=2.11.0",
+]
+
+[project.optional-dependencies]
+# 开发工具
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+]
+
+# 可视化工具
+vis = [
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "pandas>=2.0.0",
+    "wandb>=0.15.0",
+]
+
+# 模仿学习
+imitation = [
+    "bvh>=0.4.0",
+]
+
+# 所有可选依赖
+all = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "pandas>=2.0.0",
+    "wandb>=0.15.0",
+    "bvh>=0.3",  # PyPI 上最新版本是 0.3
+]
+
+[project.urls]
+Homepage = "https://github.com/chenpeel/biped-rl"
+Documentation = "https://github.com/chenpeel/biped-rl/docs"
+Repository = "https://github.com/chenpeel/biped-rl"
+Issues = "https://github.com/chenpeel/biped-rl/issues"
+
+# Black 配置
+[tool.black]
+line-length = 120
+target-version = ["py310", "py311", "py312"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # 默认排除
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  # 项目特定排除
+  | logs
+  | assets
+)/
+'''
+
+# isort 配置
+[tool.isort]
+profile = "black"
+line_length = 120
+skip_gitignore = true
+known_first_party = ["jiyuan_tasks", "agents"]
+known_third_party = ["torch", "numpy", "gymnasium", "omni"]
+sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+
+# pytest 配置
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --cov=jiyuan_tasks --cov=agents --cov-report=term-missing --cov-report=html"
+
+# mypy 配置
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+exclude = [
+    "logs/",
+    "assets/",
+    "build/",
+    "dist/",
+]
+
+# Coverage 配置
+[tool.coverage.run]
+source = ["jiyuan_tasks", "agents"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/setup.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

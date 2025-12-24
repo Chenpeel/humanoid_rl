@@ -1,0 +1,6 @@
+[submodule "dep/rsl_rl"]
+	path = dep/rsl_rl
+	url = https://github.com/leggedrobotics/rsl_rl.git
+[submodule "dep/IsaacLab"]
+	path = dep/IsaacLab
+	url = https://github.com/isaac-sim/IsaacLab.git

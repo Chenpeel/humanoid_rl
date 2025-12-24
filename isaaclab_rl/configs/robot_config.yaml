@@ -1,0 +1,129 @@
+# 机器人物理参数配置
+# 包含几何参数、质量参数、并联机构参数等
+#
+# 配置优先级: 命令行参数 > 此配置文件 > 代码中的预定义值
+
+# 机器人基础信息
+robot_info:
+    name: "Jiyuan"
+    version: "v1.0"
+    total_mass: 5 # kg
+    height: 0.35 # m (站立时的目标高度)
+
+# 并联脚踝几何参数（3-parallel-dot）
+parallel_ankle:
+    # 几何参数（单位：米）
+    l0: 0.02 # 平台半径
+    l1: 0.01 # 动平台到O点的距离
+    l2: 0.03 # 静平台到O点的距离
+
+    # 工作空间限制（单位：弧度）
+    workspace:
+        roll_min: -0.5236 # -30度
+        roll_max: 0.5236 # +30度
+        pitch_min: -0.5236
+        pitch_max: 0.5236
+        yaw_min: -0.5236
+        yaw_max: 0.5236
+
+    # 安全边界（用于训练时的软约束）
+    safety_margin: 0.1 # 弧度，距离限制的安全边界
+
+# 动作空间映射
+# 定义策略输出的动作向量到机器人关节的映射
+action_mapping:
+    # 动作空间维度
+    action_dim: 16
+
+    # 脚踝关节在动作空间中的索引
+    ankle_indices:
+        left:
+            roll: 9
+            pitch: 10
+            yaw: 11
+        right:
+            roll: 12
+            pitch: 13
+            yaw: 14
+
+    # 其他关节索引（根据实际机器人调整）
+    other_joints:
+        left_hip_yaw: 0
+        left_hip_roll: 1
+        left_hip_pitch: 2
+        left_knee: 3
+        right_hip_yaw: 4
+        right_hip_roll: 5
+        right_hip_pitch: 6
+        right_knee: 7
+        # 索引 8: 保留
+        # 索引 9-14: 脚踝（并联机构）
+        # 索引 15: 保留
+
+# 观测空间配置
+observation_config:
+    # 是否使用 IMU 观测
+    use_imu: true
+
+    # 是否使用接触传感器
+    use_contact_sensors: true
+
+    # 观测噪声（用于仿真时的域随机化）
+    noise:
+        base_lin_vel: 0.1
+        base_ang_vel: 0.2
+        projected_gravity: 0.05
+        joint_pos: 0.01
+        joint_vel: 1.5
+
+# 控制频率
+control:
+    sim_frequency: 200 # Hz，仿真物理频率
+    control_frequency: 50 # Hz，控制频率
+    decimation: 4 # sim_frequency / control_frequency
+
+# Sim2Real 参数
+sim2real:
+    # 是否启用 Sim2Real 映射
+    enable_parallel_ankle_mapping: true
+
+    # 低通滤波参数
+    filtering:
+        enable: true
+        alpha: 0.7 # 滤波系数（0-1），越大越平滑
+
+    # 域随机化参数（训练时使用）
+    domain_randomization:
+        mass:
+            enable: true
+            range: [-0.2, 0.2] # ±20%
+        actuator_gains:
+            enable: true
+            stiffness_range: [0.9, 1.1] # ±10%
+            damping_range: [0.9, 1.1]
+        friction:
+            enable: true
+            range: [0.0, 0.01]
+
+# 模型文件路径
+model_paths:
+    mjcf: "../assets/xmls/models/jiyuan/index.xml"
+    usd: null # 可选，USD格式（如果有）
+
+# 默认姿态（关节角度，单位：弧度）
+default_pose:
+    left_hip_yaw: 0.0
+    left_hip_roll: 0.0
+    left_hip_pitch: 0.0
+    left_knee: 0.5
+    left_ankle_roll: 0.0
+    left_ankle_pitch: 0.0
+    left_ankle_yaw: 0.0
+
+    right_hip_yaw: 0.0
+    right_hip_roll: 0.0
+    right_hip_pitch: 0.0
+    right_knee: 0.5
+    right_ankle_roll: 0.0
+    right_ankle_pitch: 0.0
+    right_ankle_yaw: 0.0

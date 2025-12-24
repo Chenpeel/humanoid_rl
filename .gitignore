@@ -41,3 +41,6 @@ build/
 .TODOs
 CLAUDE.md
 .claude/
+.eval/
+.configs/
+.migrate

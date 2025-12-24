@@ -1,0 +1,150 @@
+# 舵机配置文件
+# 用于实体机器人部署，包含每个舵机的物理参数和偏移量
+#
+# 配置优先级: 命令行参数 > 此配置文件 > 代码中的预定义值
+#
+# 使用方式:
+#   python scripts/deploy.py --servo_config configs/servo_config.yaml
+
+# 舵机通用参数
+servo_general:
+  # 舵机位置映射
+  position_mapping:
+    min_us: 500      # 最小脉宽 (微秒)
+    max_us: 2500     # 最大脉宽 (微秒)
+    min_angle: 0.0   # 最小角度 (弧度, 0度)
+    max_angle: 3.141592653589793  # 最大角度 (弧度, 180度)
+
+  # 默认速度和加速度限制
+  default_speed: 100      # 默认运动时间 (毫秒)
+  max_speed: 500          # 最大速度 (毫秒)
+  min_speed: 20           # 最小速度 (毫秒)
+
+# 左脚踝并联机构舵机配置
+left_ankle:
+  servo_1:
+    id: 9               # 舵机硬件ID
+    offset: 0.0         # 角度偏移 (弧度)，用于校准
+    direction: 1        # 方向：1=正向, -1=反向
+    name: "左脚踝舵机1"
+
+  servo_2:
+    id: 10
+    offset: 0.0
+    direction: 1
+    name: "左脚踝舵机2"
+
+  servo_3:
+    id: 11
+    offset: 0.0
+    direction: 1
+    name: "左脚踝舵机3"
+
+# 右脚踝并联机构舵机配置
+right_ankle:
+  servo_1:
+    id: 12
+    offset: 0.0
+    direction: 1
+    name: "右脚踝舵机1"
+
+  servo_2:
+    id: 13
+    offset: 0.0
+    direction: 1
+    name: "右脚踝舵机2"
+
+  servo_3:
+    id: 14
+    offset: 0.0
+    direction: 1
+    name: "右脚踝舵机3"
+
+# 其他关节舵机配置（示例）
+# 根据实际机器人调整
+other_joints:
+  # 左腿
+  left_hip_yaw:
+    id: 1
+    offset: 0.0
+    direction: 1
+    range: [-0.5236, 0.5236]  # ±30度
+
+  left_hip_roll:
+    id: 2
+    offset: 0.0
+    direction: 1
+    range: [-0.7854, 0.7854]  # ±45度
+
+  left_hip_pitch:
+    id: 3
+    offset: 0.0
+    direction: 1
+    range: [-1.5708, 1.5708]  # ±90度
+
+  left_knee:
+    id: 4
+    offset: 0.0
+    direction: 1
+    range: [0.0, 2.3562]  # 0~135度
+
+  # 右腿
+  right_hip_yaw:
+    id: 5
+    offset: 0.0
+    direction: 1
+    range: [-0.5236, 0.5236]
+
+  right_hip_roll:
+    id: 6
+    offset: 0.0
+    direction: 1
+    range: [-0.7854, 0.7854]
+
+  right_hip_pitch:
+    id: 7
+    offset: 0.0
+    direction: 1
+    range: [-1.5708, 1.5708]
+
+  right_knee:
+    id: 8
+    offset: 0.0
+    direction: 1
+    range: [0.0, 2.3562]
+
+# 舵机校准记录（可选）
+# 记录实际测量的舵机零点偏移，用于精确控制
+calibration:
+  # 校准日期
+  date: "2025-01-22"
+
+  # 校准方法: 手动调整到中位 / 使用水平仪测量
+  method: "手动调整"
+
+  # 舵机校准数据
+  values:
+    9:  { measured_offset: 0.0, note: "左脚踝1 - 已校准" }
+    10: { measured_offset: 0.0, note: "左脚踝2 - 已校准" }
+    11: { measured_offset: 0.0, note: "左脚踝3 - 已校准" }
+    12: { measured_offset: 0.0, note: "右脚踝1 - 已校准" }
+    13: { measured_offset: 0.0, note: "右脚踝2 - 已校准" }
+    14: { measured_offset: 0.0, note: "右脚踝3 - 已校准" }
+
+# 安全限制
+safety:
+  # 舵机温度限制（可选，如果硬件支持温度反馈）
+  max_temperature: 80  # 摄氏度
+
+  # 电流限制（可选）
+  max_current: 2.0  # 安培
+
+  # 电压范围
+  min_voltage: 6.0  # 伏特
+  max_voltage: 8.4  # 伏特
+
+  # 急停触发条件
+  emergency_stop:
+    enable: true
+    check_voltage: true
+    check_temperature: false  # 如果硬件不支持，设为false
