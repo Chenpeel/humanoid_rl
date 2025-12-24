@@ -161,32 +161,6 @@ cd isaaclab_rl
 | 站立任务 | `Isaac-Jiyuan-Standing-v0` | 保持站立姿态 |
 | 速度跟踪 | `Isaac-Jiyuan-Velocity-v0` | 跟踪指令速度 |
 
-## 常见问题
-
-### Q: 训练时 GPU 利用率低？
-
-**A:** 增加并行环境数量：
-
-```bash
-# 从 4096 增加到 8192
-./dep/IsaacLab/isaaclab.sh -p scripts/train.py --task velocity --num_envs 8192
-```
-
-### Q: MJCF 模型加载失败？
-
-**A:** 检查文件路径：
-
-```bash
-# 验证 MJCF 文件存在
-ls -la assets/xmls/models/jiyuan/index.xml
-
-# 检查配置中的路径是否正确
-grep -r "asset_path" isaaclab_rl/jiyuan_tasks/envs/cfg/
-```
-
-### Q: 如何在云端 GPU 运行？
-
-**A:** 参考 [从零开始完整指南](docs/GETTING_STARTED.md) 的云端部署章节。
 
 ## 性能参考
 
@@ -195,16 +169,6 @@ grep -r "asset_path" isaaclab_rl/jiyuan_tasks/envs/cfg/
 - **训练速度**: ~50,000 steps/s (4096 envs)
 - **GPU 利用率**: 85-95%
 - **训练时间**: 约 4-6 小时达到 30M steps
-
-## 贡献指南
-
-欢迎贡献！请遵循以下步骤：
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'feat: 添加某个特性'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 开启 Pull Request
 
 ## 版本历史
 
@@ -220,16 +184,6 @@ grep -r "asset_path" isaaclab_rl/jiyuan_tasks/envs/cfg/
 
 - 基于 JAX/MJX 的实现（已迁移到 `jax` 分支）
 
-## 许可证
-
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
-
-## 致谢
-
-- [Isaac Lab](https://github.com/isaac-sim/IsaacLab) - 仿真环境框架
-- [RSL_RL](https://github.com/leggedrobotics/rsl_rl) - 强化学习算法库
-- [NVIDIA Isaac Sim](https://developer.nvidia.com/isaac-sim) - 物理仿真引擎
-
 ## 联系方式
 
 - **作者**: Chenpeel
@@ -237,5 +191,3 @@ grep -r "asset_path" isaaclab_rl/jiyuan_tasks/envs/cfg/
 - **问题反馈**: [GitHub Issues](https://github.com/yourusername/jiyuan-rl/issues)
 
 ---
-
-⚡ 使用 [Isaac Lab](https://isaac-sim.github.io/IsaacLab/) 驱动 | 🚀 基于 [RSL_RL](https://github.com/leggedrobotics/rsl_rl) 训练

@@ -38,9 +38,9 @@ build/
 *.html
 *.cpp
 *.so
-.TODOs
-CLAUDE.md
+
+# std_docs
+.std_docs/
 .claude/
 .eval/
-.configs/
 .migrate/

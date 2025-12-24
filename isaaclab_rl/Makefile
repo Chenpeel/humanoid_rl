@@ -81,7 +81,7 @@ submodule-status:
 # 更新所有子模块到最新
 submodule-update-remote:
 	@echo "更新子模块到远程最新版本..."
-	git submodule update --remote	
+	git submodule update --remote
 	@echo "✓ 子模块已更新到最新"
 
 # ==============================================================================
@@ -116,6 +116,7 @@ check-env: check-isaaclab
 
 install: check-isaaclab
 	@echo "正在安装项目（开发模式）..."
+	$(ISAACLAB_PYTHON) -m pip install 'isaacsim[all,extscache]==5.1.0' --extra-index-url https://pypi.nvidia.com
 	$(ISAACLAB_PYTHON) -m pip install -e .
 	@echo "✓ 安装完成！"
 
