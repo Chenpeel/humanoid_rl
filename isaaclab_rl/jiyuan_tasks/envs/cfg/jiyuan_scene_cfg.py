@@ -29,6 +29,9 @@ cp jiyuan_scene_cfg.py unitree_go2_scene_cfg.py
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
@@ -40,6 +43,10 @@ from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
 from isaaclab.sim import MjcfFileCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
+
+# 项目根目录（相对于当前文件：isaaclab_rl/jiyuan_tasks/envs/cfg/）
+# 向上4级：cfg -> envs -> jiyuan_tasks -> isaaclab_rl -> 项目根目录
+ISAAC_LAB_RL_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 
 
 ##
@@ -76,8 +83,8 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=MjcfFileCfg(
-            # MJCF 文件路径（相对于 isaaclab_rl/assets/）
-            asset_path="assets/xmls/models/jiyuan/index.xml",
+            # MJCF 文件路径（使用项目根目录的绝对路径）
+            asset_path=str(ISAAC_LAB_RL_ROOT / "assets/xmls/models/jiyuan/index.xml"),
             make_instanceable=True,
             # 设置articulation属性
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(
