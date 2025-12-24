@@ -43,4 +43,4 @@ CLAUDE.md
 .claude/
 .eval/
 .configs/
-.migrate
+.migrate/
