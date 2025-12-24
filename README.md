@@ -68,7 +68,7 @@ make verify
 
 #### 方法 B: 手动安装
 
-详见 [完整安装指南](isaaclab_rl/docs/GETTING_STARTED.md)
+详见 [完整安装指南](docs/GETTING_STARTED.md)
 
 ### 3. 快速测试训练
 
@@ -108,24 +108,13 @@ jiyuan-rl/
 
 ### 入门文档
 
-- [从零开始完整指南](isaaclab_rl/docs/GETTING_STARTED.md) - **推荐新手阅读**
-- [最小化安装指南](isaaclab_rl/docs/MINIMAL_SETUP_GUIDE.md) - 快速上手
-- [Conda 安装指南](isaaclab_rl/docs/CONDA_INSTALLATION.md) - 使用 Conda 管理环境
+- [从零开始完整指南](docs/GETTING_STARTED.md) 
+- [使用指南](docs/USAGE.md) - 日常使用和开发
+- [高级功能](docs/ADVANCED.md) - Sim2Real和模仿学习
 
-### 使用文档
+### 文档索引
 
-- [Isaac Lab RL 使用指南](isaaclab_rl/README.md) - 项目详细说明
-- [文档索引](isaaclab_rl/docs/README.md) - 所有文档列表
-
-### 高级功能
-
-- [Sim2Real 和高级特性](isaaclab_rl/docs/SIM2REAL_AND_ADVANCED_FEATURES.md) - 真机部署和模仿学习
-
-### 迁移文档（仅供参考）
-
-- [迁移指南](.migrate/README.md) - JAX 到 Isaac Lab 迁移记录
-- [架构设计](.migrate/02-architecture.md) - 系统架构说明
-- [代码映射](.migrate/03-code-mapping.md) - JAX 到 PyTorch 代码对照
+- [文档中心](docs/README.md) - 所有文档和阅读路径
 
 ## 使用示例
 
@@ -197,7 +186,7 @@ grep -r "asset_path" isaaclab_rl/jiyuan_tasks/envs/cfg/
 
 ### Q: 如何在云端 GPU 运行？
 
-**A:** 参考 [从零开始完整指南](isaaclab_rl/docs/GETTING_STARTED.md) 的云端部署章节。
+**A:** 参考 [从零开始完整指南](docs/GETTING_STARTED.md) 的云端部署章节。
 
 ## 性能参考
 
