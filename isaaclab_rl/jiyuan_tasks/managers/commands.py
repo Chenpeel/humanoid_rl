@@ -21,7 +21,7 @@ from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from omni.isaac.lab.envs import ManagerBasedRLEnv
+    from isaaclab.envs import ManagerBasedRLEnv
 
 
 ##
@@ -168,7 +168,7 @@ def resample_commands(
 # 在实际项目中，推荐使用 Isaac Lab 内置的命令生成器，
 # 而不是自定义实现。配置示例：
 #
-# from omni.isaac.lab.envs.mdp import UniformVelocityCommandCfg
+# from isaaclab.envs.mdp import UniformVelocityCommandCfg
 #
 # @configclass
 # class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):

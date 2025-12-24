@@ -22,7 +22,7 @@ from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from omni.isaac.lab.envs import ManagerBasedRLEnv
+    from isaaclab.envs import ManagerBasedRLEnv
 
 # 导入数学工具
 from ..utils.math_utils import quat_to_euler_xyz, normalize_quaternion
@@ -420,27 +420,22 @@ WALKING_REWARD_WEIGHTS = {
     # 主要目标：前向运动
     "track_lin_vel_xy": 1.5,  # 速度跟踪
     "track_ang_vel_z": 0.5,  # 转向
-
     # 步态质量
     "gait_symmetry": 0.5,  # 步态对称性
     "feet_air_time": 0.3,  # 离地时间
     "stance_duration": 0.3,  # 支撑时间
     "foot_clearance": 0.2,  # 脚部抬高
-
     # 躯干稳定
     "trunk_height": 0.5,  # 高度保持
     "orientation": 0.3,  # 姿态稳定
     "trunk_lin_vel_z": -1.0,  # Z方向速度惩罚
     "trunk_tilt": -0.5,  # 过度倾斜惩罚
-
     # 步态惩罚
     "stumbling": -2.0,  # 绊倒
     "drag": -1.0,  # 拖地
-
     # 能量效率
     "action_rate": -0.01,  # 动作平滑
     "joint_powers": -2.0e-5,  # 功率消耗
-
     # 存活
     "alive": 0.5,
 }

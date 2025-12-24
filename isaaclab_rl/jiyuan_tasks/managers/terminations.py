@@ -20,7 +20,7 @@ from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from omni.isaac.lab.envs import ManagerBasedRLEnv
+    from isaaclab.envs import ManagerBasedRLEnv
 
 # 导入数学工具
 from ..utils.math_utils import quat_to_euler_xyz, normalize_quaternion

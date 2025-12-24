@@ -32,11 +32,7 @@ def quat_to_euler_xyz(quat: Tensor) -> Tensor:
     # Pitch (y-axis rotation)
     sinp = 2 * (w * y - z * x)
     # 处理万向节死锁
-    pitch = torch.where(
-        torch.abs(sinp) >= 1,
-        torch.sign(sinp) * torch.pi / 2,
-        torch.asin(sinp)
-    )
+    pitch = torch.where(torch.abs(sinp) >= 1, torch.sign(sinp) * torch.pi / 2, torch.asin(sinp))
 
     # Yaw (z-axis rotation)
     siny_cosp = 2 * (w * z + x * y)

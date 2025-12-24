@@ -1,17 +1,15 @@
 """
-Jiyuan :hº¯ƒ°
+åŒè¶³æœºå™¨äººç¯å¢ƒæ¨¡å—
 
-+¯ƒú{ŒÍû¡¯ƒ„wS°
-
-!W:
-- cfg: ¯ƒMn{( @configclass Åph	
-- jiyuan_base_env.py: ¯ƒú{¡-	
-- velocity_tracking_env.py: ¦ß*¯ƒ¡-	
+åŒ…å«ç¯å¢ƒå®šä¹‰å’Œé…ç½®:
+- cfg: ç¯å¢ƒé…ç½® (@configclass è£…é¥°çš„é…ç½®ç±»)
+- jiyuan_base_env.py: åŸºç¡€ç¯å¢ƒç±»
+- velocity_tracking_env.py: é€Ÿåº¦è·Ÿè¸ªç¯å¢ƒ
 """
 
 from . import cfg
 
-# TODO: °¯ƒ(ÙÌüe
+# TODO: ç¯å¢ƒç±»å®ç°åå–æ¶ˆæ³¨é‡Š
 # from .jiyuan_base_env import JiyuanBaseEnv
 # from .velocity_tracking_env import VelocityTrackingEnv
 

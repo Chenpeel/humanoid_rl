@@ -28,7 +28,7 @@ from torch import Tensor
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
-    from omni.isaac.lab.envs import ManagerBasedRLEnv
+    from isaaclab.envs import ManagerBasedRLEnv
 
 
 ##
@@ -79,10 +79,7 @@ class ReferenceMotion:
             dt = 1.0 / fps
             self.joint_velocities = torch.diff(self.joint_positions, dim=0) / dt
             # 在末尾复制最后一帧
-            self.joint_velocities = torch.cat([
-                self.joint_velocities,
-                self.joint_velocities[-1:, :]
-            ], dim=0)
+            self.joint_velocities = torch.cat([self.joint_velocities, self.joint_velocities[-1:, :]], dim=0)
 
         # 根节点数据
         if root_positions is not None:
@@ -137,23 +134,19 @@ class ReferenceMotion:
         joint_vel = (1 - alpha) * self.joint_velocities[idx] + alpha * self.joint_velocities[idx + 1]
 
         result = {
-            'joint_pos': joint_pos,
-            'joint_vel': joint_vel,
+            "joint_pos": joint_pos,
+            "joint_vel": joint_vel,
         }
 
         # 插值根节点数据
         if self.root_positions is not None:
             root_pos = (1 - alpha) * self.root_positions[idx] + alpha * self.root_positions[idx + 1]
-            result['root_pos'] = root_pos
+            result["root_pos"] = root_pos
 
         if self.root_orientations is not None:
             # 四元数需要球面线性插值（SLERP）
-            root_quat = self._slerp(
-                self.root_orientations[idx],
-                self.root_orientations[idx + 1],
-                alpha
-            )
-            result['root_quat'] = root_quat
+            root_quat = self._slerp(self.root_orientations[idx], self.root_orientations[idx + 1], alpha)
+            result["root_quat"] = root_quat
 
         return result
 
@@ -240,10 +233,10 @@ def pose_matching_reward(
         ref_frame = reference_motion.get_frame(phase.item())
 
         # 计算位置误差
-        pos_error = torch.sum(torch.square(joint_pos[env_id] - ref_frame['joint_pos']))
+        pos_error = torch.sum(torch.square(joint_pos[env_id] - ref_frame["joint_pos"]))
 
         # 计算速度误差
-        vel_error = torch.sum(torch.square(joint_vel[env_id] - ref_frame['joint_vel']))
+        vel_error = torch.sum(torch.square(joint_vel[env_id] - ref_frame["joint_vel"]))
 
         # 指数奖励
         reward = torch.exp(-(weight_pos * pos_error + weight_vel * vel_error))
@@ -287,12 +280,12 @@ def root_pose_matching_reward(
         ref_frame = reference_motion.get_frame(phase.item())
 
         # 位置误差
-        pos_error = torch.sum(torch.square(root_pos[env_id] - ref_frame['root_pos']))
+        pos_error = torch.sum(torch.square(root_pos[env_id] - ref_frame["root_pos"]))
 
         # 朝向误差（如果有）
-        if 'root_quat' in ref_frame:
+        if "root_quat" in ref_frame:
             # 四元数误差可以用点积衡量（越接近1越相似）
-            quat_similarity = torch.abs(torch.sum(root_quat[env_id] * ref_frame['root_quat']))
+            quat_similarity = torch.abs(torch.sum(root_quat[env_id] * ref_frame["root_quat"]))
             quat_error = 1.0 - quat_similarity
         else:
             quat_error = 0.0
@@ -414,9 +407,9 @@ def load_motion_from_fbx(filepath: str) -> ReferenceMotion:
 示例：使用模仿学习的环境配置
 
 ```python
-from omni.isaac.lab.envs import ManagerBasedRLEnvCfg
-from omni.isaac.lab.managers import ObservationTermCfg as ObsTerm
-from omni.isaac.lab.managers import RewardTermCfg as RewTerm
+from isaaclab.envs import ManagerBasedRLEnvCfg
+from isaaclab.managers import ObservationTermCfg as ObsTerm
+from isaaclab.managers import RewardTermCfg as RewTerm
 
 # 加载参考动作（需要先实现加载器）
 # reference_motion = load_motion_from_bvh("path/to/walk.bvh")

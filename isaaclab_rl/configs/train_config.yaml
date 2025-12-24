@@ -1,0 +1,195 @@
+# 训练配置文件
+# 包含训练超参数、环境配置、奖励权重等
+#
+# 配置优先级: 命令行参数 > 此配置文件 > 代码中的预定义值
+#
+# 使用方式:
+#   python scripts/train.py --config configs/train_config.yaml
+
+# 任务选择
+task: "velocity"  # 可选: velocity, standing, walking, test
+
+# 环境配置
+environment:
+  num_envs: 4096
+  episode_length_s: 20.0
+  headless: false
+
+  # 环境特定配置（可覆盖默认值）
+  velocity_tracking:
+    target_velocity_range: [-1.5, 1.5]  # m/s
+    target_angular_velocity_range: [-1.5, 1.5]  # rad/s
+    command_resample_time: 10.0  # 秒
+
+  standing:
+    target_height: 0.35  # m
+    height_tolerance: 0.05  # m
+
+  walking:
+    target_stride_frequency: 2.0  # Hz
+    target_air_time: 0.5  # 秒
+    target_clearance: 0.05  # m
+
+# PPO 训练参数
+ppo:
+  # 算法超参数
+  algorithm:
+    value_loss_coef: 1.0
+    use_clipped_value_loss: true
+    clip_param: 0.2
+    entropy_coef: 0.01
+    num_learning_epochs: 5
+    num_mini_batches: 4
+    learning_rate: 0.001
+    schedule: "adaptive"
+    gamma: 0.99
+    lam: 0.95
+    desired_kl: 0.01
+    max_grad_norm: 1.0
+
+  # 训练循环参数
+  runner:
+    seed: 42
+    device: "cuda:1"
+    num_steps_per_env: 24
+    max_iterations: 30000
+    save_interval: 500
+    log_dir: "logs"
+    logger: "tensorboard"
+
+  # 网络架构
+  network:
+    actor_hidden_dims: [512, 256, 128]
+    critic_hidden_dims: [512, 256, 128]
+    activation: "elu"
+    init_noise_std: 1.0
+
+# 奖励权重配置（按任务）
+rewards:
+  # 速度跟踪任务
+  velocity_tracking:
+    track_lin_vel_xy: 1.5
+    track_ang_vel_z: 0.75
+    orientation: 0.5
+    lin_vel_z_l2: -2.0
+    ang_vel_xy_l2: -0.05
+    action_rate_l2: -0.01
+    joint_powers: -2.0e-5
+    joint_accel_l2: -2.5e-7
+    alive: 0.5
+    joint_pos_limits: -1.0
+    joint_vel_limits: -1.0
+    # Sim2Real 准备
+    ankle_workspace: -1.0
+
+  # 站立任务
+  standing:
+    height: 2.0
+    orientation: 2.0
+    lin_vel: -1.0
+    ang_vel: -0.5
+    xy_vel: -0.5
+    action_rate: -0.01
+    action_l2: -0.005
+    torques: -0.0002
+    alive: 0.5
+    joint_pos_limits: -0.5
+
+  # 行走任务
+  walking:
+    track_lin_vel_xy: 1.5
+    track_ang_vel_z: 0.5
+    gait_symmetry: 0.5
+    feet_air_time: 0.3
+    stance_duration: 0.3
+    foot_clearance: 0.2
+    stumbling: -2.0
+    drag: -1.0
+    trunk_height: 0.5
+    orientation: 0.3
+    trunk_lin_vel_z: -1.0
+    trunk_tilt: -0.5
+    action_rate: -0.01
+    joint_powers: -2.0e-5
+    alive: 0.5
+
+# 领域随机化配置
+domain_randomization:
+  # 质量随机化
+  randomize_mass:
+    enable: true
+    range: [-0.2, 0.2]  # ±20%
+
+  # 执行器增益随机化
+  randomize_actuator_gains:
+    enable: true
+    stiffness_range: [0.9, 1.1]
+    damping_range: [0.9, 1.1]
+
+  # 关节摩擦力随机化
+  randomize_friction:
+    enable: true
+    range: [0.0, 0.01]
+
+  # 外部扰动（推力）
+  external_push:
+    enable: true
+    interval_range_s: [10.0, 15.0]
+    velocity_range:
+      x: [-0.5, 0.5]
+      y: [-0.5, 0.5]
+
+  # 初始姿态随机化
+  randomize_initial_pose:
+    enable: true
+    position_range: 0.2  # rad
+    velocity_range: 0.1  # rad/s
+
+# 终止条件配置
+terminations:
+  # 通用终止条件
+  time_out: true
+  fallen: true
+  velocity_out_of_bounds: true
+  joint_pos_out_of_limits: true
+
+  # 终止阈值
+  min_height: 0.15  # m
+  max_tilt: 1.0  # rad (~57度)
+  max_velocity: 8.0  # m/s
+
+# Sim2Real 配置
+sim2real:
+  # 脚踝工作空间约束
+  ankle_workspace:
+    enable: true
+    margin: 0.1  # rad
+
+  # 并联机构映射（部署时）
+  parallel_ankle_mapping:
+    enable: false  # 训练时禁用，部署时启用
+    filtering:
+      enable: true
+      alpha: 0.7
+
+# 数据记录和评估
+logging:
+  # 训练日志
+  log_interval: 10  # 每10次迭代记录一次
+
+  # 视频录制
+  record_video:
+    enable: false
+    interval: 2000  # 每2000次迭代录制一次
+    length: 200  # 步数
+
+  # 检查点保存
+  checkpoint:
+    save_interval: 500
+    keep_last_n: 10  # 只保留最近5个检查点
+
+# 实验跟踪（可选）
+experiment:
+  name: null  # 如果为null，使用任务名称
+  tags: []  # 实验标签
+  notes: ""  # 实验备注

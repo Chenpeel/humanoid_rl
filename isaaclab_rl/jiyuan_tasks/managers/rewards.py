@@ -20,7 +20,7 @@ from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from omni.isaac.lab.envs import ManagerBasedRLEnv
+    from isaaclab.envs import ManagerBasedRLEnv
 
 # 导入数学工具
 from ..utils.math_utils import quat_to_euler_xyz, normalize_quaternion
@@ -182,7 +182,7 @@ def track_lin_vel_xy_exp(
     vel_error = torch.sum(torch.square(base_lin_vel - target_vel), dim=-1)
 
     # 指数奖励
-    return torch.exp(-vel_error / (std ** 2))
+    return torch.exp(-vel_error / (std**2))
 
 
 def track_ang_vel_z_exp(
@@ -211,7 +211,7 @@ def track_ang_vel_z_exp(
     ang_vel_error = torch.square(base_ang_vel - target_ang_vel)
 
     # 指数奖励
-    return torch.exp(-ang_vel_error / (std ** 2))
+    return torch.exp(-ang_vel_error / (std**2))
 
 
 ##
@@ -388,24 +388,24 @@ def feet_air_time(
 
 # 站立任务奖励权重
 STANDING_REWARD_WEIGHTS = {
-    "height": 1.0,           # 高度保持
-    "orientation": 1.0,      # 姿态稳定
-    "lin_vel": -0.5,         # 线速度惩罚
-    "ang_vel": -0.3,         # 角速度惩罚
-    "alive": 0.2,            # 存活奖励
-    "action_rate": -0.01,    # 动作平滑
-    "torques": -0.0001,      # 能量效率
+    "height": 1.0,  # 高度保持
+    "orientation": 1.0,  # 姿态稳定
+    "lin_vel": -0.5,  # 线速度惩罚
+    "ang_vel": -0.3,  # 角速度惩罚
+    "alive": 0.2,  # 存活奖励
+    "action_rate": -0.01,  # 动作平滑
+    "torques": -0.0001,  # 能量效率
 }
 
 # 速度跟踪任务奖励权重
 VELOCITY_TRACKING_REWARD_WEIGHTS = {
-    "track_lin_vel": 1.0,    # 线速度跟踪
-    "track_ang_vel": 0.5,    # 角速度跟踪
-    "lin_vel_z": -2.0,       # Z方向速度惩罚
-    "ang_vel_xy": -0.05,     # XY方向角速度惩罚
-    "orientation": 0.5,      # 姿态稳定
-    "action_rate": -0.01,    # 动作平滑
+    "track_lin_vel": 1.0,  # 线速度跟踪
+    "track_ang_vel": 0.5,  # 角速度跟踪
+    "lin_vel_z": -2.0,  # Z方向速度惩罚
+    "ang_vel_xy": -0.05,  # XY方向角速度惩罚
+    "orientation": 0.5,  # 姿态稳定
+    "action_rate": -0.01,  # 动作平滑
     "joint_accel": -2.5e-7,  # 关节加速度惩罚
-    "joint_powers": -2e-5,   # 能量效率
-    "alive": 0.1,            # 存活奖励
+    "joint_powers": -2e-5,  # 能量效率
+    "alive": 0.1,  # 存活奖励
 }

@@ -34,18 +34,35 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
+# ============================================================================
+# 必须先启动 Isaac Sim 应用（在导入 Isaac Lab 之前）
+# ============================================================================
+from isaaclab.app import AppLauncher
+
+# 创建参数解析器（用于 AppLauncher）
+app_launcher_parser = argparse.ArgumentParser(add_help=False)
+AppLauncher.add_app_launcher_args(app_launcher_parser)
+app_launcher_args, remaining_args = app_launcher_parser.parse_known_args()
+
+# 启动 Isaac Sim 应用
+app_launcher = AppLauncher(app_launcher_args)
+simulation_app = app_launcher.app
+
+# ============================================================================
+# 现在可以安全地导入 Isaac Lab 和其他模块
+# ============================================================================
 import gymnasium as gym
 import torch
 
 # Isaac Lab 导入
-from omni.isaac.lab.envs import ManagerBasedRLEnv
+from isaaclab.envs import ManagerBasedRLEnv
 
 # RSL_RL 导入
 from rsl_rl.runners import OnPolicyRunner
 
 # 项目导入
-from isaaclab_rl import jiyuan_tasks  # 注册环境
-from isaaclab_rl.agents.rsl_rl import (
+import jiyuan_tasks  # 注册环境
+from agents.rsl_rl import (
     VELOCITY_TRACKING_PPO_CFG,
     STANDING_PPO_CFG,
 )

@@ -21,7 +21,7 @@ from torch import Tensor
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from omni.isaac.lab.envs import ManagerBasedRLEnv
+    from isaaclab.envs import ManagerBasedRLEnv
 
 
 ##
@@ -79,9 +79,9 @@ class ParallelAnkleMapper:
 
         # 工作空间限制（弧度）
         self.rpy_limits = {
-            'roll': (-np.pi / 6, np.pi / 6),  # ±30°
-            'pitch': (-np.pi / 6, np.pi / 6),
-            'yaw': (-np.pi / 6, np.pi / 6),
+            "roll": (-np.pi / 6, np.pi / 6),  # ±30°
+            "pitch": (-np.pi / 6, np.pi / 6),
+            "yaw": (-np.pi / 6, np.pi / 6),
         }
 
         print(f"[Sim2Real] ParallelAnkleMapper 初始化完成")
@@ -95,6 +95,7 @@ class ParallelAnkleMapper:
         try:
             # 尝试导入 ROS 包
             import sys
+
             ros_path = "/home/chenpeel/work/repo/jiyuan/ros/src/parallel_3dof_controller"
             if ros_path not in sys.path:
                 sys.path.insert(0, ros_path)
@@ -119,9 +120,9 @@ class ParallelAnkleMapper:
         Returns:
             裁剪后的 (roll, pitch, yaw)
         """
-        roll = np.clip(roll, *self.rpy_limits['roll'])
-        pitch = np.clip(pitch, *self.rpy_limits['pitch'])
-        yaw = np.clip(yaw, *self.rpy_limits['yaw'])
+        roll = np.clip(roll, *self.rpy_limits["roll"])
+        pitch = np.clip(pitch, *self.rpy_limits["pitch"])
+        yaw = np.clip(yaw, *self.rpy_limits["yaw"])
         return roll, pitch, yaw
 
     def map_action(self, action: np.ndarray, ankle_side: str) -> List[Dict]:
@@ -150,11 +151,7 @@ class ParallelAnkleMapper:
         roll, pitch, yaw = self.clip_rpy(roll, pitch, yaw)
 
         # 调用运动学求解器
-        commands = self.solver.rpy_to_servo_commands(
-            roll, pitch, yaw,
-            ankle_side=ankle_side,
-            speed=100  # 默认速度
-        )
+        commands = self.solver.rpy_to_servo_commands(roll, pitch, yaw, ankle_side=ankle_side, speed=100)  # 默认速度
 
         # 应用滤波
         if self.enable_filtering:
@@ -186,12 +183,11 @@ class ParallelAnkleMapper:
         for curr_cmd, last_cmd in zip(commands, last_commands):
             # 低通滤波: position_new = α × position_last + (1-α) × position_curr
             filtered_position = int(
-                self.filter_alpha * last_cmd['position'] +
-                (1 - self.filter_alpha) * curr_cmd['position']
+                self.filter_alpha * last_cmd["position"] + (1 - self.filter_alpha) * curr_cmd["position"]
             )
 
             filtered_cmd = curr_cmd.copy()
-            filtered_cmd['position'] = filtered_position
+            filtered_cmd["position"] = filtered_position
             filtered_commands.append(filtered_cmd)
 
         self.last_servo_commands[ankle_side] = filtered_commands
@@ -216,12 +212,12 @@ class ParallelAnkleMapper:
         actions_np = actions.cpu().numpy()
 
         for env_id, action in enumerate(actions_np):
-            left_commands = self.map_action(action, 'left')
-            right_commands = self.map_action(action, 'right')
+            left_commands = self.map_action(action, "left")
+            right_commands = self.map_action(action, "right")
 
             results[env_id] = {
-                'left': left_commands,
-                'right': right_commands,
+                "left": left_commands,
+                "right": right_commands,
             }
 
         return results
@@ -262,13 +258,13 @@ def ankle_workspace_penalty(
     penalty = torch.zeros(env.num_envs, device=env.device)
 
     # 检查左脚踝
-    for idx in ankle_indices['left']:
+    for idx in ankle_indices["left"]:
         angle = actions[:, idx]
         violation = torch.clamp(torch.abs(angle) - safe_limit, min=0.0)
         penalty += violation
 
     # 检查右脚踝
-    for idx in ankle_indices['right']:
+    for idx in ankle_indices["right"]:
         angle = actions[:, idx]
         violation = torch.clamp(torch.abs(angle) - safe_limit, min=0.0)
         penalty += violation

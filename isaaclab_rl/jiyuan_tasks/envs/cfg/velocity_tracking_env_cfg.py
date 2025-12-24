@@ -21,29 +21,29 @@ Jiyuan 速度跟踪环境配置
 
 from __future__ import annotations
 
-import omni.isaac.lab.sim as sim_utils
-from omni.isaac.lab.assets import ArticulationCfg
-from omni.isaac.lab.envs import ManagerBasedRLEnvCfg
-from omni.isaac.lab.managers import CurriculumTermCfg as CurrTerm
-from omni.isaac.lab.managers import EventTermCfg as EventTerm
-from omni.isaac.lab.managers import ObservationGroupCfg as ObsGroup
-from omni.isaac.lab.managers import ObservationTermCfg as ObsTerm
-from omni.isaac.lab.managers import RewardTermCfg as RewTerm
-from omni.isaac.lab.managers import SceneEntityCfg
-from omni.isaac.lab.managers import TerminationTermCfg as DoneTerm
-from omni.isaac.lab.scene import InteractiveSceneCfg
-from omni.isaac.lab.utils import configclass
-from omni.isaac.lab.utils.noise import AdditiveUniformNoiseCfg as Unif
-from omni.isaac.lab.utils.noise import AdditiveGaussianNoiseCfg as Gauss
+import isaaclab.sim as sim_utils
+from isaaclab.assets import ArticulationCfg
+from isaaclab.envs import ManagerBasedRLEnvCfg
+from isaaclab.managers import CurriculumTermCfg as CurrTerm
+from isaaclab.managers import EventTermCfg as EventTerm
+from isaaclab.managers import ObservationGroupCfg as ObsGroup
+from isaaclab.managers import ObservationTermCfg as ObsTerm
+from isaaclab.managers import RewardTermCfg as RewTerm
+from isaaclab.managers import SceneEntityCfg
+from isaaclab.managers import TerminationTermCfg as DoneTerm
+from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.utils import configclass
+from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unif
+from isaaclab.utils.noise import AdditiveGaussianNoiseCfg as Gauss
 
 # 导入场景配置
 from .jiyuan_scene_cfg import JiyuanSceneCfg
 
 # 导入Isaac Lab内置的MDP函数
-import omni.isaac.lab.envs.mdp as mdp
+import isaaclab.envs.mdp as mdp
 
 # 导入自定义管理器函数
-from isaaclab_rl.jiyuan_tasks.managers import rewards, terminations
+from jiyuan_tasks.managers import rewards, terminations
 
 
 ##
@@ -176,8 +176,8 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
         )
 
         # 关节加速度惩罚（平滑运动）
-        joint_accel_l2 = RewTerm(
-            func=mdp.joint_accel_l2,
+        joint_acc_l2 = RewTerm(
+            func=mdp.joint_acc_l2,
             weight=-2.5e-7,
             params={"asset_cfg": SceneEntityCfg("robot")},
         )
@@ -341,9 +341,6 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
         # 设置查看器参数
         self.viewer.eye = (7.5, 7.5, 7.5)
         self.viewer.lookat = (0.0, 0.0, 0.0)
-
-        # 禁用重力可视化（可选）
-        self.scene.robot.spawn.articulation_props.enabled_self_collisions = False
 
 
 ##

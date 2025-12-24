@@ -36,9 +36,9 @@ from . import utils
 
 gym.register(
     id="Isaac-Jiyuan-Test-v0",
-    entry_point="omni.isaac.lab.envs:ManagerBasedRLEnv",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
     kwargs={
-        "env_cfg_entry_point": "isaaclab_rl.jiyuan_tasks.envs.cfg:JIYUAN_TEST_ENV_CFG",
+        "env_cfg_entry_point": "jiyuan_tasks.envs.cfg:JIYUAN_TEST_ENV_CFG",
     },
     disable_env_checker=True,
 )
@@ -46,9 +46,9 @@ gym.register(
 # 速度跟踪环境（主要训练任务）
 gym.register(
     id="Isaac-Jiyuan-Velocity-v0",
-    entry_point="omni.isaac.lab.envs:ManagerBasedRLEnv",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
     kwargs={
-        "env_cfg_entry_point": "isaaclab_rl.jiyuan_tasks.envs.cfg:VELOCITY_TRACKING_ENV_CFG",
+        "env_cfg_entry_point": "jiyuan_tasks.envs.cfg:VELOCITY_TRACKING_ENV_CFG",
     },
     disable_env_checker=True,
 )
@@ -56,9 +56,9 @@ gym.register(
 # 站立平衡环境（预训练/调试）
 gym.register(
     id="Isaac-Jiyuan-Standing-v0",
-    entry_point="omni.isaac.lab.envs:ManagerBasedRLEnv",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
     kwargs={
-        "env_cfg_entry_point": "isaaclab_rl.jiyuan_tasks.envs.cfg:STANDING_ENV_CFG",
+        "env_cfg_entry_point": "jiyuan_tasks.envs.cfg:STANDING_ENV_CFG",
     },
     disable_env_checker=True,
 )

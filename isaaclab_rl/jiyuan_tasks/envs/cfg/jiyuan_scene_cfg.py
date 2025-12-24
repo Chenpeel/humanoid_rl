@@ -29,17 +29,17 @@ cp jiyuan_scene_cfg.py unitree_go2_scene_cfg.py
 
 from __future__ import annotations
 
-import omni.isaac.lab.sim as sim_utils
-from omni.isaac.lab.actuators import ImplicitActuatorCfg
-from omni.isaac.lab.assets import ArticulationCfg
-from omni.isaac.lab.envs import ManagerBasedRLEnvCfg
-from omni.isaac.lab.managers import EventTermCfg as EventTerm
-from omni.isaac.lab.managers import SceneEntityCfg
-from omni.isaac.lab.scene import InteractiveSceneCfg
-from omni.isaac.lab.sensors import ContactSensorCfg, RayCasterCfg, patterns
-from omni.isaac.lab.sim import MjcfFileCfg
-from omni.isaac.lab.terrains import TerrainImporterCfg
-from omni.isaac.lab.utils import configclass
+import isaaclab.sim as sim_utils
+from isaaclab.actuators import ImplicitActuatorCfg
+from isaaclab.assets import ArticulationCfg
+from isaaclab.envs import ManagerBasedRLEnvCfg
+from isaaclab.managers import EventTermCfg as EventTerm
+from isaaclab.managers import SceneEntityCfg
+from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
+from isaaclab.sim import MjcfFileCfg
+from isaaclab.terrains import TerrainImporterCfg
+from isaaclab.utils import configclass
 
 
 ##
@@ -79,44 +79,39 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
             # MJCF 文件路径（相对于 isaaclab_rl/assets/）
             asset_path="assets/xmls/models/jiyuan/index.xml",
             make_instanceable=True,
+            # 设置articulation属性
+            articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+                enabled_self_collisions=False,
+            ),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             # 初始位置：在地面上方约0.3米（MJCF中是0.99m，但那是整个机器人高度）
             pos=(0.0, 0.0, 0.35),
-
             # 初始姿态：保持直立（四元数 [w, x, y, z]）
             # MJCF 中的 quat="0.70710678 0.70710678 0 0" 可能是为了坐标系转换
             # Isaac Lab 中直接使用 identity quaternion (w=1)
             rot=(1.0, 0.0, 0.0, 0.0),
-
             # 关节初始位置（单位：弧度）
             # 从原始MJX代码的_default_pose()推断
             joint_pos={
                 # 髋关节pitch：略微前倾
                 ".*hip_pitch_engine.*": 0.0,
-
                 # 髋关节yaw：保持中立
                 ".*hip_yaw_engine.*": 0.0,
-
                 # 髋关节roll：保持中立
                 ".*hip_roll.*": 0.0,
-
                 # 膝关节：弯曲约30度（0.5弧度）以降低重心
                 ".*knee.*": 0.5,
-
                 # 踝关节：保持中立（3自由度并联结构）
                 ".*ankle_1_3.*": 0.0,
                 ".*ankle_2_3.*": 0.0,
                 ".*ankle_3_3.*": 0.0,
-
                 # 脚趾关节：略微抬起
                 ".*toe.*": 0.0,
             },
-
             # 初始速度：静止
             joint_vel={".*": 0.0},
         ),
-
         # 执行器配置
         actuators={
             # 主要关节电机（hip, knee）
@@ -131,16 +126,13 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 # MJCF: damping=0.5, armature=0.01
                 # Isaac Lab: stiffness和damping需要根据实际调优
                 stiffness=80.0,  # 典型值：40-150
-                damping=2.0,     # 典型值：1-5
-
+                damping=2.0,  # 典型值：1-5
                 # 力矩限制（从 MJCF ctrlrange="-1 1" 映射）
                 # 实际力矩需要乘以gear ratio，这里假设最大力矩约150Nm
                 effort_limit=150.0,
-
                 # 速度限制（弧度/秒）
                 velocity_limit=10.0,
             ),
-
             # 踝关节电机（3自由度并联结构）
             "ankle_motors": ImplicitActuatorCfg(
                 joint_names_expr=[
@@ -154,7 +146,6 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 effort_limit=100.0,
                 velocity_limit=10.0,
             ),
-
             # 脚趾电机
             "toe_motors": ImplicitActuatorCfg(
                 joint_names_expr=[".*toe.*"],
