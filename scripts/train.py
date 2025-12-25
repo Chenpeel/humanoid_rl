@@ -12,9 +12,9 @@ from datetime import datetime
 from pathlib import Path
 
 # ==================== JAX配置 (必须在导入jax之前) ====================
-# 🔧 指定使用 GPU device:1（第二张显卡）
+# 🔧 指定使用 GPU device:0（第一张显卡，AutoDL 单卡环境）
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 # 启用JAX编译缓存 (使用绝对路径，确保持久化)
 cache_path = os.path.abspath(os.path.join(
