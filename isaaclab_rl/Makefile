@@ -17,11 +17,7 @@
 ISAACLAB_PATH ?= ../dep/IsaacLab
 ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 
-# 云服务器环境配置说明：
-# --headless 模式会导致 MJCF 导入器不可用（headless kit 缺少 isaacsim.asset.importer.mjcf）
-# 解决方案：不使用 --headless，而是让 Isaac Sim 自动检测无显示环境
-# Vulkan 错误可以安全忽略，训练仍然可以正常进行
-HEADLESS_FLAGS = --no-window
+HEADLESS_FLAGS =""
 
 .PHONY: help install install-dev install-vis install-all train train-test clean clean-logs verify
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
