@@ -284,7 +284,7 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
         ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
         action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
         joint_powers = RewTerm(func=rewards.joint_powers_l1, weight=-2.0e-5)
-        joint_accel_l2 = RewTerm(func=mdp.joint_accel_l2, weight=-2.5e-7)
+        joint_accel_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
 
         # 存活奖励
         alive = RewTerm(func=mdp.is_alive, weight=0.5)
