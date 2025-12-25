@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from tkinter.constants import FALSE
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
@@ -86,6 +87,12 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
             # MJCF 文件路径（使用项目根目录的绝对路径）
             asset_path=str(ISAAC_LAB_RL_ROOT / "assets/xmls/models/jiyuan/index.xml"),
             make_instanceable=True,
+            # fix_base 必须显式设置（MjcfConverterCfg 中的必需字段）
+            # False = 允许机器人移动（双足机器人需要自由移动）
+            fix_base=False,
+            # 其他 MJCF 转换选项
+            import_sites=True,
+            self_collision=False,
             # 设置articulation属性
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                 enabled_self_collisions=False,
