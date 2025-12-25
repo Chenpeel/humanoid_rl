@@ -17,7 +17,6 @@
 ISAACLAB_PATH ?= ../dep/IsaacLab
 ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 
-HEADLESS_FLAGS =""
 
 .PHONY: help install install-dev install-vis install-all train train-test clean clean-logs verify
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
@@ -146,11 +145,11 @@ install-all: check-isaaclab
 
 train: check-isaaclab
 	@echo "开始训练（使用默认配置，headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py $(HEADLESS_FLAGS) --config configs/train_config.yaml
+	$(ISAACLAB_PYTHON) scripts/train.py --config configs/train_config.yaml
 
 train-test: check-isaaclab
 	@echo "快速测试训练（64 envs, 10 iters，headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py $(HEADLESS_FLAGS) --config configs/train_config.yaml --num_envs 64 --max_iterations 10
+	$(ISAACLAB_PYTHON) scripts/train.py --config configs/train_config.yaml --num_envs 64 --max_iterations 10
 
 # ==============================================================================
 # 验证目标
