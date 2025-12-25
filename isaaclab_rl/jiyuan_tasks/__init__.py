@@ -7,6 +7,7 @@ Jiyuan 机器人任务定义模块
 - TestEnv: 最小可行环境（用于基础验证）
 - VelocityTracking: 速度跟踪任务（主要训练任务）
 - Standing: 站立平衡任务（预训练/调试）
+- Walking: 行走任务（专用步态训练）
 
 环境注册:
 所有环境都会在导入时自动注册到 gymnasium，可通过 gym.make() 创建。
@@ -21,6 +22,9 @@ Jiyuan 机器人任务定义模块
     >>>
     >>> # 站立环境（预训练）
     >>> standing_env = gym.make("Isaac-Jiyuan-Standing-v0", num_envs=4096)
+    >>>
+    >>> # 行走环境（步态训练）
+    >>> walking_env = gym.make("Isaac-Jiyuan-Walking-v0", num_envs=4096)
 """
 
 import gymnasium as gym
@@ -59,6 +63,16 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     kwargs={
         "env_cfg_entry_point": "jiyuan_tasks.envs.cfg:STANDING_ENV_CFG",
+    },
+    disable_env_checker=True,
+)
+
+# 行走环境（专用步态训练）
+gym.register(
+    id="Isaac-Jiyuan-Walking-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": "jiyuan_tasks.envs.cfg:WALKING_ENV_CFG",
     },
     disable_env_checker=True,
 )

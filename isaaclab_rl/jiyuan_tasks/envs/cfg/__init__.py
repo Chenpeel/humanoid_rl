@@ -8,6 +8,7 @@
 - jiyuan_test_env_cfg.py: 测试环境配置（最小可行环境）
 - velocity_tracking_env_cfg.py: 速度跟踪任务配置
 - standing_env_cfg.py: 站立任务配置
+- walking_env_cfg.py: 行走任务配置
 """
 
 # 导入场景配置
@@ -19,6 +20,7 @@ from .jiyuan_test_env_cfg import JiyuanTestEnvCfg, JIYUAN_TEST_ENV_CFG
 # 导入完整任务配置
 from .velocity_tracking_env_cfg import VelocityTrackingEnvCfg, VELOCITY_TRACKING_ENV_CFG
 from .standing_env_cfg import StandingEnvCfg, STANDING_ENV_CFG
+from .walking_env_cfg import WalkingEnvCfg, WALKING_ENV_CFG
 
 __all__ = [
     "JiyuanSceneCfg",
@@ -28,4 +30,6 @@ __all__ = [
     "VELOCITY_TRACKING_ENV_CFG",
     "StandingEnvCfg",
     "STANDING_ENV_CFG",
+    "WalkingEnvCfg",
+    "WALKING_ENV_CFG",
 ]
