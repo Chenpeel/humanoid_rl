@@ -5,13 +5,13 @@
 scene: flat_terrain # 训练场景 (flat_terrain / rough_terrain)
 
 # ==================== 环境配置 ====================
-num_envs: 8192 # 并行环境数
-num_steps: 128 # 每次rollout的步数
+num_envs: 16384 # 并行环境数（RTX 4090 24GB 优化配置）
+num_steps: 64 # 每次rollout的步数（降低以适应更多环境）
 max_episode_steps: 2048 # 每个episode最大步数
 
-# 批次大小 = 8192 × 128 = 1,048,576
-# 显存占用预估：24-28GB（安全范围）
-# 编译时间预估：30-60分钟（首次）
+# 批次大小 = 16384 × 64 = 1,048,576
+# 显存占用预估：约 20-22GB（RTX 4090 24GB 安全范围）
+# 编译时间预估：首次约 20-40 分钟
 
 # ==================== PPO超参数 ====================
 num_epochs: 4 # 每次update的epoch数
@@ -26,7 +26,7 @@ max_grad_norm: 0.5 # 梯度裁剪阈值
 value_clip_epsilon: 0.2 # 价值函数裁剪系数
 
 # ==================== 训练配置 ====================
-total_timesteps: 300000000 # 总训练步数
+total_timesteps: 104857600 # 总训练步数 (100轮次 × 16384环境 × 64步)
 log_interval: 10 # 日志记录间隔
 eval_interval: 50 # 评估间隔
 save_interval: 100 # 模型保存间隔（每100次更新保存一次checkpoint）
