@@ -268,7 +268,6 @@ def main():
             f"[bold green]PPO 训练[/bold green]\n"
             f"[dim]JAX + MJX + Flax实现[/dim]\n"
             f"[yellow]场景: {args.scene}[/yellow]\n"
-            f"[yellow]环境类型: {args.env_type}[/yellow]\n"
             f"[dim]配置: {pre_args.config}[/dim]",
             border_style="green",
         )
@@ -319,7 +318,6 @@ def main():
         env = create_velocity_tracking_env(xml_path=scene_path)
         console.print(f"✓ VelocityTrackingEnv 创建完成")
 
-    console.print(f"  环境类型参数: {args.env_type}")
     console.print(f"  观测维度: {env.observation_size}")
     console.print(f"  动作维度: {env.action_size}")
 
@@ -336,13 +334,7 @@ def main():
     rng = jax.random.PRNGKey(42)
     rng, init_rng = jax.random.split(rng)
     dummy_obs = jp.zeros((1, env.observation_size))
-    console.print(f"  [dim]dummy_obs shape: {dummy_obs.shape}[/dim]")
     params = network.init(init_rng, dummy_obs)
-
-    # 检查第一层 kernel 形状
-    first_kernel_shape = params['params']['backbone']['Dense_0']['kernel'].shape
-    console.print(f"  [dim]第一层 Dense kernel shape: {first_kernel_shape}[/dim]")
-
     num_params = count_parameters(params)
 
     # 🔍 诊断：检查网络参数是否包含 NaN

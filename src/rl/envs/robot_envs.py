@@ -963,15 +963,9 @@ class WalkingEnv(MJXBaseEnv):
                 if any(foot in name_lower for foot in ["foot", "toe", "feet"]):
                     self.contact_sensor_indices.append(i)
 
-        # 调试：打印找到的传感器
-        if self.verbose:
-            print(f"找到的触地传感器: {[sensor_names[i] for i in self.contact_sensor_indices]}")
-
         # 如果没找到，默认使用前4个传感器
         if not self.contact_sensor_indices and model.nsensor >= 4:
             self.contact_sensor_indices = [0, 1, 2, 3]
-            if self.verbose:
-                print(f"未找到触地传感器，使用前4个传感器: {[sensor_names[i] for i in self.contact_sensor_indices]}")
 
         # 脚部 body 索引（用于获取位置）
         self.right_foot_body_id = mujoco.mj_name2id(
@@ -1296,13 +1290,13 @@ class WalkingEnv(MJXBaseEnv):
             pipeline_state: 当前MJX pipeline状态
 
         Returns:
-            额外信息字典
+            额外信息字典（始终包含 command 和 actual_velocity）
         """
-        info = {}
-
-        # 保留命令信息（如果存在）
-        if "command" in state.info:
-            info["command"] = state.info["command"]
+        # 始终保持相同的字典结构（JAX scan 要求）
+        info = {
+            "command": state.info.get("command", jp.zeros(3)),
+            "actual_velocity": jp.zeros(3),  # 默认值
+        }
 
         # 提取实际速度（基座线速度和角速度）
         if self.floating_base_qvel_addr is not None:
@@ -1337,9 +1331,11 @@ class WalkingEnv(MJXBaseEnv):
         rng, cmd_rng = jax.random.split(state.rng)
         command = self._sample_command(cmd_rng)
 
-        # 更新info（包含命令）
-        info = state.info.copy()
-        info["command"] = command
+        # 初始化 info（包含命令和 actual_velocity，保持 pytree 结构一致）
+        info = {
+            "command": command,
+            "actual_velocity": jp.zeros(3),  # 初始速度为零
+        }
 
         # 重新计算obs（包含命令）
         # 更新观测的最后3个元素为命令
