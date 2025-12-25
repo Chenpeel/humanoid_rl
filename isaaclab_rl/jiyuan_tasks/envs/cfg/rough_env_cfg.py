@@ -43,6 +43,8 @@ from .jiyuan_scene_cfg import JiyuanSceneCfg, get_joint_names, ISAAC_LAB_RL_ROOT
 
 # 导入Isaac Lab内置的MDP函数
 import isaaclab.envs.mdp as mdp
+# 导入地形训练的MDP函数（课程学习）
+import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp_locomotion
 
 # 导入自定义奖励函数
 from jiyuan_tasks.managers import rewards
@@ -373,7 +375,7 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
     class CurriculumCfg:
         """课程学习配置"""
 
-        terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
+        terrain_levels = CurrTerm(func=mdp_locomotion.terrain_levels_vel)
 
     # 配置实例
     commands: CommandsCfg = CommandsCfg()
