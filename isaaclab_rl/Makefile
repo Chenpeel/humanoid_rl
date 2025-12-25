@@ -135,7 +135,7 @@ install-vis: check-isaaclab
 
 install-all: check-isaaclab
 	@echo "正在安装所有依赖..."
-	$(ISAACLAB_PYTHON) -m pip install 'isaacsim[all,extscache]==5.1.0' --extra-index-url https://pypi.nvidia.com
+	$(ISAACLAB_PYTHON) -m pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
 	$(ISAACLAB_PYTHON) -m pip install -e ".[all]"
 	@echo "✓ 安装完成（包含所有依赖）！"
 
