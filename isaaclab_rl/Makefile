@@ -17,7 +17,10 @@
 ISAACLAB_PATH ?= ../dep/IsaacLab
 ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 
-# 云服务器环境配置：指定 NVIDIA Vulkan ICD 文件
+# AutoDL 云服务器平台专用配置
+# 问题：AutoDL 环境下 NVIDIA Open Kernel Module 的 Vulkan 支持需要使用 EGL 库
+# 解决方案：指定 NVIDIA Vulkan ICD 文件，使用 libEGL_nvidia.so.0 (headless 模式)
+# 参考：AutoDL 官方文档 - https://www.autodl.com/docs/
 export VK_ICD_FILENAMES = /usr/share/vulkan/icd.d/nvidia_icd.json
 
 
