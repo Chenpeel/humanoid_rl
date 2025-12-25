@@ -7,7 +7,11 @@
 #   make install-dev        - 安装项目 + 开发工具
 #   make install-vis        - 安装项目 + 可视化工具
 #   make install-all        - 安装所有依赖
-#   make train              - 开始训练（使用默认配置）
+#   make train              - 开始速度跟踪训练（平坦地形）
+#   make train-standing     - 开始站立平衡训练
+#   make train-walking      - 开始行走步态训练
+#   make train-rough        - 开始粗糙地形训练
+#   make train-flat         - 开始平坦地形训练
 #   make train-test         - 快速测试训练（64 envs, 10 iters）
 #   make clean              - 清理构建文件
 #   make help               - 显示帮助信息
@@ -24,7 +28,7 @@ ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 export VK_ICD_FILENAMES = /usr/share/vulkan/icd.d/nvidia_icd.json
 
 
-.PHONY: help install install-dev install-vis install-all train train-test clean clean-logs verify
+.PHONY: help install install-dev install-vis install-all train train-standing train-walking train-rough train-flat train-test clean clean-logs verify
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
 .PHONY: check-env check-isaaclab
 
@@ -53,7 +57,11 @@ help:
 	@echo "  make install-all             - 安装所有依赖"
 	@echo ""
 	@echo "训练命令:"
-	@echo "  make train                   - 开始训练（使用默认配置）"
+	@echo "  make train                   - 速度跟踪训练（平坦地形，默认配置）"
+	@echo "  make train-standing          - 站立平衡训练"
+	@echo "  make train-walking           - 行走步态训练"
+	@echo "  make train-rough             - 粗糙地形训练（台阶、斜坡、障碍）"
+	@echo "  make train-flat              - 平坦地形训练（简化版）"
 	@echo "  make train-test              - 快速测试训练（64 envs, 10 iters）"
 	@echo ""
 	@echo "验证命令:"
@@ -149,13 +157,35 @@ install-all: check-isaaclab
 # 训练目标
 # ==============================================================================
 
+# 速度跟踪训练（平坦地形）
 train: check-isaaclab
-	@echo "开始训练（使用默认配置，headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --config configs/train_config.yaml
+	@echo "开始速度跟踪训练（平坦地形，headless模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py --task velocity --headless
 
+# 站立平衡训练
+train-standing: check-isaaclab
+	@echo "开始站立平衡训练（headless模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py --task standing --headless
+
+# 行走步态训练
+train-walking: check-isaaclab
+	@echo "开始行走步态训练（headless模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py --task walking --headless
+
+# 粗糙地形训练（台阶、斜坡、障碍）
+train-rough: check-isaaclab
+	@echo "开始粗糙地形训练（台阶、斜坡、障碍，headless模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py --task rough --headless
+
+# 平坦地形训练（简化版）
+train-flat: check-isaaclab
+	@echo "开始平坦地形训练（简化版，headless模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py --task flat --headless
+
+# 快速测试训练
 train-test: check-isaaclab
 	@echo "快速测试训练（64 envs, 10 iters，headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --config configs/train_config.yaml --num_envs 64 --max_iterations 10
+	$(ISAACLAB_PYTHON) scripts/train.py --task velocity --num_envs 64 --max_iterations 10 --headless
 
 # ==============================================================================
 # 验证目标

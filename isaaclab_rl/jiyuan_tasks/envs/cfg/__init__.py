@@ -9,6 +9,7 @@
 - velocity_tracking_env_cfg.py: 速度跟踪任务配置
 - standing_env_cfg.py: 站立任务配置
 - walking_env_cfg.py: 行走任务配置
+- rough_env_cfg.py: 地形训练任务配置（粗糙地形/平面）
 """
 
 # 导入场景配置
@@ -22,6 +23,14 @@ from .velocity_tracking_env_cfg import VelocityTrackingEnvCfg, VELOCITY_TRACKING
 from .standing_env_cfg import StandingEnvCfg, STANDING_ENV_CFG
 from .walking_env_cfg import WalkingEnvCfg, WALKING_ENV_CFG
 
+# 导入地形训练配置
+from .rough_env_cfg import (
+    JiyuanRoughEnvCfg,
+    JiyuanFlatEnvCfg,
+    JIYUAN_ROUGH_ENV_CFG,
+    JIYUAN_FLAT_ENV_CFG,
+)
+
 __all__ = [
     "JiyuanSceneCfg",
     "JiyuanTestEnvCfg",
@@ -32,4 +41,8 @@ __all__ = [
     "STANDING_ENV_CFG",
     "WalkingEnvCfg",
     "WALKING_ENV_CFG",
+    "JiyuanRoughEnvCfg",
+    "JiyuanFlatEnvCfg",
+    "JIYUAN_ROUGH_ENV_CFG",
+    "JIYUAN_FLAT_ENV_CFG",
 ]

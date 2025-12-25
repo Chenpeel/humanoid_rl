@@ -8,6 +8,8 @@
 - velocity: 速度跟踪任务（主要训练任务）
 - standing: 站立平衡任务（预训练）
 - walking: 行走任务（专用步态训练）
+- rough: 粗糙地形任务（复杂地形训练）
+- flat: 平坦地形任务（简化训练）
 
 配置优先级:
     命令行参数 > 配置文件 > 代码预定义值
@@ -24,6 +26,12 @@
 
     # 行走任务训练
     python scripts/train.py --task walking --num_envs 4096
+
+    # 粗糙地形训练
+    python scripts/train.py --task rough --num_envs 4096
+
+    # 平坦地形训练
+    python scripts/train.py --task flat --num_envs 4096
 
     # 从检查点恢复
     python scripts/train.py --config configs/train_config.yaml --resume --load_run run_20250122_143000
@@ -94,14 +102,18 @@ TASK_ENV_MAP = {
     "velocity": "Isaac-Jiyuan-Velocity-v0",
     "standing": "Isaac-Jiyuan-Standing-v0",
     "walking": "Isaac-Jiyuan-Walking-v0",
+    "rough": "Isaac-Jiyuan-Rough-v0",
+    "flat": "Isaac-Jiyuan-Flat-v0",
     "test": "Isaac-Jiyuan-Test-v0",
 }
 
 TASK_PPO_CFG_MAP = {
     "velocity": VELOCITY_TRACKING_PPO_CFG,
     "standing": STANDING_PPO_CFG,
-    "walking": VELOCITY_TRACKING_PPO_CFG,  # 行走使用速度跟踪配置
-    "test": STANDING_PPO_CFG,  # 测试环境使用站立配置
+    "walking": VELOCITY_TRACKING_PPO_CFG,
+    "rough": VELOCITY_TRACKING_PPO_CFG,
+    "flat": VELOCITY_TRACKING_PPO_CFG,
+    "test": STANDING_PPO_CFG,
 }
 
 
@@ -134,7 +146,7 @@ def parse_args():
         "--task",
         type=str,
         default=None,
-        help="训练任务 (可选: velocity, standing, walking, test)。如果使用配置文件，可以在配置文件中指定",
+        help="训练任务 (可选: velocity, standing, walking, rough, flat, test)。如果使用配置文件，可以在配置文件中指定",
     )
 
     # 环境参数
@@ -289,7 +301,7 @@ def load_config_with_cli(args) -> ConfigDict:
         default_config = {
             "task": "velocity",
             "environment": {
-                "num_envs": 4096,
+                "num_envs": 8192,
                 "episode_length_s": 20.0,
                 "headless": False,
             },

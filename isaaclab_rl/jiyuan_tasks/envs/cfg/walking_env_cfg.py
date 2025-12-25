@@ -60,7 +60,7 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
     """
 
     # 场景配置
-    scene: JiyuanSceneCfg = JiyuanSceneCfg(num_envs=4096, env_spacing=2.5)
+    scene: JiyuanSceneCfg = JiyuanSceneCfg(num_envs=8192, env_spacing=2.5)
 
     # 基础设置
     decimation = 4  # 控制频率：50Hz / 4 = 12.5Hz
