@@ -122,16 +122,19 @@ install: check-isaaclab
 
 install-dev: check-isaaclab
 	@echo "正在安装项目 + 开发工具..."
+	$(ISAACLAB_PYTHON) -m pip install 'isaacsim[all,extscache]==5.1.0' --extra-index-url https://pypi.nvidia.com
 	$(ISAACLAB_PYTHON) -m pip install -e ".[dev]"
 	@echo "✓ 安装完成（包含开发工具）！"
 
 install-vis: check-isaaclab
 	@echo "正在安装项目 + 可视化工具..."
+	$(ISAACLAB_PYTHON) -m pip install 'isaacsim[all,extscache]==5.1.0' --extra-index-url https://pypi.nvidia.com
 	$(ISAACLAB_PYTHON) -m pip install -e ".[vis]"
 	@echo "✓ 安装完成（包含可视化工具）！"
 
 install-all: check-isaaclab
 	@echo "正在安装所有依赖..."
+	$(ISAACLAB_PYTHON) -m pip install 'isaacsim[all,extscache]==5.1.0' --extra-index-url https://pypi.nvidia.com
 	$(ISAACLAB_PYTHON) -m pip install -e ".[all]"
 	@echo "✓ 安装完成（包含所有依赖）！"
 
