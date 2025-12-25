@@ -17,6 +17,9 @@
 ISAACLAB_PATH ?= ../dep/IsaacLab
 ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 
+# 云服务器环境配置：指定 NVIDIA Vulkan ICD 文件
+export VK_ICD_FILENAMES = /usr/share/vulkan/icd.d/nvidia_icd.json
+
 
 .PHONY: help install install-dev install-vis install-all train train-test clean clean-logs verify
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
