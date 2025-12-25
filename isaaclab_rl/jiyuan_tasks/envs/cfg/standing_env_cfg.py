@@ -286,6 +286,15 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.dt = 0.005  # 200Hz 物理模拟
         self.sim.render_interval = self.decimation  # 渲染频率
 
+        # 设置 PhysX GPU 缓冲区（支持多环境并行训练）
+        self.sim.physx.gpu_max_rigid_contact_count = 2**26  # 默认 2^23
+        self.sim.physx.gpu_max_rigid_patch_count = 2**19  # 默认 5*2^15
+        self.sim.physx.gpu_found_lost_pairs_capacity = 2**24  # 默认 2^21
+        self.sim.physx.gpu_total_aggregate_pairs_capacity = 2**24  # 默认 2^21
+        self.sim.physx.gpu_collision_stack_size = 2**28  # 默认 2^26
+        self.sim.physx.gpu_heap_capacity = 2**28  # 默认 2^26
+        self.sim.physx.gpu_temp_buffer_capacity = 2**26  # 默认 2^24
+
         # 设置查看器参数
         self.viewer.eye = (5.0, 5.0, 3.0)  # 更近的视角，适合观察站立
         self.viewer.lookat = (0.0, 0.0, 0.35)  # 聚焦在目标高度
