@@ -84,11 +84,11 @@ algorithm:
 
 # 训练配置
 training:
-    total_timesteps: 5000000  # 总训练步数
-    num_envs: 32  # 并行环境数量
-    save_freq: 50000
-    eval_freq: 25000
-    log_freq: 100
+    total_timesteps: 104857600  # 总训练步数 (100轮次 × 16384环境 × 64步)
+    num_envs: 16384  # 并行环境数量（RTX 4090 24GB 优化配置）
+    save_freq: 50  # 每50轮次保存
+    eval_freq: 25  # 每25轮次评估
+    log_freq: 10  # 每10轮次日志
 
     # 检查点配置
     checkpoint:

@@ -1,0 +1,44 @@
+# ==================== 行走训练配置文件 ====================
+# 与 train.py 兼容的扁平结构
+
+# ==================== 场景配置 ====================
+scene: flat_terrain # 训练场景 (flat_terrain / rough_terrain)
+env_type: walking # 环境类型: velocity=速度跟踪, walking=行走任务
+
+# ==================== 环境配置 ====================
+num_envs: 16384 # 并行环境数（RTX 4090 24GB 优化配置）
+num_steps: 64 # 每次rollout的步数
+max_episode_steps: 2000 # 每个episode最大步数
+
+# 批次大小 = 16384 × 64 = 1,048,576
+# 显存占用预估：约 20-22GB（RTX 4090 24GB 安全范围）
+
+# ==================== PPO超参数 ====================
+num_epochs: 4 # 每次update的epoch数
+num_minibatches: 8 # mini-batch数量
+gamma: 0.99 # 折扣因子
+gae_lambda: 0.95 # GAE lambda
+clip_epsilon: 0.2 # PPO裁剪系数
+value_coef: 0.5 # 价值损失系数
+entropy_coef: 0.01 # 熵正则化系数
+max_grad_norm: 0.5 # 梯度裁剪阈值
+
+# ==================== 训练配置 ====================
+total_timesteps: 104857600 # 总训练步数 (100轮次 × 16384环境 × 64步)
+log_interval: 10 # 日志记录间隔
+eval_interval: 25 # 评估间隔
+save_interval: 50 # 模型保存间隔
+
+# ==================== 优化器配置 ====================
+learning_rate: 3.0e-4 # 峰值学习率
+final_lr_fraction: 0.02 # 最终学习率相对峰值的比例
+
+# ==================== 网络配置 ====================
+hidden_dims: [256, 256, 128] # 隐藏层维度列表
+shared_backbone: true # 是否使用共享backbone
+
+# ==================== 视频录制配置 ====================
+enable_video: false # 默认关闭
+video_interval: 25 # 每 25 updates 录制一次
+video_frames: 180 # 每个视频 180 帧（3秒@60fps）
+video_camera: "track" # 使用跟踪相机

@@ -55,7 +55,10 @@ if True:
     from rich import box
     from rich.console import Console
     from rich.panel import Panel
-    from rl.envs import VelocityTrackingEnv, create_velocity_tracking_env
+    from rl.envs import (
+        VelocityTrackingEnv, create_velocity_tracking_env,
+        WalkingEnv, create_walking_env
+    )
     from rl.models.networks import ActorCriticNetwork, count_parameters
     from rl.models.optimizer import create_ppo_optimizer_cosine
     from rl.training.logger import Logger, MetricsLogger
@@ -152,6 +155,15 @@ def main():
         default=yaml_config.get("scene", "flat_terrain"),
         choices=["flat_terrain", "rough_terrain"],
         help="选择训练场景"
+    )
+
+    # 环境类型配置
+    parser.add_argument(
+        "--env-type",
+        type=str,
+        default=yaml_config.get("env_type", "velocity"),
+        choices=["velocity", "walking"],
+        help="环境类型: velocity=速度跟踪, walking=行走任务"
     )
 
     # 环境配置
@@ -297,8 +309,15 @@ def main():
     scene_path = f"assets/xmls/scenes/{args.scene}.xml"
     if not os.path.exists(os.path.join(os.path.dirname(__file__), scene_path)):
         pass
-    env = create_velocity_tracking_env(xml_path=scene_path)
-    console.print(f"✓ 环境创建完成")
+
+    # 根据环境类型创建环境
+    if args.env_type == "walking":
+        env = create_walking_env(xml_path=scene_path)
+        console.print(f"✓ WalkingEnv 创建完成")
+    else:
+        env = create_velocity_tracking_env(xml_path=scene_path)
+        console.print(f"✓ VelocityTrackingEnv 创建完成")
+
     console.print(f"  观测维度: {env.observation_size}")
     console.print(f"  动作维度: {env.action_size}")
 
