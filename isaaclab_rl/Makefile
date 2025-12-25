@@ -17,8 +17,9 @@
 ISAACLAB_PATH ?= ../dep/IsaacLab
 ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 
-# 云服务器环境配置（使用纯headless experience避免GPU渲染错误）
-export EXP_FILE = $(ISAACLAB_PATH)/apps/isaaclab.python.headless.kit
+# 云服务器环境配置：强制使用headless模式避免GPU渲染错误
+# 注意：--headless 必须作为脚本参数传递，不能通过环境变量设置
+HEADLESS_FLAGS = --headless
 
 .PHONY: help install install-dev install-vis install-all train train-test clean clean-logs verify
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
@@ -146,12 +147,12 @@ install-all: check-isaaclab
 # ==============================================================================
 
 train: check-isaaclab
-	@echo "开始训练（使用默认配置）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --config configs/train_config.yaml
+	@echo "开始训练（使用默认配置，headless模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py $(HEADLESS_FLAGS) --config configs/train_config.yaml
 
 train-test: check-isaaclab
-	@echo "快速测试训练（64 envs, 10 iters）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --config configs/train_config.yaml --num_envs 64 --max_iterations 10
+	@echo "快速测试训练（64 envs, 10 iters，headless模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py $(HEADLESS_FLAGS) --config configs/train_config.yaml --num_envs 64 --max_iterations 10
 
 # ==============================================================================
 # 验证目标
