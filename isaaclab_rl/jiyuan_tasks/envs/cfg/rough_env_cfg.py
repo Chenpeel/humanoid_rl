@@ -15,7 +15,8 @@ Jiyuan 机器人地形训练环境配置
 from __future__ import annotations
 
 import isaaclab.sim as sim_utils
-from isaaclab.assets import ArticulationCfg
+from isaaclab.actuators import ImplicitActuatorCfg
+from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import EventTermCfg as EventTerm
@@ -110,7 +111,7 @@ class JiyuanRoughSceneCfg(InteractiveSceneCfg):
             joint_vel={".*": 0.0},
         ),
         actuators={
-            "main_motors": sim_utils.ImplicitActuatorCfg(
+            "main_motors": ImplicitActuatorCfg(
                 joint_names_expr=[
                     ".*hip_pitch_engine.*",
                     ".*hip_yaw_engine.*",
@@ -122,7 +123,7 @@ class JiyuanRoughSceneCfg(InteractiveSceneCfg):
                 effort_limit=150.0,
                 velocity_limit=10.0,
             ),
-            "ankle_motors": sim_utils.ImplicitActuatorCfg(
+            "ankle_motors": ImplicitActuatorCfg(
                 joint_names_expr=[
                     ".*ankle_1_3.*",
                     ".*ankle_2_3.*",
@@ -133,7 +134,7 @@ class JiyuanRoughSceneCfg(InteractiveSceneCfg):
                 effort_limit=100.0,
                 velocity_limit=10.0,
             ),
-            "toe_motors": sim_utils.ImplicitActuatorCfg(
+            "toe_motors": ImplicitActuatorCfg(
                 joint_names_expr=[".*toe.*"],
                 stiffness=40.0,
                 damping=1.0,
@@ -163,7 +164,7 @@ class JiyuanRoughSceneCfg(InteractiveSceneCfg):
     )
 
     # 天空光照
-    sky_light = sim_utils.AssetBaseCfg(
+    sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
         spawn=sim_utils.DomeLightCfg(
             intensity=750.0,
