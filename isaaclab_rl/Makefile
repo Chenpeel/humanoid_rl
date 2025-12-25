@@ -17,9 +17,10 @@
 ISAACLAB_PATH ?= ../dep/IsaacLab
 ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 
-# 云服务器环境配置：强制使用headless模式避免GPU渲染错误
-# 注意：--headless 必须作为脚本参数传递，不能通过环境变量设置
-HEADLESS_FLAGS = --headless
+# 云服务器环境配置：强制使用headless模式并启用相机支持（用于MJCF导入）
+# 注意：--headless + --enable_cameras 会使用 isaaclab.python.headless.rendering.kit
+#       这个experience文件包含MJCF导入所需的插件
+HEADLESS_FLAGS = --headless --enable_cameras
 
 .PHONY: help install install-dev install-vis install-all train train-test clean clean-logs verify
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
