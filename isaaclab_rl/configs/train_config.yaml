@@ -13,7 +13,7 @@ task: "velocity"  # 可选: velocity, standing, walking, test
 environment:
   num_envs: 4096
   episode_length_s: 20.0
-  headless: false
+  headless: true  # 远程服务器必须启用无头模式
 
   # 环境特定配置（可覆盖默认值）
   velocity_tracking:
