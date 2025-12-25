@@ -232,7 +232,7 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
             joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unif(-1.5, 1.5))
 
             # 高度扫描（地形感知）
-            height_scan = ObsTerm(func=mdp.height_scan_ray_cast, params={"sensor_cfg": SceneEntityCfg("height_scanner")})
+            height_scan = ObsTerm(func=mdp.height_scan, params={"sensor_cfg": SceneEntityCfg("height_scanner")})
 
             # 上一步动作
             actions = ObsTerm(func=mdp.last_action)
