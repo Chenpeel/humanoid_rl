@@ -17,6 +17,9 @@
 ISAACLAB_PATH ?= ../dep/IsaacLab
 ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 
+# 云服务器环境配置（使用纯headless experience避免GPU渲染错误）
+export EXP_FILE = $(ISAACLAB_PATH)/apps/isaaclab.python.headless.kit
+
 .PHONY: help install install-dev install-vis install-all train train-test clean clean-logs verify
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
 .PHONY: check-env check-isaaclab
