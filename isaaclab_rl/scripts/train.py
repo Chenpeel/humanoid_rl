@@ -294,6 +294,9 @@ def load_config_with_cli(args) -> ConfigDict:
                 "headless": False,
             },
             "ppo": {
+                "algorithm": {
+                    "learning_rate": 0.001,
+                },
                 "runner": {
                     "seed": 42,
                     "device": "cuda:0",

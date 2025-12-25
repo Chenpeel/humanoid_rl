@@ -164,7 +164,7 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
         )
 
         orientation = RewTerm(
-            func=mdp.orientation_reward,
+            func=rewards.orientation_reward,
             weight=0.3,
             params={"tolerance": 0.3},
         )
