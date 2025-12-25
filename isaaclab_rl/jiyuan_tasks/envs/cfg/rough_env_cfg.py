@@ -15,8 +15,6 @@ Jiyuan 机器人地形训练环境配置
 from __future__ import annotations
 
 import isaaclab.sim as sim_utils
-from isaaclab.actuators import ImplicitActuatorCfg
-from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import EventTermCfg as EventTerm
@@ -25,21 +23,17 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
-from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
-from isaaclab.sim import MjcfFileCfg
+from isaaclab.sensors import RayCasterCfg, patterns
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unif
 
-from pathlib import Path
-
 # 导入 Isaac Lab 地形训练基础模板
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG
 
-# 导入 Jiyuan 机器人配置
-from .jiyuan_scene_cfg import JiyuanSceneCfg, get_joint_names, ISAAC_LAB_RL_ROOT
+# 导入 Jiyuan 场景配置
+from .jiyuan_scene_cfg import JiyuanSceneCfg
 
 # 导入Isaac Lab内置的MDP函数
 import isaaclab.envs.mdp as mdp
@@ -52,140 +46,19 @@ from jiyuan_tasks.managers import terminations
 
 
 ##
-# 场景配置（带粗糙地形）
-##
-
-
-@configclass
-class JiyuanRoughSceneCfg(InteractiveSceneCfg):
-    """Jiyuan 机器人粗糙地形场景配置
-
-    基于 JiyuanSceneCfg，将 ground 替换为 terrain 生成器。
-    """
-
-    # 粗糙地形生成器
-    terrain = TerrainImporterCfg(
-        prim_path="/World/ground",
-        terrain_type="generator",
-        terrain_generator=ROUGH_TERRAINS_CFG,
-        max_init_terrain_level=5,
-        collision_group=-1,
-        physics_material=sim_utils.RigidBodyMaterialCfg(
-            friction_combine_mode="multiply",
-            restitution_combine_mode="multiply",
-            static_friction=1.0,
-            dynamic_friction=1.0,
-        ),
-        visual_material=sim_utils.MdlFileCfg(
-            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
-            project_uvw=True,
-            texture_scale=(0.25, 0.25),
-        ),
-        debug_vis=False,
-    )
-
-    # 机器人（从 JiyuanSceneCfg 复制）
-    robot: ArticulationCfg = ArticulationCfg(
-        prim_path="{ENV_REGEX_NS}/Robot",
-        spawn=MjcfFileCfg(
-            asset_path=str(ISAAC_LAB_RL_ROOT / "assets/xmls/models/jiyuan/index.xml"),
-            make_instanceable=True,
-            fix_base=False,
-            import_sites=True,
-            self_collision=False,
-            articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                enabled_self_collisions=False,
-            ),
-        ),
-        init_state=ArticulationCfg.InitialStateCfg(
-            pos=(0.0, 0.0, 0.35),
-            rot=(1.0, 0.0, 0.0, 0.0),
-            joint_pos={
-                ".*hip_pitch_engine.*": 0.0,
-                ".*hip_yaw_engine.*": 0.0,
-                ".*hip_roll.*": 0.0,
-                ".*knee.*": 0.5,
-                ".*ankle_1_3.*": 0.0,
-                ".*ankle_2_3.*": 0.0,
-                ".*ankle_3_3.*": 0.0,
-                ".*toe.*": 0.0,
-            },
-            joint_vel={".*": 0.0},
-        ),
-        actuators={
-            "main_motors": ImplicitActuatorCfg(
-                joint_names_expr=[
-                    ".*hip_pitch_engine.*",
-                    ".*hip_yaw_engine.*",
-                    ".*hip_roll.*",
-                    ".*knee.*",
-                ],
-                stiffness=80.0,
-                damping=2.0,
-                effort_limit=150.0,
-                velocity_limit=10.0,
-            ),
-            "ankle_motors": ImplicitActuatorCfg(
-                joint_names_expr=[
-                    ".*ankle_1_3.*",
-                    ".*ankle_2_3.*",
-                    ".*ankle_3_3.*",
-                ],
-                stiffness=60.0,
-                damping=1.5,
-                effort_limit=100.0,
-                velocity_limit=10.0,
-            ),
-            "toe_motors": ImplicitActuatorCfg(
-                joint_names_expr=[".*toe.*"],
-                stiffness=40.0,
-                damping=1.0,
-                effort_limit=50.0,
-                velocity_limit=10.0,
-            ),
-        },
-    )
-
-    # 高度扫描传感器（地形感知）
-    height_scanner = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/base_link",
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-        attach_yaw_only=True,
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
-        debug_vis=False,
-        mesh_prim_paths=["/World/ground"],
-    )
-
-    # 脚部接触传感器
-    contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*_foot",
-        update_period=0.0,
-        history_length=3,
-        track_air_time=True,
-        debug_vis=False,
-    )
-
-    # 天空光照
-    sky_light = AssetBaseCfg(
-        prim_path="/World/skyLight",
-        spawn=sim_utils.DomeLightCfg(
-            intensity=750.0,
-            texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
-        ),
-    )
-
-
-##
 # 环境配置
 ##
 
 
 @configclass
 class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
-    """Jiyuan 机器人在粗糙地形上的速度跟踪环境"""
+    """Jiyuan 机器人在粗糙地形上的速度跟踪环境
 
-    # 场景配置
-    scene: JiyuanRoughSceneCfg = JiyuanRoughSceneCfg(num_envs=8192, env_spacing=2.5)
+    基于 JiyuanSceneCfg，将 ground 替换为 terrain 生成器。
+    """
+
+    # 场景配置（在 __post_init__ 中修改 ground -> terrain）
+    scene: JiyuanSceneCfg = JiyuanSceneCfg(num_envs=8192, env_spacing=2.5)
 
     # 基础设置
     decimation = 4
@@ -387,11 +260,46 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
     curriculum: CurriculumCfg = CurriculumCfg()
 
     def __post_init__(self):
-        """后处理配置"""
+        """后处理配置 - 将 ground 替换为 terrain"""
+        # 将 ground 替换为粗糙地形生成器
+        self.scene.ground = TerrainImporterCfg(
+            prim_path="/World/ground",
+            terrain_type="generator",
+            terrain_generator=ROUGH_TERRAINS_CFG,
+            max_init_terrain_level=5,
+            collision_group=-1,
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                friction_combine_mode="multiply",
+                restitution_combine_mode="multiply",
+                static_friction=1.0,
+                dynamic_friction=1.0,
+            ),
+            visual_material=sim_utils.MdlFileCfg(
+                mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+                project_uvw=True,
+                texture_scale=(0.25, 0.25),
+            ),
+            debug_vis=False,
+        )
+
+        # 添加高度扫描传感器（地形感知）
+        self.scene.height_scanner = RayCasterCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/base_link",
+            offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
+            attach_yaw_only=True,
+            pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
+            debug_vis=False,
+            mesh_prim_paths=["/World/ground"],
+        )
+
+        # 启用脚部空中时间跟踪
+        if hasattr(self.scene.contact_forces, "track_air_time"):
+            self.scene.contact_forces.track_air_time = True
+
         # 设置模拟参数
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation
-        self.sim.physics_material = self.scene.terrain.physics_material
+        self.sim.physics_material = self.scene.ground.physics_material
 
         # 设置 PhysX GPU 缓冲区
         self.sim.physx.gpu_max_rigid_contact_count = 2**26
@@ -410,11 +318,11 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
 
         # 启用/禁用地形课程学习
         if getattr(self.curriculum, "terrain_levels", None) is not None:
-            if self.scene.terrain.terrain_generator is not None:
-                self.scene.terrain.terrain_generator.curriculum = True
+            if self.scene.ground.terrain_generator is not None:
+                self.scene.ground.terrain_generator.curriculum = True
         else:
-            if self.scene.terrain.terrain_generator is not None:
-                self.scene.terrain.terrain_generator.curriculum = False
+            if self.scene.ground.terrain_generator is not None:
+                self.scene.ground.terrain_generator.curriculum = False
 
         # 设置查看器参数
         self.viewer.eye = (7.5, 7.5, 7.5)
@@ -426,9 +334,12 @@ class JiyuanFlatEnvCfg(JiyuanRoughEnvCfg):
     """Jiyuan 平坦地形环境（用于初期训练）"""
 
     def __post_init__(self):
+        # 调用父类初始化（设置粗糙地形）
+        super().__post_init__()
+
         # 将地形替换为平面
-        self.scene.terrain.terrain_type = "plane"
-        self.scene.terrain.terrain_generator = None
+        self.scene.ground.terrain_type = "plane"
+        self.scene.ground.terrain_generator = None
 
         # 移除高度扫描传感器
         self.scene.height_scanner = None
