@@ -953,11 +953,25 @@ class WalkingEnv(MJXBaseEnv):
             for i in range(model.nsensor)
         ]
 
-        # 接触传感器索引
+        # 接触传感器索引（支持多种命名格式）
         self.contact_sensor_indices = []
         for i, name in enumerate(sensor_names):
-            if "touch" in name.lower() and ("foot" in name.lower() or "toe" in name.lower()):
-                self.contact_sensor_indices.append(i)
+            name_lower = name.lower()
+            # 匹配触地传感器（touch、contact、force 等）
+            if any(keyword in name_lower for keyword in ["touch", "contact", "force"]):
+                # 确保是脚部传感器
+                if any(foot in name_lower for foot in ["foot", "toe", "feet"]):
+                    self.contact_sensor_indices.append(i)
+
+        # 调试：打印找到的传感器
+        if self.verbose:
+            print(f"找到的触地传感器: {[sensor_names[i] for i in self.contact_sensor_indices]}")
+
+        # 如果没找到，默认使用前4个传感器
+        if not self.contact_sensor_indices and model.nsensor >= 4:
+            self.contact_sensor_indices = [0, 1, 2, 3]
+            if self.verbose:
+                print(f"未找到触地传感器，使用前4个传感器: {[sensor_names[i] for i in self.contact_sensor_indices]}")
 
         # 脚部 body 索引（用于获取位置）
         self.right_foot_body_id = mujoco.mj_name2id(
@@ -1099,12 +1113,14 @@ class WalkingEnv(MJXBaseEnv):
         joint_pos = qpos[qpos_indices]
         joint_vel = qvel[qvel_indices]
 
-        # 接触传感器
-        if self.contact_sensor_indices:
+        # 接触传感器（使用 contact_sensor_indices 的长度）
+        num_contacts = len(self.contact_sensor_indices)
+        if num_contacts > 0:
             contact_indices = jp.array(self.contact_sensor_indices)
             contact_data = sensordata[contact_indices]
         else:
-            contact_data = jp.zeros(4)
+            # 如果没有找到传感器，使用与 observation_size 一致的数量（4个零值）
+            contact_data = jp.zeros(num_contacts if num_contacts > 0 else 4)
 
         # 命令（此处为默认值，将在reset时设置）
         command = jp.array([self.target_velocity, 0.0, 0.0])
