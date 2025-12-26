@@ -21,13 +21,9 @@
 ISAACLAB_PATH ?= ../dep/IsaacLab
 ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 
-# 自定义 .kit 文件路径（包含 MJCF 支持的 headless 模式）
-# 修复问题：官方 isaaclab.python.headless.kit 缺少 isaacsim.asset.importer.mjcf 扩展
-CUSTOM_KIT_FILE ?= $(CURDIR)/apps/isaaclab.python.headless.with_mjcf.kit
-
 # AutoDL 云服务器平台专用配置
 # 问题：AutoDL 环境下 NVIDIA Open Kernel Module 的 Vulkan 支持需要使用 EGL 库
-# 解决方案：指定 NVIDIA Vulkan ICD 文件，使用 libEGL_nvidia.so.0 (headless 模式)
+# 解决方案：指定 NVIDIA Vulkan ICD 文件，使用 libEGL_nvidia.so.0
 # 参考：AutoDL 官方文档 - https://www.autodl.com/docs/
 export VK_ICD_FILENAMES = /usr/share/vulkan/icd.d/nvidia_icd.json
 
@@ -163,33 +159,33 @@ install-all: check-isaaclab
 
 # 速度跟踪训练（平坦地形）
 train: check-isaaclab
-	@echo "开始速度跟踪训练（平坦地形，headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --task velocity --headless --experience $(CUSTOM_KIT_FILE)
+	@echo "开始速度跟踪训练（平坦地形，有头模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py --task velocity
 
 # 站立平衡训练
 train-standing: check-isaaclab
-	@echo "开始站立平衡训练（headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --task standing --headless --experience $(CUSTOM_KIT_FILE)
+	@echo "开始站立平衡训练（有头模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py --task standing
 
 # 行走步态训练
 train-walking: check-isaaclab
-	@echo "开始行走步态训练（headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --task walking --headless --experience $(CUSTOM_KIT_FILE)
+	@echo "开始行走步态训练（有头模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py --task walking
 
 # 粗糙地形训练（台阶、斜坡、障碍）
 train-rough: check-isaaclab
-	@echo "开始粗糙地形训练（台阶、斜坡、障碍，headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --task rough --headless --experience $(CUSTOM_KIT_FILE)
+	@echo "开始粗糙地形训练（台阶、斜坡、障碍，有头模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py --task rough
 
 # 平坦地形训练（简化版）
 train-flat: check-isaaclab
-	@echo "开始平坦地形训练（简化版，headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --task flat --headless --experience $(CUSTOM_KIT_FILE)
+	@echo "开始平坦地形训练（简化版，有头模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py --task flat
 
 # 快速测试训练
 train-test: check-isaaclab
-	@echo "快速测试训练（64 envs, 10 iters，headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --task velocity --num_envs 64 --max_iterations 10 --headless --experience $(CUSTOM_KIT_FILE)
+	@echo "快速测试训练（64 envs, 10 iters，有头模式）..."
+	$(ISAACLAB_PYTHON) scripts/train.py --task velocity --num_envs 64 --max_iterations 10
 
 # ==============================================================================
 # 验证目标
