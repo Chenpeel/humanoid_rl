@@ -57,8 +57,10 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
     基于 JiyuanSceneCfg，将 ground 替换为 terrain 生成器。
     """
 
-    # 场景配置（在 __post_init__ 中修改 ground -> terrain）
-    scene: JiyuanSceneCfg = JiyuanSceneCfg(num_envs=8192, env_spacing=2.5)
+    # 场景配置
+    # num_envs 在运行时由 train.py 从配置文件或命令行参数设置
+    # 默认值仅用于未指定时的后备
+    scene: JiyuanSceneCfg = JiyuanSceneCfg(num_envs=4096, env_spacing=2.5)
 
     # 基础设置
     decimation = 4
