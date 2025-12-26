@@ -250,10 +250,10 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         },
     )
 
-    # 脚部接触传感器（可选，用于奖励计算）
-    # Isaac Lab 会自动在引用的 USD 内部查找匹配的 prims
+    # 脚部接触传感器（用于奖励计算和步态检测）
+    # 已修复：为foot/toe bodies添加了CollisionAPI
     contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*/.*foot.*",
+        prim_path="{ENV_REGEX_NS}/Robot/base_link/.*foot.*",
         update_period=0.0,  # 每步更新
         history_length=3,
         debug_vis=False,
