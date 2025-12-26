@@ -157,6 +157,8 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
             # USD 文件路径（自动根据模型名称查找）
             # 从环境变量 ROBOT_MODEL 读取，默认为 "jiyuan"
             usd_path=get_usd_path(),
+            # 启用contact sensors以支持contact_forces传感器
+            activate_contact_sensors=True,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 rigid_body_enabled=True,
                 max_linear_velocity=1000.0,
