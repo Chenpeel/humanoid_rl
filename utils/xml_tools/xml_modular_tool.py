@@ -381,32 +381,110 @@ class MJCFModularMerger:
         tree = ET.parse(index)
         root = tree.getroot()
 
+        print(f"[DEBUG] Before processing: {len(list(root.findall('.//include')))} include tags")
+
         self._process_includes(root)
 
+        print(f"[DEBUG] After processing: {len(list(root.findall('.//include')))} include tags")
+
+        # 修正mesh路径：从 ../../../../meshes/ 改为 ../../meshes/
+        # 因为合并后的文件在 assets/xmls/models/jiyuan.xml
+        # 而不是 assets/xmls/models/jiyuan/geometry/meshes.xml
+        self._fix_mesh_paths(root)
+
+        print(f"[DEBUG] After fixing mesh paths")
+
+        # 最终检查：在写入前验证没有include标签
+        final_includes = list(root.findall('.//include'))
+        if final_includes:
+            print(f"[ERROR] Found {len(final_includes)} include tags after processing!")
+            for inc in final_includes:
+                print(f"  - file=\"{inc.get('file')}\"")
+                # 查找父元素
+                for p in root.iter():
+                    if inc in list(p):
+                        print(f"    parent: {p.tag} name=\"{p.get('name', '')}\"")
+                        break
+
         self._indent(root)
+
+        print(f"[DEBUG] After indent: {len(list(root.findall('.//include')))} include tags")
+
         ET.ElementTree(root).write(self.output_file, encoding='utf-8', xml_declaration=True)
+
+        # 验证写入的文件
+        verify_tree = ET.parse(self.output_file)
+        verify_root = verify_tree.getroot()
+        verify_includes = list(verify_root.findall('.//include'))
+        print(f"[DEBUG] Verification: {len(verify_includes)} include tags in written file")
+        if verify_includes:
+            print(f"[ERROR] Found include tags in written file:")
+            for inc in verify_includes:
+                print(f"  - file=\"{inc.get('file')}\"")
 
         print(f"✓ Complete: {self.output_file}")
 
     def _process_includes(self, elem, current_dir: Path = None):
-        """Recursively process includes in element and all descendants"""
+        """Recursively process includes in element and all descendants
+
+        使用深度优先遍历，确保所有层级的include标签都被展开。
+
+        关键设计：所有include路径都相对于module_dir（index.xml所在目录），
+        即使这些include标签嵌套在已经被include进来的文件中。
+        """
         if current_dir is None:
             current_dir = self.module_dir
 
-        # Process direct include children
-        for inc in list(elem.findall('include')):
+        # 使用while循环持续处理，直到没有include标签为止
+        # 这确保了多层嵌套的include都会被展开
+        max_iterations = 100  # 防止无限循环
+        iteration = 0
+
+        while iteration < max_iterations:
+            iteration += 1
+
+            # 查找所有include标签（包括嵌套的）
+            includes = list(elem.findall('.//include'))
+
+            if not includes:
+                # 没有找到include标签，处理完成
+                break
+
+            print(f"[DEBUG] Iteration {iteration}: Found {len(includes)} include tags")
+
+            # 处理第一个include标签
+            inc = includes[0]
             file_attr = inc.get('file')
+
             if not file_attr:
+                print(f"[DEBUG] Include tag has no 'file' attribute, removing it")
+                # 找到父元素并移除
+                for p in elem.iter():
+                    if inc in list(p):
+                        p.remove(inc)
+                        break
                 continue
 
-            # Try relative to current dir, then module root
-            inc_path = current_dir / file_attr
-            if not inc_path.exists():
-                inc_path = self.module_dir / file_attr
+            # 找到include的父元素
+            parent = None
+            for p in elem.iter():
+                if inc in list(p):
+                    parent = p
+                    break
+
+            if parent is None:
+                print(f"[DEBUG] Could not find parent for include tag")
+                break
+
+            # 所有include路径都相对于module_dir
+            # 因为分割工具生成的include路径是相对于index.xml的
+            inc_path = self.module_dir / file_attr
+
+            print(f"[DEBUG] Processing include: {file_attr} -> {inc_path}")
 
             if not inc_path.exists():
-                print(f"Warning: {inc_path} not found")
-                elem.remove(inc)
+                print(f"Warning: {inc_path} not found, removing include tag")
+                parent.remove(inc)
                 continue
 
             # Load and extract content
@@ -415,20 +493,55 @@ class MJCFModularMerger:
 
             children = list(inc_root) if inc_root.tag == 'mujoco' else [inc_root]
 
+            print(f"[DEBUG] Loaded {len(children)} children from {file_attr}")
+
             # Replace include
-            idx = list(elem).index(inc)
-            elem.remove(inc)
+            idx = list(parent).index(inc)
+            parent.remove(inc)
             for i, child in enumerate(children):
-                elem.insert(idx + i, child)
+                parent.insert(idx + i, child)
 
-            # Process loaded children recursively
-            for child in children:
-                self._process_includes(child, inc_path.parent)
+            print(f"[DEBUG] Replaced include tag with {len(children)} children")
 
-        # Process all other children (recursively handle nested includes)
-        for child in list(elem):
-            if child.tag != 'include':  # Skip already processed includes
-                self._process_includes(child, current_dir)
+        if iteration >= max_iterations:
+            print(f"Warning: Reached maximum iterations ({max_iterations}), may have circular includes")
+        else:
+            print(f"[DEBUG] Include processing completed after {iteration} iterations")
+
+        # 调试：检查是否还有include标签
+        remaining_includes = list(elem.findall('.//include'))
+        if remaining_includes:
+            print(f"[WARNING] After processing, still found {len(remaining_includes)} include tags:")
+            for inc in remaining_includes:
+                print(f"  - file=\"{inc.get('file')}\"")
+                # 查找父元素
+                for p in elem.iter():
+                    if inc in list(p):
+                        print(f"    parent: {p.tag} name=\"{p.get('name', '')}\"")
+                        break
+
+    def _fix_mesh_paths(self, root):
+        """修正合并后的mesh路径
+
+        分割工具生成的mesh路径是从 assets/xmls/models/jiyuan/geometry/meshes.xml
+        到 assets/meshes/ 的相对路径（../../../../meshes/）。
+
+        但合并后的文件在 assets/xmls/models/jiyuan.xml，
+        所以需要改为 ../../meshes/
+        """
+        meshes = root.findall('.//mesh')
+        fixed_count = 0
+
+        for mesh in meshes:
+            file_path = mesh.get('file')
+            if file_path and file_path.startswith('../../../../meshes/'):
+                # 替换为正确的相对路径
+                new_path = file_path.replace('../../../../meshes/', '../../meshes/')
+                mesh.set('file', new_path)
+                fixed_count += 1
+
+        if fixed_count > 0:
+            print(f"[DEBUG] Fixed {fixed_count} mesh paths")
 
     def _load(self, path: Path):
         """Load module with cache"""
