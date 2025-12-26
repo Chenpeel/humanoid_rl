@@ -389,10 +389,11 @@ class MJCFModularMerger:
         print(f"✓ Complete: {self.output_file}")
 
     def _process_includes(self, elem, current_dir: Path = None):
-        """Recursively process includes"""
+        """Recursively process includes in element and all descendants"""
         if current_dir is None:
             current_dir = self.module_dir
 
+        # Process direct include children
         for inc in list(elem.findall('include')):
             file_attr = inc.get('file')
             if not file_attr:
@@ -420,9 +421,14 @@ class MJCFModularMerger:
             for i, child in enumerate(children):
                 elem.insert(idx + i, child)
 
-            # Process children recursively
+            # Process loaded children recursively
             for child in children:
                 self._process_includes(child, inc_path.parent)
+
+        # Process all other children (recursively handle nested includes)
+        for child in list(elem):
+            if child.tag != 'include':  # Skip already processed includes
+                self._process_includes(child, current_dir)
 
     def _load(self, path: Path):
         """Load module with cache"""
