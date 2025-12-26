@@ -486,10 +486,17 @@ def main():
     # 加载配置
     config = load_config_with_cli(args)
 
+    # 设置机器人模型环境变量（用于场景配置）
+    if "robot" in config and "model_name" in config.robot:
+        os.environ["ROBOT_MODEL"] = config.robot.model_name
+        print(f"\n[INFO] 机器人模型: {config.robot.model_name}")
+
     # 打印配置信息
     print(f"\n最终配置:")
     print(f"  - 任务: {config.task}")
     print(f"  - 环境ID: {TASK_ENV_MAP[config.task]}")
+    if "robot" in config:
+        print(f"  - 机器人模型: {config.robot.get('model_name', 'jiyuan')}")
     print(f"  - 并行环境数: {config.environment.num_envs}")
     print(f"  - 设备: {config.ppo.runner.device}")
     print(f"  - 随机种子: {config.ppo.runner.seed}")

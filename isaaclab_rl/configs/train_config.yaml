@@ -9,6 +9,12 @@
 # 任务选择
 task: "velocity"  # 可选: velocity, standing, walking, test
 
+# 机器人模型配置
+robot:
+  model_name: "jiyuan"  # 机器人模型名称，用于查找 USD 文件
+  # USD 文件路径规则: assets/usd/{model_name}/{model_name}.usd
+  # MJCF 文件路径规则: assets/xmls/models/{model_name}.xml
+
 # 环境配置
 environment:
   num_envs: 4096

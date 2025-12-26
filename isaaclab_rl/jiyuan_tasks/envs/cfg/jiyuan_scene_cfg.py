@@ -15,15 +15,15 @@ Jiyuan 机器人场景配置
 make convert-usd
 
 # 或者直接使用转换脚本
-python utils/mjcf2usd/convert.py \
-    assets/xmls/models/jiyuan/jiyuan.xml \
-    assets/usd/jiyuan.usd \
-    --headless --make-instanceable --import-sites
+dep/IsaacLab/isaaclab.sh -p dep/IsaacLab/scripts/tools/convert_mjcf.py \
+    assets/xmls/models/jiyuan.xml \
+    assets/usd/jiyuan/jiyuan.usd \
+    --make-instanceable --import-sites
 ```
 
 转换后会生成：
-- `assets/usd/jiyuan.usd` - 主 USD 文件
-- `assets/usd/jiyuan/` - 可实例化的 meshes
+- `assets/usd/jiyuan/jiyuan.usd` - 主 USD 文件
+- `assets/usd/jiyuan/configuration/` - 可实例化的配置文件
 
 ## USD 结构说明
 
@@ -82,6 +82,35 @@ from isaaclab.utils import configclass
 # 向上4级：cfg -> envs -> jiyuan_tasks -> isaaclab_rl -> 项目根目录
 ISAAC_LAB_RL_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 
+# 默认模型名称（可通过环境变量 ROBOT_MODEL 覆盖）
+DEFAULT_ROBOT_MODEL = "jiyuan"
+
+
+def get_usd_path(model_name: str | None = None) -> str:
+    """根据模型名称获取 USD 文件路径
+
+    Args:
+        model_name: 机器人模型名称
+                   - 如果为 None，从环境变量 ROBOT_MODEL 读取
+                   - 如果环境变量也不存在，使用默认值 "jiyuan"
+
+    Returns:
+        USD 文件的绝对路径字符串
+
+    路径规则：
+        assets/usd/{model_name}/{model_name}.usd
+
+    示例：
+        >>> get_usd_path("jiyuan")
+        '/path/to/project/assets/usd/jiyuan/jiyuan.usd'
+        >>> os.environ["ROBOT_MODEL"] = "unitree_go2"
+        >>> get_usd_path()
+        '/path/to/project/assets/usd/unitree_go2/unitree_go2.usd'
+    """
+    if model_name is None:
+        model_name = os.environ.get("ROBOT_MODEL", DEFAULT_ROBOT_MODEL)
+    return str(ISAAC_LAB_RL_ROOT / f"assets/usd/{model_name}/{model_name}.usd")
+
 
 ##
 # 场景配置
@@ -125,8 +154,9 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=UsdFileCfg(
-            # USD 文件路径
-            usd_path=str(ISAAC_LAB_RL_ROOT / "assets/usd/jiyuan.usd"),
+            # USD 文件路径（自动根据模型名称查找）
+            # 从环境变量 ROBOT_MODEL 读取，默认为 "jiyuan"
+            usd_path=get_usd_path(),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 rigid_body_enabled=True,
                 max_linear_velocity=1000.0,
