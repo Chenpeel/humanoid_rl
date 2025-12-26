@@ -27,6 +27,9 @@ ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 # 参考：AutoDL 官方文档 - https://www.autodl.com/docs/
 export VK_ICD_FILENAMES = /usr/share/vulkan/icd.d/nvidia_icd.json
 
+# 日志级别配置（屏蔽 Isaac Sim 的警告输出）
+export CARB_LOG_LEVEL = ERROR
+
 
 .PHONY: help install install-dev install-vis install-all train train-standing train-walking train-rough train-flat train-test clean clean-logs verify
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
