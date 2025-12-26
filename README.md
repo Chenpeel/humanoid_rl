@@ -38,12 +38,10 @@
 
 **软件：**
 - Ubuntu 20.04 / 22.04
-- NVIDIA Driver 525+
+- NVIDIA Driver 550+
 - CUDA 11.8 / 12.1
 
-### 2. 安装步骤
-
-#### 方法 A: 使用 Makefile（推荐）
+### 2. 使用步骤
 
 ```bash
 # 1. 克隆仓库（包含子模块）
@@ -64,130 +62,7 @@ make install
 
 # 5. 验证安装
 make verify
-```
 
-#### 方法 B: 手动安装
-
-详见 [完整安装指南](docs/GETTING_STARTED.md)
-
-### 3. 快速测试训练
-
-```bash
-cd isaaclab_rl
-
-# 测试训练（64 个环境，10 次迭代）
-make train-test
-
-# 完整训练（4096 个环境）
+# 6. 运行训练
 make train
 ```
-
-## 项目结构
-
-```
-jiyuan-rl/
-├── assets/                      # 机器人资源文件
-│   └── xmls/models/jiyuan/     # MJCF 模型文件
-├── dep/                         # 依赖子模块
-│   ├── IsaacLab/               # Isaac Lab 框架
-│   └── rsl_rl/                 # RSL_RL 训练器
-├── isaaclab_rl/                # 主项目目录
-│   ├── jiyuan_tasks/           # 任务定义
-│   │   ├── envs/cfg/          # 环境配置
-│   │   ├── managers/          # 奖励/终止/命令管理器
-│   │   └── utils/             # 工具函数
-│   ├── agents/                 # 训练器配置
-│   ├── scripts/                # 训练和评估脚本
-│   ├── configs/                # 配置文件
-│   └── docs/                   # 文档
-├── scripts/                     # 通用脚本
-└── docs/                        # 项目文档
-```
-
-## 文档导航
-
-### 入门文档
-
-- [从零开始完整指南](docs/GETTING_STARTED.md) 
-- [使用指南](docs/USAGE.md) - 日常使用和开发
-- [高级功能](docs/ADVANCED.md) - Sim2Real和模仿学习
-
-### 文档索引
-
-- [文档中心](docs/README.md) - 所有文档和阅读路径
-
-## 使用示例
-
-### 训练站立任务
-
-```bash
-cd isaaclab_rl
-
-# 使用默认配置训练
-./dep/IsaacLab/isaaclab.sh -p scripts/train.py \
-    --task standing \
-    --num_envs 4096 \
-    --headless
-
-# 使用自定义配置
-./dep/IsaacLab/isaaclab.sh -p scripts/train.py \
-    --task standing \
-    --config configs/train_config.yaml
-```
-
-### 训练速度跟踪任务
-
-```bash
-./dep/IsaacLab/isaaclab.sh -p scripts/train.py \
-    --task velocity \
-    --num_envs 4096 \
-    --headless
-```
-
-### 评估训练好的策略
-
-```bash
-./dep/IsaacLab/isaaclab.sh -p scripts/play.py \
-    --task velocity \
-    --checkpoint logs/rsl_rl/velocity/model_10000.pt \
-    --num_envs 1
-```
-
-## 可用任务
-
-| 任务名称 | 环境ID | 描述 |
-|---------|--------|------|
-| 测试环境 | `Isaac-Jiyuan-Test-v0` | 最小化测试环境 |
-| 站立任务 | `Isaac-Jiyuan-Standing-v0` | 保持站立姿态 |
-| 速度跟踪 | `Isaac-Jiyuan-Velocity-v0` | 跟踪指令速度 |
-
-
-## 性能参考
-
-在 NVIDIA RTX 4070 (12GB VRAM) 上：
-
-- **训练速度**: ~50,000 steps/s (4096 envs)
-- **GPU 利用率**: 85-95%
-- **训练时间**: 约 4-6 小时达到 30M steps
-
-## 版本历史
-
-### v0.3.0 (当前版本)
-
-- ✅ 完整迁移到 Isaac Lab + PyTorch + RSL_RL
-- ✅ 支持 MJCF 模型加载
-- ✅ 实现站立和速度跟踪任务
-- ✅ 添加 Sim2Real 映射和模仿学习支持
-- ✅ 完善文档和安装脚本
-
-### v0.2.0 (已弃用)
-
-- 基于 JAX/MJX 的实现（已迁移到 `jax` 分支）
-
-## 联系方式
-
-- **作者**: Chenpeel
-- **邮箱**: chenpeel@foxmail.com
-- **问题反馈**: [GitHub Issues](https://github.com/yourusername/jiyuan-rl/issues)
-
----
