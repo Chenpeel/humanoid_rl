@@ -21,11 +21,18 @@
 ISAACLAB_PATH ?= ../dep/IsaacLab
 ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 
+# 自定义 .kit 文件路径（包含 MJCF 支持的 headless 模式）
+# 修复问题：官方 isaaclab.python.headless.kit 缺少 isaacsim.asset.importer.mjcf 扩展
+CUSTOM_KIT_FILE ?= $(CURDIR)/apps/isaaclab.python.headless.with_mjcf.kit
+
 # AutoDL 云服务器平台专用配置
 # 问题：AutoDL 环境下 NVIDIA Open Kernel Module 的 Vulkan 支持需要使用 EGL 库
 # 解决方案：指定 NVIDIA Vulkan ICD 文件，使用 libEGL_nvidia.so.0 (headless 模式)
 # 参考：AutoDL 官方文档 - https://www.autodl.com/docs/
 export VK_ICD_FILENAMES = /usr/share/vulkan/icd.d/nvidia_icd.json
+
+# 设置 Isaac Lab 使用自定义 .kit 文件
+export ISAACLAB_APP_EXPERIENCE_FILE = $(CUSTOM_KIT_FILE)
 
 
 .PHONY: help install install-dev install-vis install-all train train-standing train-walking train-rough train-flat train-test clean clean-logs verify
