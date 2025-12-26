@@ -33,7 +33,7 @@ export CARB_LOG_LEVEL = ERROR
 
 .PHONY: help install install-dev install-vis install-all train train-standing train-walking train-rough train-flat train-test clean clean-logs verify
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
-.PHONY: check-env check-isaaclab convert-usd convert-usd-xvfb
+.PHONY: check-env check-isaaclab convert-usd
 
 # 默认目标
 help:
@@ -54,8 +54,7 @@ help:
 	@echo "  make check-env               - 检查所有环境"
 	@echo ""
 	@echo "资产转换:"
-	@echo "  make convert-usd             - 将MJCF转换为USD格式（有头模式）"
-	@echo "  make convert-usd-xvfb        - 将MJCF转换为USD格式（使用虚拟显示，推荐用于服务器）"
+	@echo "  make convert-usd             - 将MJCF转换为USD格式"
 	@echo ""
 	@echo "安装命令:"
 	@echo "  make install                 - 安装项目（开发模式）"
@@ -136,28 +135,11 @@ check-env: check-isaaclab
 # 资产转换
 # ==============================================================================
 
-# 将 MJCF 转换为 USD（有头模式）
-# 注意：无头模式下 MJCF 导入有 bug，使用有头模式
-# 在远程服务器上推荐使用 convert-usd-xvfb
+# 将 MJCF 转换为 USD
 convert-usd: check-isaaclab
-	@echo "转换 MJCF 到 USD（有头模式）..."
-	@echo "注意：如果在无显示器的服务器上运行，请使用 make convert-usd-xvfb"
+	@echo "转换 MJCF 到 USD..."
 	@mkdir -p assets/usd
-	$(ISAACLAB_PYTHON) utils/mjcf2usd/convert.py \
-		assets/xmls/models/jiyuan/jiyuan.xml \
-		assets/usd/jiyuan.usd \
-		--make-instanceable \
-		--import-sites
-	@echo "✓ 转换完成: assets/usd/jiyuan.usd"
-
-# 将 MJCF 转换为 USD（使用虚拟显示 xvfb，推荐用于服务器）
-convert-usd-xvfb: check-isaaclab
-	@echo "转换 MJCF 到 USD（使用虚拟显示）..."
-	@echo "检查 xvfb-run 是否安装..."
-	@which xvfb-run > /dev/null || (echo "✗ xvfb-run 未安装，请运行: sudo apt-get install xvfb" && exit 1)
-	@mkdir -p assets/usd
-	xvfb-run -a -s "-screen 0 1024x768x24" \
-		$(ISAACLAB_PYTHON) utils/mjcf2usd/convert.py \
+	$(ISAACLAB_PYTHON) dep/IsaacLab/scripts/tools/convert_mjcf.py \
 		assets/xmls/models/jiyuan/jiyuan.xml \
 		assets/usd/jiyuan.usd \
 		--make-instanceable \

@@ -118,17 +118,26 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     )
 
     # 机器人
-    # 注意：MJCF 导入后会创建 worldBody 作为 articulation root
-    # 因此 prim_path 必须指向 Robot/jiyuan/worldBody
+    # USD 文件加载说明：
+    # - prim_path 是在场景中创建引用的位置
+    # - UsdFileCfg 会在这个位置创建对 jiyuan.usd 的引用
+    # - Isaac Lab 会自动查找 articulation root（带有 ArticulationRootAPI 的 prim）
     robot: ArticulationCfg = ArticulationCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/jiyuan/worldBody",
+        prim_path="{ENV_REGEX_NS}/Robot",
         spawn=UsdFileCfg(
-            # USD 文件路径（从 MJCF 转换而来，需要先运行 make convert-usd）
+            # USD 文件路径
             usd_path=str(ISAAC_LAB_RL_ROOT / "assets/usd/jiyuan.usd"),
-            # Isaac Sim 会自动识别 articulation root，无需额外配置
-            # 但我们仍然设置一些属性以保持一致性
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                rigid_body_enabled=True,
+                max_linear_velocity=1000.0,
+                max_angular_velocity=1000.0,
+                max_depenetration_velocity=100.0,
+                enable_gyroscopic_forces=True,
+            ),
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                 enabled_self_collisions=False,
+                solver_position_iteration_count=4,
+                solver_velocity_iteration_count=0,
             ),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
@@ -206,9 +215,9 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     )
 
     # 脚部接触传感器（可选，用于奖励计算）
-    # 注意：由于 articulation root 是 worldBody，传感器路径需要包含完整路径
+    # Isaac Lab 会自动在引用的 USD 内部查找匹配的 prims
     contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/jiyuan/worldBody/.*foot.*",
+        prim_path="{ENV_REGEX_NS}/Robot/.*/.*foot.*",
         update_period=0.0,  # 每步更新
         history_length=3,
         debug_vis=False,
