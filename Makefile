@@ -135,11 +135,11 @@ check-env: check-isaaclab
 # 将 MJCF 转换为 USD
 convert-usd: check-isaaclab
 	@echo "转换 MJCF 到 USD..."
-	@mkdir -p isaaclab_rl/assets/usd
+	@mkdir -p assets/usd
 	$(ISAACLAB_PYTHON) utils/mjcf2usd/convert.py --headless \
-		isaaclab_rl/assets/xmls/models/jiyuan/index.xml \
-		isaaclab_rl/assets/usd/jiyuan.usd
-	@echo "✓ 转换完成: isaaclab_rl/assets/usd/jiyuan.usd"
+		assets/xmls/models/jiyuan/index.xml \
+		assets/usd/jiyuan.usd
+	@echo "✓ 转换完成: assets/usd/jiyuan.usd"
 
 # ==============================================================================
 # 安装目标
@@ -231,7 +231,7 @@ clean:
 
 clean-logs:
 	@echo "清理日志文件..."
-	rm -rf isaaclab_rl/logs/
+	rm -rf logs/
 	@echo "✓ 日志清理完成！"
 
 # ==============================================================================

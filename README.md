@@ -49,15 +49,14 @@ git clone --recursive https://github.com/Chenpeel/rl.git
 cd rl
 
 # 2. 更新子模块
-cd isaaclab_rl
 make submodule-update
 
 # 3. 安装 Isaac Lab
-cd ../dep/IsaacLab
+cd dep/IsaacLab
 ./isaaclab.sh --install
 
 # 4. 安装项目
-cd ../../isaaclab_rl
+cd ..
 make install
 
 # 5. 验证安装
