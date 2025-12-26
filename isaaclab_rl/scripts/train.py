@@ -448,7 +448,8 @@ def create_runner(env: ManagerBasedRLEnv, ppo_cfg, config: ConfigDict, args):
     print(f"[INFO] PPO 配置已保存到: {ppo_config_path}")
 
     # 创建 RSL_RL 训练器
-    # 注意：OnPolicyRunner 期望接收字典格式的配置，而不是配置类对象
+    # 注意1：OnPolicyRunner 期望接收字典格式的配置，而不是配置类对象
+    # 注意2：需要传入 unwrapped 环境，因为 Gymnasium 包装器不支持 get_observations() 等方法
     # 将配置类对象转换为字典
     ppo_cfg_dict = {
         "algorithm": ppo_cfg.algorithm.__dict__,
@@ -460,7 +461,7 @@ def create_runner(env: ManagerBasedRLEnv, ppo_cfg, config: ConfigDict, args):
         "obs_groups": None,  # 将由 OnPolicyRunner 自动解析
     }
 
-    runner = OnPolicyRunner(env, ppo_cfg_dict, log_dir=log_dir, device=ppo_cfg.device)
+    runner = OnPolicyRunner(env.unwrapped, ppo_cfg_dict, log_dir=log_dir, device=ppo_cfg.device)
 
     # 如果恢复训练，加载检查点
     if args.resume:
