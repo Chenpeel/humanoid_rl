@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<mujoco>
+<!-- Left leg bodies - directly included into base_link -->
   <body name="left_hip_pitch_engine_link" pos="0.08433300 0.00002460 0.00000000"
     quat="1.00000000 0.00000000 -0.00000000 -0.00000000">
     <joint name="left_hip_pitch_engine_joint" type="hinge" ref="0.0" class="motor" range="-1.5 1.0"
@@ -297,4 +297,3 @@
       </body>
     </body>
   </body>
-</mujoco>
