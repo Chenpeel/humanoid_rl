@@ -31,9 +31,6 @@ CUSTOM_KIT_FILE ?= $(CURDIR)/apps/isaaclab.python.headless.with_mjcf.kit
 # 参考：AutoDL 官方文档 - https://www.autodl.com/docs/
 export VK_ICD_FILENAMES = /usr/share/vulkan/icd.d/nvidia_icd.json
 
-# 设置 Isaac Lab 使用自定义 .kit 文件
-export ISAACLAB_APP_EXPERIENCE_FILE = $(CUSTOM_KIT_FILE)
-
 
 .PHONY: help install install-dev install-vis install-all train train-standing train-walking train-rough train-flat train-test clean clean-logs verify
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
@@ -167,32 +164,32 @@ install-all: check-isaaclab
 # 速度跟踪训练（平坦地形）
 train: check-isaaclab
 	@echo "开始速度跟踪训练（平坦地形，headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --task velocity --headless
+	$(ISAACLAB_PYTHON) scripts/train.py --task velocity --headless --experience $(CUSTOM_KIT_FILE)
 
 # 站立平衡训练
 train-standing: check-isaaclab
 	@echo "开始站立平衡训练（headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --task standing --headless
+	$(ISAACLAB_PYTHON) scripts/train.py --task standing --headless --experience $(CUSTOM_KIT_FILE)
 
 # 行走步态训练
 train-walking: check-isaaclab
 	@echo "开始行走步态训练（headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --task walking --headless
+	$(ISAACLAB_PYTHON) scripts/train.py --task walking --headless --experience $(CUSTOM_KIT_FILE)
 
 # 粗糙地形训练（台阶、斜坡、障碍）
 train-rough: check-isaaclab
 	@echo "开始粗糙地形训练（台阶、斜坡、障碍，headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --task rough --headless
+	$(ISAACLAB_PYTHON) scripts/train.py --task rough --headless --experience $(CUSTOM_KIT_FILE)
 
 # 平坦地形训练（简化版）
 train-flat: check-isaaclab
 	@echo "开始平坦地形训练（简化版，headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --task flat --headless
+	$(ISAACLAB_PYTHON) scripts/train.py --task flat --headless --experience $(CUSTOM_KIT_FILE)
 
 # 快速测试训练
 train-test: check-isaaclab
 	@echo "快速测试训练（64 envs, 10 iters，headless模式）..."
-	$(ISAACLAB_PYTHON) scripts/train.py --task velocity --num_envs 64 --max_iterations 10 --headless
+	$(ISAACLAB_PYTHON) scripts/train.py --task velocity --num_envs 64 --max_iterations 10 --headless --experience $(CUSTOM_KIT_FILE)
 
 # ==============================================================================
 # 验证目标
