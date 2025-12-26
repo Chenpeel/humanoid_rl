@@ -1,0 +1,224 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="assets">
+  <compiler angle="radian" />
+  <visual>
+    <quality shadowsize="4096" />
+  </visual>
+  <default>
+    <default class="robot">
+      <default class="motor">
+        <joint damping="0.5" armature="0.01" frictionloss="0.1" solreflimit="0.005 1" solimplimit="0.95 0.99 0.001" />
+        <motor ctrllimited="true" ctrlrange="-1 1" />
+      </default>
+      <default class="ankle_motor">
+        <joint />
+        <motor />
+      </default>
+      <default class="toe_motor">
+        <joint damping="0.2" armature="0.005" frictionloss="0.05" solreflimit="0.005 1" solimplimit="0.95 0.99 0.001" />
+        <motor ctrllimited="true" ctrlrange="-1 1" />
+      </default>
+      <default class="visual">
+        <geom contype="0" conaffinity="0" group="2" />
+      </default>
+      <default class="collision">
+        <geom condim="3" contype="8" conaffinity="1" priority="1" group="1" solref="0.005 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
+      </default>
+      <default class="right_leg_collision">
+        <geom condim="3" contype="2" conaffinity="5" priority="1" group="1" solref="0.005 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
+      </default>
+      <default class="left_leg_collision">
+        <geom condim="3" contype="4" conaffinity="3" priority="1" group="1" solref="0.005 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
+      </default>
+      <default class="right_leg_minor_collision">
+        <geom condim="3" contype="16" conaffinity="1" priority="1" group="1" solref="0.005 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
+      </default>
+      <default class="left_leg_minor_collision">
+        <geom condim="3" contype="32" conaffinity="1" priority="1" group="1" solref="0.005 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
+      </default>
+      <default class="thigh_equality">
+        <equality solref="0.001 1" solimp="0.99 0.999 0.0001" />
+      </default>
+    </default>
+  </default>
+  <asset>
+    <material name="ground" rgba="1 1 1 1" />
+    <material name="default_material" rgba="0.7 0.7 0.7 1" />
+    <material name="collision_material" rgba="1.0 0.28 0.1 0.9" />
+  </asset>
+  <asset>
+    <mesh name="base_link.STL" file="../../../../meshes/base_link.STL" />
+    <mesh name="right_hip_pitch_engine_link.STL" file="../../../../meshes/right_hip_pitch_engine_link.STL" />
+    <mesh name="right_hip_yaw_engine_link.STL" file="../../../../meshes/right_hip_yaw_engine_link.STL" />
+    <mesh name="right_hip_roll_link.STL" file="../../../../meshes/right_hip_roll_link.STL" />
+    <mesh name="right_hip_cube_link.STL" file="../../../../meshes/right_hip_cube_link.STL" />
+    <mesh name="right_thigh_link.STL" file="../../../../meshes/right_thigh_link.STL" />
+    <mesh name="right_shin_link.STL" file="../../../../meshes/right_shin_link.STL" />
+    <mesh name="right_ankle_1_3_link.STL" file="../../../../meshes/right_ankle_1_3_link.STL" />
+    <mesh name="right_ankle_1_3_cube_link.STL" file="../../../../meshes/right_ankle_1_3_cube_link.STL" />
+    <mesh name="right_ankle_1_3_page_link.STL" file="../../../../meshes/right_ankle_1_3_page_link.STL" />
+    <mesh name="right_ankle_2_3_link.STL" file="../../../../meshes/right_ankle_2_3_link.STL" />
+    <mesh name="right_ankle_2_3_cube_link.STL" file="../../../../meshes/right_ankle_2_3_cube_link.STL" />
+    <mesh name="right_ankle_2_3_page_link.STL" file="../../../../meshes/right_ankle_2_3_page_link.STL" />
+    <mesh name="right_ankle_3_3_link.STL" file="../../../../meshes/right_ankle_3_3_link.STL" />
+    <mesh name="right_ankle_3_3_cube_link.STL" file="../../../../meshes/right_ankle_3_3_cube_link.STL" />
+    <mesh name="right_ankle_3_3_page_link.STL" file="../../../../meshes/right_ankle_3_3_page_link.STL" />
+    <mesh name="right_ankle_cube_link.STL" file="../../../../meshes/right_ankle_cube_link.STL" />
+    <mesh name="right_ankle_axle_link.STL" file="../../../../meshes/right_ankle_axle_link.STL" />
+    <mesh name="right_foot_link.STL" file="../../../../meshes/right_foot_link.STL" />
+    <mesh name="right_toe_link.STL" file="../../../../meshes/right_toe_link.STL" />
+    <mesh name="left_hip_pitch_engine_link.STL" file="../../../../meshes/left_hip_pitch_engine_link.STL" />
+    <mesh name="left_hip_yaw_engine_link.STL" file="../../../../meshes/left_hip_yaw_engine_link.STL" />
+    <mesh name="left_hip_roll_link.STL" file="../../../../meshes/left_hip_roll_link.STL" />
+    <mesh name="left_hip_cube_link.STL" file="../../../../meshes/left_hip_cube_link.STL" />
+    <mesh name="left_thigh_link.STL" file="../../../../meshes/left_thigh_link.STL" />
+    <mesh name="left_shin_link.STL" file="../../../../meshes/left_shin_link.STL" />
+    <mesh name="left_ankle_1_3_link.STL" file="../../../../meshes/left_ankle_1_3_link.STL" />
+    <mesh name="left_ankle_1_3_cube_link.STL" file="../../../../meshes/left_ankle_1_3_cube_link.STL" />
+    <mesh name="left_ankle_1_3_page_link.STL" file="../../../../meshes/left_ankle_1_3_page_link.STL" />
+    <mesh name="left_ankle_2_3_link.STL" file="../../../../meshes/left_ankle_2_3_link.STL" />
+    <mesh name="left_ankle_2_3_cube_link.STL" file="../../../../meshes/left_ankle_2_3_cube_link.STL" />
+    <mesh name="left_ankle_2_3_page_link.STL" file="../../../../meshes/left_ankle_2_3_page_link.STL" />
+    <mesh name="left_ankle_3_3_link.STL" file="../../../../meshes/left_ankle_3_3_link.STL" />
+    <mesh name="left_ankle_3_3_cube_link.STL" file="../../../../meshes/left_ankle_3_3_cube_link.STL" />
+    <mesh name="left_ankle_3_3_page_link.STL" file="../../../../meshes/left_ankle_3_3_page_link.STL" />
+    <mesh name="left_ankle_cube_link.STL" file="../../../../meshes/left_ankle_cube_link.STL" />
+    <mesh name="left_ankle_axle_link.STL" file="../../../../meshes/left_ankle_axle_link.STL" />
+    <mesh name="left_foot_link.STL" file="../../../../meshes/left_foot_link.STL" />
+    <mesh name="left_toe_link.STL" file="../../../../meshes/left_toe_link.STL" />
+  </asset>
+  <worldbody>
+    <body name="base_link" pos="0.00000000 0.00000000 0.99150000" quat="0.70710678 0.70710678 0.00000000 0.00000000" childclass="robot">
+      <freejoint name="floating_base" />
+      <inertial pos="0.0 0.0 0.0" mass="3.0" diaginertia="0.016 0.021 0.024" />
+      <include file="geometry/base.xml" />
+      <include file="geometry/right_leg.xml" />
+      <include file="geometry/left_leg.xml" />
+    </body>
+  </worldbody>
+  <equality>
+    <joint joint1="right_hip_pitch_engine_joint" joint2="right_hip_cube_joint" polycoef="0 1 0 0 0" class="thigh_equality" />
+    <joint joint1="right_hip_yaw_engine_joint" joint2="right_thigh_joint" polycoef="0 1 0 0 0" class="thigh_equality" />
+    <joint joint1="left_hip_pitch_engine_joint" joint2="left_hip_cube_joint" polycoef="0 1 0 0 0" class="thigh_equality" />
+    <joint joint1="left_hip_yaw_engine_joint" joint2="left_thigh_joint" polycoef="0 1 0 0 0" class="thigh_equality" />
+  </equality>
+  <tendon>
+    <spatial name="ankle_tendon_1" limited="true" range="0.034 0.038" stiffness="5000" damping="500" solreflimit="0.02 1" solimplimit="0.9 0.95 0.001">
+      <site site="ankle_1_3_attach" />
+      <site site="foot_attach_1" />
+    </spatial>
+    <spatial name="ankle_tendon_2" limited="true" range="0.034 0.038" stiffness="5000" damping="500" solreflimit="0.02 1" solimplimit="0.9 0.95 0.001">
+      <site site="ankle_2_3_attach" />
+      <site site="foot_attach_2" />
+    </spatial>
+    <spatial name="ankle_tendon_3" limited="true" range="0.034 0.038" stiffness="5000" damping="500" solreflimit="0.02 1" solimplimit="0.9 0.95 0.001">
+      <site site="ankle_3_3_attach" />
+      <site site="foot_attach_3" />
+    </spatial>
+    <spatial name="left_ankle_tendon_1" limited="true" range="0.034 0.038" stiffness="5000" damping="500" solreflimit="0.02 1" solimplimit="0.9 0.95 0.001">
+      <site site="left_ankle_1_3_attach" />
+      <site site="left_foot_attach_1" />
+    </spatial>
+    <spatial name="left_ankle_tendon_2" limited="true" range="0.034 0.038" stiffness="5000" damping="500" solreflimit="0.02 1" solimplimit="0.9 0.95 0.001">
+      <site site="left_ankle_2_3_attach" />
+      <site site="left_foot_attach_2" />
+    </spatial>
+    <spatial name="left_ankle_tendon_3" limited="true" range="0.034 0.038" stiffness="5000" damping="500" solreflimit="0.02 1" solimplimit="0.9 0.95 0.001">
+      <site site="left_ankle_3_3_attach" />
+      <site site="left_foot_attach_3" />
+    </spatial>
+  </tendon>
+  <actuator>
+    <motor name="right_hip_pitch_engine_joint_ctrl" joint="right_hip_pitch_engine_joint" class="motor" />
+    <motor name="right_hip_yaw_engine_joint_ctrl" joint="right_hip_yaw_engine_joint" class="motor" />
+    <motor name="right_hip_roll_joint_ctrl" joint="right_hip_roll_joint" class="motor" />
+    <motor name="right_knee_joint_ctrl" joint="right_knee_joint" class="motor" />
+    <motor name="right_ankle_1_3_joint_ctrl" joint="right_ankle_1_3_joint" class="motor" />
+    <motor name="right_ankle_2_3_joint_ctrl" joint="right_ankle_2_3_joint" class="motor" />
+    <motor name="right_ankle_3_3_joint_ctrl" joint="right_ankle_3_3_joint" class="motor" />
+    <motor name="right_toe_joint_ctrl" joint="right_toe_joint" class="motor" />
+    <motor name="left_hip_pitch_engine_joint_ctrl" joint="left_hip_pitch_engine_joint" class="motor" />
+    <motor name="left_hip_yaw_engine_joint_ctrl" joint="left_hip_yaw_engine_joint" class="motor" />
+    <motor name="left_hip_roll_joint_ctrl" joint="left_hip_roll_joint" class="motor" />
+    <motor name="left_knee_joint_ctrl" joint="left_knee_joint" class="motor" />
+    <motor name="left_ankle_1_3_joint_ctrl" joint="left_ankle_1_3_joint" class="motor" />
+    <motor name="left_ankle_2_3_joint_ctrl" joint="left_ankle_2_3_joint" class="motor" />
+    <motor name="left_ankle_3_3_joint_ctrl" joint="left_ankle_3_3_joint" class="motor" />
+    <motor name="left_toe_joint_ctrl" joint="left_toe_joint" class="motor" />
+  </actuator>
+  <sensor>
+    <framepos name="base_link_site_pos" objtype="site" objname="base_link_site" />
+    <framequat name="base_link_site_quat" objtype="site" objname="base_link_site" />
+    <framelinvel name="base_link_site_linvel" objtype="site" objname="base_link_site" />
+    <frameangvel name="base_link_site_angvel" objtype="site" objname="base_link_site" />
+    <velocimeter name="base_link_site_vel" site="base_link_site" />
+    <touch name="right_foot_contact" site="right_foot_touch_site" />
+    <touch name="right_toe_contact" site="right_toe_touch_site" />
+    <touch name="left_foot_contact" site="left_foot_touch_site" />
+    <touch name="left_toe_contact" site="left_toe_touch_site" />
+  </sensor>
+  <contact>
+    <exclude body1="base_link" body2="right_hip_pitch_engine_link" />
+    <exclude body1="base_link" body2="right_hip_yaw_engine_link" />
+    <exclude body1="base_link" body2="right_hip_roll_link" />
+    <exclude body1="right_hip_roll_link" body2="right_hip_cube_link" />
+    <exclude body1="right_hip_cube_link" body2="right_thigh_link" />
+    <exclude body1="right_thigh_link" body2="right_shin_link" />
+    <exclude body1="right_shin_link" body2="right_ankle_1_3_link" />
+    <exclude body1="right_ankle_1_3_link" body2="right_ankle_1_3_cube_link" />
+    <exclude body1="right_ankle_1_3_cube_link" body2="right_ankle_1_3_page_link" />
+    <exclude body1="right_shin_link" body2="right_ankle_2_3_link" />
+    <exclude body1="right_ankle_2_3_link" body2="right_ankle_2_3_cube_link" />
+    <exclude body1="right_ankle_2_3_cube_link" body2="right_ankle_2_3_page_link" />
+    <exclude body1="right_shin_link" body2="right_ankle_3_3_link" />
+    <exclude body1="right_ankle_3_3_link" body2="right_ankle_3_3_cube_link" />
+    <exclude body1="right_ankle_3_3_cube_link" body2="right_ankle_3_3_page_link" />
+    <exclude body1="right_ankle_1_3_link" body2="right_ankle_2_3_link" />
+    <exclude body1="right_ankle_1_3_link" body2="right_ankle_3_3_link" />
+    <exclude body1="right_ankle_2_3_link" body2="right_ankle_3_3_link" />
+    <exclude body1="right_ankle_1_3_page_link" body2="right_ankle_2_3_page_link" />
+    <exclude body1="right_ankle_1_3_page_link" body2="right_ankle_3_3_page_link" />
+    <exclude body1="right_ankle_2_3_page_link" body2="right_ankle_3_3_page_link" />
+    <exclude body1="right_ankle_1_3_page_link" body2="right_foot_link" />
+    <exclude body1="right_ankle_2_3_page_link" body2="right_foot_link" />
+    <exclude body1="right_ankle_3_3_page_link" body2="right_foot_link" />
+    <exclude body1="right_shin_link" body2="right_ankle_cube_link" />
+    <exclude body1="right_ankle_cube_link" body2="right_ankle_axle_link" />
+    <exclude body1="right_ankle_axle_link" body2="right_foot_link" />
+    <exclude body1="right_foot_link" body2="right_toe_link" />
+    <exclude body1="base_link" body2="left_hip_pitch_engine_link" />
+    <exclude body1="base_link" body2="left_hip_yaw_engine_link" />
+    <exclude body1="base_link" body2="left_hip_roll_link" />
+    <exclude body1="left_hip_roll_link" body2="left_hip_cube_link" />
+    <exclude body1="left_hip_cube_link" body2="left_thigh_link" />
+    <exclude body1="left_thigh_link" body2="left_shin_link" />
+    <exclude body1="left_shin_link" body2="left_ankle_1_3_link" />
+    <exclude body1="left_ankle_1_3_link" body2="left_ankle_1_3_cube_link" />
+    <exclude body1="left_ankle_1_3_cube_link" body2="left_ankle_1_3_page_link" />
+    <exclude body1="left_shin_link" body2="left_ankle_2_3_link" />
+    <exclude body1="left_ankle_2_3_link" body2="left_ankle_2_3_cube_link" />
+    <exclude body1="left_ankle_2_3_cube_link" body2="left_ankle_2_3_page_link" />
+    <exclude body1="left_shin_link" body2="left_ankle_3_3_link" />
+    <exclude body1="left_ankle_3_3_link" body2="left_ankle_3_3_cube_link" />
+    <exclude body1="left_ankle_3_3_cube_link" body2="left_ankle_3_3_page_link" />
+    <exclude body1="left_ankle_1_3_link" body2="left_ankle_2_3_link" />
+    <exclude body1="left_ankle_1_3_link" body2="left_ankle_3_3_link" />
+    <exclude body1="left_ankle_2_3_link" body2="left_ankle_3_3_link" />
+    <exclude body1="left_ankle_1_3_page_link" body2="left_ankle_2_3_page_link" />
+    <exclude body1="left_ankle_1_3_page_link" body2="left_ankle_3_3_page_link" />
+    <exclude body1="left_ankle_2_3_page_link" body2="left_ankle_3_3_page_link" />
+    <exclude body1="left_ankle_1_3_page_link" body2="left_foot_link" />
+    <exclude body1="left_ankle_2_3_page_link" body2="left_foot_link" />
+    <exclude body1="left_ankle_3_3_page_link" body2="left_foot_link" />
+    <exclude body1="left_shin_link" body2="left_ankle_cube_link" />
+    <exclude body1="left_ankle_cube_link" body2="left_ankle_axle_link" />
+    <exclude body1="left_ankle_axle_link" body2="left_foot_link" />
+    <exclude body1="left_foot_link" body2="left_toe_link" />
+    <exclude body1="right_hip_pitch_engine_link" body2="left_hip_pitch_engine_link" />
+    <exclude body1="right_hip_yaw_engine_link" body2="left_hip_yaw_engine_link" />
+    <exclude body1="right_hip_roll_link" body2="left_hip_roll_link" />
+    <exclude body1="right_hip_cube_link" body2="left_hip_cube_link" />
+    <exclude body1="right_thigh_link" body2="left_thigh_link" />
+    <exclude body1="right_shin_link" body2="left_shin_link" />
+  </contact>
+</mujoco>
