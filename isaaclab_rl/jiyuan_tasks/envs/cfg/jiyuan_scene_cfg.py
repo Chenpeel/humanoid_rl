@@ -84,8 +84,8 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=MjcfFileCfg(
-            # MJCF 文件路径（使用项目根目录的绝对路径）
-            asset_path=str(ISAAC_LAB_RL_ROOT / "assets/xmls/models/jiyuan/index.xml"),
+            # MJCF 文件路径（使用合并后的单一文件，避免 include 导致的嵌套问题）
+            asset_path=str(ISAAC_LAB_RL_ROOT / "assets/xmls/models/jiyuan/jiyuan.xml"),
             make_instanceable=True,
             # fix_base 必须显式设置（MjcfConverterCfg 中的必需字段）
             # False = 允许机器人移动（双足机器人需要自由移动）
