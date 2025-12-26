@@ -55,6 +55,9 @@ help:
 	@echo ""
 	@echo "资产转换:"
 	@echo "  make convert-usd             - 将MJCF转换为USD格式"
+	@echo "    可选参数:"
+	@echo "      MJCF=path/to/model.xml    指定输入MJCF文件"
+	@echo "      USD_OUT=path/to/output.usd 指定输出USD文件"
 	@echo ""
 	@echo "安装命令:"
 	@echo "  make install                 - 安装项目（开发模式）"
@@ -136,15 +139,25 @@ check-env: check-isaaclab
 # ==============================================================================
 
 # 将 MJCF 转换为 USD
+# 用法：
+#   make convert-usd                                    # 使用默认路径
+#   make convert-usd MJCF=path/to/model.xml            # 指定输入文件
+#   make convert-usd USD_OUT=path/to/output.usd        # 指定输出文件
+#   make convert-usd MJCF=input.xml USD_OUT=output.usd # 同时指定
+MJCF ?= assets/xmls/models/jiyuan.xml
+USD_OUT ?= assets/usd/jiyuan/jiyuan.usd
+
 convert-usd: check-isaaclab
 	@echo "转换 MJCF 到 USD..."
-	@mkdir -p assets/usd
+	@echo "  输入: $(MJCF)"
+	@echo "  输出: $(USD_OUT)"
+	@mkdir -p $(dir $(USD_OUT))
 	$(ISAACLAB_PYTHON) dep/IsaacLab/scripts/tools/convert_mjcf.py \
-		assets/xmls/models/jiyuan/jiyuan.xml \
-		assets/usd/jiyuan.usd \
+		$(MJCF) \
+		$(USD_OUT) \
 		--make-instanceable \
 		--import-sites
-	@echo "✓ 转换完成: assets/usd/jiyuan.usd"
+	@echo "✓ 转换完成: $(USD_OUT)"
 
 # ==============================================================================
 # 安装目标
