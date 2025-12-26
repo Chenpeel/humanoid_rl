@@ -2,9 +2,42 @@
 Jiyuan 机器人场景配置
 
 本模块定义 Jiyuan 双足机器人的场景和机器人配置，包括：
-- 从 MJCF 加载机器人模型
+- 从 USD 加载机器人模型（从 MJCF 转换而来）
 - 定义初始状态（位置、姿态、关节角度）
 - 配置执行器参数（刚度、阻尼等）
+
+## 资产转换
+
+**重要**：本配置使用 USD 格式的机器人模型，需要先从 MJCF 转换：
+
+```bash
+# 在服务器上运行转换（只需执行一次）
+make convert-usd
+
+# 或者直接使用转换脚本
+python utils/mjcf2usd/convert.py \
+    assets/xmls/models/jiyuan/jiyuan.xml \
+    assets/usd/jiyuan.usd \
+    --headless --make-instanceable --import-sites
+```
+
+转换后会生成：
+- `assets/usd/jiyuan.usd` - 主 USD 文件
+- `assets/usd/jiyuan/` - 可实例化的 meshes
+
+## USD 结构说明
+
+MJCF 导入后的 USD 结构：
+```
+/jiyuan (根 Prim)
+  /worldBody (articulation root，带有 ArticulationRootAPI)
+    /base_link (第一个 body，但不是 articulation root)
+      /right_hip_pitch_engine_link
+      /left_hip_pitch_engine_link
+      ...
+```
+
+**关键点**：`prim_path` 必须指向 `worldBody`，而不是 `Robot`，因为 MJCF 导入器会创建 `worldBody` 作为 articulation root。
 
 ## 如何适配其他机器人
 
@@ -13,7 +46,7 @@ Jiyuan 机器人场景配置
 cp jiyuan_scene_cfg.py unitree_go2_scene_cfg.py
 ```
 然后修改：
-1. `MjcfFileCfg.asset_path` → 指向新机器人的MJCF文件
+1. `UsdFileCfg.usd_path` → 指向新机器人的 USD 文件
 2. `init_state` → 调整初始位置、姿态、关节角度
 3. `actuators` → 调整执行器参数（刚度、阻尼、力矩限制）
 4. `joint_names_expr` → 匹配新机器人的关节命名
@@ -23,7 +56,7 @@ cp jiyuan_scene_cfg.py unitree_go2_scene_cfg.py
 
 参考:
 - Isaac Lab 官方文档: https://isaac-sim.github.io/IsaacLab/main/
-- MJCF 支持: omni.isaac.lab.sim.spawners.from_files.MjcfFileCfg
+- USD 支持: omni.isaac.lab.sim.spawners.from_files.UsdFileCfg
 - 多机器人架构: ../.migrate/08-multi-robot-architecture.md
 """
 
@@ -41,7 +74,7 @@ from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
-from isaaclab.sim import MjcfFileCfg
+from isaaclab.sim import UsdFileCfg  # 改用 UsdFileCfg 替代 MjcfFileCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 
@@ -60,9 +93,13 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     """Jiyuan 双足机器人场景配置
 
     包含:
-    - 机器人资产配置（从 MJCF 加载）
+    - 机器人资产配置（从 USD 加载）
     - 地面/地形配置
     - 传感器配置（可选）
+
+    注意:
+    - USD 文件需要先从 MJCF 转换：`make convert-usd`
+    - prim_path 指向 `worldBody`（MJCF 导入后的 articulation root）
     """
 
     # 地面平面
@@ -81,19 +118,15 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     )
 
     # 机器人
+    # 注意：MJCF 导入后会创建 worldBody 作为 articulation root
+    # 因此 prim_path 必须指向 Robot/jiyuan/worldBody
     robot: ArticulationCfg = ArticulationCfg(
-        prim_path="{ENV_REGEX_NS}/Robot",
-        spawn=MjcfFileCfg(
-            # MJCF 文件路径（使用合并后的单一文件，避免 include 导致的嵌套问题）
-            asset_path=str(ISAAC_LAB_RL_ROOT / "assets/xmls/models/jiyuan/jiyuan.xml"),
-            make_instanceable=True,
-            # fix_base 必须显式设置（MjcfConverterCfg 中的必需字段）
-            # False = 允许机器人移动（双足机器人需要自由移动）
-            fix_base=False,
-            # 其他 MJCF 转换选项
-            import_sites=True,
-            self_collision=False,
-            # 设置articulation属性
+        prim_path="{ENV_REGEX_NS}/Robot/jiyuan/worldBody",
+        spawn=UsdFileCfg(
+            # USD 文件路径（从 MJCF 转换而来，需要先运行 make convert-usd）
+            usd_path=str(ISAAC_LAB_RL_ROOT / "assets/usd/jiyuan.usd"),
+            # Isaac Sim 会自动识别 articulation root，无需额外配置
+            # 但我们仍然设置一些属性以保持一致性
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                 enabled_self_collisions=False,
             ),
@@ -173,8 +206,9 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     )
 
     # 脚部接触传感器（可选，用于奖励计算）
+    # 注意：由于 articulation root 是 worldBody，传感器路径需要包含完整路径
     contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*_foot",
+        prim_path="{ENV_REGEX_NS}/Robot/jiyuan/worldBody/.*foot.*",
         update_period=0.0,  # 每步更新
         history_length=3,
         debug_vis=False,

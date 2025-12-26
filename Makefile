@@ -139,9 +139,12 @@ check-env: check-isaaclab
 convert-usd: check-isaaclab
 	@echo "转换 MJCF 到 USD..."
 	@mkdir -p assets/usd
-	$(ISAACLAB_PYTHON) utils/mjcf2usd/convert.py --headless \
-		assets/xmls/models/jiyuan/index.xml \
-		assets/usd/jiyuan.usd
+	$(ISAACLAB_PYTHON) utils/mjcf2usd/convert.py \
+		assets/xmls/models/jiyuan/jiyuan.xml \
+		assets/usd/jiyuan.usd \
+		--headless \
+		--make-instanceable \
+		--import-sites
 	@echo "✓ 转换完成: assets/usd/jiyuan.usd"
 
 # ==============================================================================
