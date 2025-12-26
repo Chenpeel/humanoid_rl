@@ -222,7 +222,7 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
             mode="startup",
             params={
                 "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-                "mass_distribution_params": (-0.2, 0.2),
+                "mass_distribution_params": (0.8, 1.2),  # 改为0.8-1.2倍（±20%），scale操作要求>0
                 "operation": "scale",
             },
         )
