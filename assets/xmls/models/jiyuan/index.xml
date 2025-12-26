@@ -6,7 +6,7 @@
   <include file="params/materials.xml" />
   <!-- === Geometry === -->
   <include file="geometry/meshes.xml" />
-  <include file="geometry/world.xml" />
+  <!-- Note: world.xml removed - Isaac Lab creates ground in scene config -->
   <include file="geometry/robot.xml" />
   <!-- === Constraints === -->
   <include file="equality.xml" />
