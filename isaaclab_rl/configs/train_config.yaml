@@ -17,7 +17,7 @@ robot:
 
 # 环境配置
 environment:
-  num_envs: 4096
+  num_envs: 512  # 降低到512以适配RTX 4090 24GB（从4096降低）
   episode_length_s: 20.0
   headless: true  # 远程服务器必须启用无头模式
 
@@ -124,7 +124,8 @@ domain_randomization:
   # 质量随机化
   randomize_mass:
     enable: true
-    range: [-0.2, 0.2]  # ±20%
+    operation: "add"  # 使用add操作而不是scale，因为范围包含负数
+    range: [-0.2, 0.2]  # ±20% (使用add操作)
 
   # 执行器增益随机化
   randomize_actuator_gains:
