@@ -79,6 +79,9 @@ from isaaclab.utils.io import dump_yaml
 # RSL_RL 导入
 from rsl_rl.runners import OnPolicyRunner
 
+# Isaac Lab RSL_RL 包装器
+from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
+
 # 项目导入
 from jiyuan_tasks import *  # 注册环境
 from jiyuan_tasks.utils.config_loader import (
@@ -448,8 +451,7 @@ def create_runner(env: ManagerBasedRLEnv, ppo_cfg, config: ConfigDict, args):
     print(f"[INFO] PPO 配置已保存到: {ppo_config_path}")
 
     # 创建 RSL_RL 训练器
-    # 注意1：OnPolicyRunner 期望接收字典格式的配置，而不是配置类对象
-    # 注意2：需要传入 unwrapped 环境，因为 Gymnasium 包装器不支持 get_observations() 等方法
+    # 注意：OnPolicyRunner 期望接收字典格式的配置，而不是配置类对象
     # 将配置类对象转换为字典
     ppo_cfg_dict = {
         "algorithm": ppo_cfg.algorithm.__dict__,
@@ -461,7 +463,8 @@ def create_runner(env: ManagerBasedRLEnv, ppo_cfg, config: ConfigDict, args):
         "obs_groups": None,  # 将由 OnPolicyRunner 自动解析
     }
 
-    runner = OnPolicyRunner(env.unwrapped, ppo_cfg_dict, log_dir=log_dir, device=ppo_cfg.device)
+    # 直接传入 RslRlVecEnvWrapper 包装的环境（已经实现了 VecEnv 接口）
+    runner = OnPolicyRunner(env, ppo_cfg_dict, log_dir=log_dir, device=ppo_cfg.device)
 
     # 如果恢复训练，加载检查点
     if args.resume:
@@ -543,10 +546,14 @@ def main():
         render_mode="rgb_array" if config.get("logging", {}).get("record_video", {}).get("enable", False) else None,
     )
 
+    # 包装环境以适配 RSL_RL
+    print(f"[INFO] 包装环境以适配 RSL_RL")
+    env = RslRlVecEnvWrapper(env)
+
     print(f"[INFO] 环境创建成功")
     print(f"  - 观测空间: {env.observation_space}")
     print(f"  - 动作空间: {env.action_space}")
-    print(f"  - 并行环境数: {env.unwrapped.num_envs}")  # 使用unwrapped访问底层环境
+    print(f"  - 并行环境数: {env.num_envs}")  # 包装器提供了 num_envs 属性
 
     # 获取 PPO 配置
     ppo_cfg = TASK_PPO_CFG_MAP[config.task]
