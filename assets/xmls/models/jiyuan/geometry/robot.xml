@@ -4,6 +4,9 @@
     <body name="base_link" pos="0.00000000 0.00000000 0.99150000"
       quat="0.70710678 0.70710678 0.00000000 0.00000000" childclass="robot">
       <freejoint name="floating_base" />
+      <!-- 基座惯量参数 (躯干质量约3kg，参考box尺寸 0.24x0.20x0.16m) -->
+      <inertial pos="0.0 0.0 0.0" mass="3.0"
+        diaginertia="0.016 0.021 0.024" />
       <!-- Base -->
       <include file="geometry/base.xml" />
       <!-- Right leg -->
