@@ -533,7 +533,7 @@ def main():
     print(f"[INFO] 环境创建成功")
     print(f"  - 观测空间: {env.observation_space}")
     print(f"  - 动作空间: {env.action_space}")
-    print(f"  - 并行环境数: {env.num_envs}")
+    print(f"  - 并行环境数: {env.unwrapped.num_envs}")  # 使用unwrapped访问底层环境
 
     # 获取 PPO 配置
     ppo_cfg = TASK_PPO_CFG_MAP[config.task]
