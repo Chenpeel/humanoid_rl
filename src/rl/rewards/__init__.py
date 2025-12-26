@@ -1,7 +1,7 @@
 """
-V��p!W
+奖励函数模块
 
-+����V��p��
+包含站立、行走等任务的奖励函数。
 """
 
 from .standing_rewards import (
@@ -15,9 +15,26 @@ from .standing_rewards import (
     compute_velocity_penalty,
     quat_to_euler,
 )
+from .walking_rewards import (
+    DEFAULT_WALKING_REWARD_WEIGHTS,
+    check_walking_termination,
+    compute_action_rate_penalty as compute_walking_action_rate_penalty,
+    compute_drag_penalty,
+    compute_foot_clearance_reward,
+    compute_forward_velocity_reward,
+    compute_gait_symmetry_reward,
+    compute_torque_penalty as compute_walking_torque_penalty,
+    compute_trunk_height_reward,
+    compute_trunk_lin_vel_z_penalty,
+    compute_trunk_orientation_penalty,
+    compute_walking_reward,
+    get_feet_contacts,
+    normalize_quaternion,
+    wrap_to_pi,
+)
 
 __all__ = [
-    # ����V�
+    # 站立奖励
     "compute_standing_reward",
     "compute_height_reward",
     "compute_orientation_reward",
@@ -26,6 +43,20 @@ __all__ = [
     "compute_torque_penalty",
     "check_standing_termination",
     "DEFAULT_STANDING_REWARD_WEIGHTS",
-    # �w�p
+    # 行走奖励
+    "compute_walking_reward",
+    "compute_forward_velocity_reward",
+    "compute_gait_symmetry_reward",
+    "compute_foot_clearance_reward",
+    "compute_trunk_height_reward",
+    "compute_trunk_orientation_penalty",
+    "compute_trunk_lin_vel_z_penalty",
+    "compute_drag_penalty",
+    "check_walking_termination",
+    "DEFAULT_WALKING_REWARD_WEIGHTS",
+    # 工具函数
     "quat_to_euler",
+    "normalize_quaternion",
+    "wrap_to_pi",
+    "get_feet_contacts",
 ]

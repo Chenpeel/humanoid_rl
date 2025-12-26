@@ -6,8 +6,10 @@ from .mjx_base_env import MJXBaseEnv, EnvState
 from .robot_envs import (
     VelocityTrackingEnv,
     StandingEnv,
+    WalkingEnv,
     create_velocity_tracking_env,
     create_standing_env,
+    create_walking_env,
 )
 
 __all__ = [
@@ -20,4 +22,7 @@ __all__ = [
     # 站立环境
     'StandingEnv',
     'create_standing_env',
+    # 行走环境
+    'WalkingEnv',
+    'create_walking_env',
 ]

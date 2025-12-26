@@ -839,3 +839,528 @@ def create_standing_env(
         StandingEnv实例
     """
     return StandingEnv(xml_path=xml_path, **kwargs)
+
+
+# ==================== 行走环境 ====================
+
+
+class WalkingEnv(MJXBaseEnv):
+    """行走环境
+
+    任务：向前行走，跟踪速度命令，保持稳定步态
+    观测：机器人姿态、速度、关节状态、接触传感器、命令
+    动作：关节位置控制
+    奖励：使用 walking_rewards 模块
+
+    Attributes:
+        target_velocity: 默认目标前向速度 (m/s)
+        cmd_x_range: 前向速度命令采样范围 (m/s)
+        cmd_y_range: 侧向速度命令采样范围 (m/s)
+        cmd_yaw_range: 偏航角速度命令采样范围 (rad/s)
+        target_height: 目标躯干高度 (m)
+        reward_weights: 奖励权重字典
+    """
+
+    def __init__(
+        self,
+        xml_path: str = "assets/xmls/scenes/flat_terrain.xml",
+        max_steps: int = 2000,
+        dt: float = 0.002,
+        frame_skip: int = 10,
+        verbose: bool = True,
+        # 任务参数
+        target_velocity: float = 0.5,
+        cmd_x_range: tuple = (-0.2, 0.8),
+        cmd_y_range: tuple = (-0.3, 0.3),
+        cmd_yaw_range: tuple = (-1.0, 1.0),
+        target_height: float = 0.35,
+        # 奖励权重
+        reward_weights: Dict[str, float] = None,
+    ):
+        """初始化行走环境
+
+        Args:
+            xml_path: MuJoCo XML模型路径
+            max_steps: 最大步数
+            dt: 仿真时间步
+            frame_skip: 动作重复次数
+            verbose: 是否显示信息
+            target_velocity: 默认目标前向速度 (m/s)
+            cmd_x_range: 前向速度命令采样范围 (m/s)
+            cmd_y_range: 侧向速度命令采样范围 (m/s)
+            cmd_yaw_range: 偏航角速度命令采样范围 (rad/s)
+            target_height: 目标躯干高度 (m)
+            reward_weights: 奖励权重字典
+        """
+        # 延迟导入避免循环依赖
+        from ..rewards.walking_rewards import DEFAULT_WALKING_REWARD_WEIGHTS
+
+        super().__init__(xml_path, max_steps, dt, frame_skip, verbose)
+
+        # 任务参数
+        self.target_velocity = target_velocity
+        self.cmd_x_range = cmd_x_range
+        self.cmd_y_range = cmd_y_range
+        self.cmd_yaw_range = cmd_yaw_range
+        self.target_height = target_height
+
+        # 行走任务的奖励权重
+        if reward_weights is None:
+            reward_weights = DEFAULT_WALKING_REWARD_WEIGHTS.copy()
+        self.reward_weights = reward_weights
+
+        # 提取关键索引
+        self._extract_indices()
+
+        # 设置观测维度
+        self._setup_observation_space()
+
+        if verbose:
+            console.print(f"[green]✓ 行走环境初始化完成[/green]")
+            console.print(f"  观测维度: {self.observation_size}")
+            console.print(f"  动作维度: {self.action_size}")
+            console.print(f"  目标速度: {target_velocity}m/s")
+            console.print(f"  目标高度: {target_height}m")
+            console.print(f"  命令范围: x={cmd_x_range}, y={cmd_y_range}, yaw={cmd_yaw_range}")
+
+    def _extract_indices(self) -> None:
+        """提取关键索引"""
+        model = self.mj_model
+
+        # 找到浮动基座的地址（freejoint）
+        self.floating_base_qpos_addr = None
+        self.floating_base_qvel_addr = None
+        for i in range(model.njnt):
+            if model.jnt_type[i] == 0:  # 0 = freejoint
+                self.floating_base_qpos_addr = model.jnt_qposadr[i]
+                self.floating_base_qvel_addr = model.jnt_dofadr[i]
+                break
+
+        # 执行器关节地址
+        self.actuator_qpos_indices = []
+        self.actuator_qvel_indices = []
+        for i in range(model.nu):
+            trnid = model.actuator_trnid[i, 0]
+            if trnid >= 0:
+                joint_id = trnid
+                self.actuator_qpos_indices.append(model.jnt_qposadr[joint_id])
+                self.actuator_qvel_indices.append(model.jnt_dofadr[joint_id])
+
+        # 找到传感器
+        sensor_names = [
+            mujoco.mj_id2name(
+                model, mujoco.mjtObj.mjOBJ_SENSOR, i) or f"sensor_{i}"
+            for i in range(model.nsensor)
+        ]
+
+        # 接触传感器索引（支持多种命名格式）
+        self.contact_sensor_indices = []
+        for i, name in enumerate(sensor_names):
+            name_lower = name.lower()
+            # 匹配触地传感器（touch、contact、force 等）
+            if any(keyword in name_lower for keyword in ["touch", "contact", "force"]):
+                # 确保是脚部传感器
+                if any(foot in name_lower for foot in ["foot", "toe", "feet"]):
+                    self.contact_sensor_indices.append(i)
+
+        # 如果没找到，默认使用前4个传感器
+        if not self.contact_sensor_indices and model.nsensor >= 4:
+            self.contact_sensor_indices = [0, 1, 2, 3]
+
+        # 脚部 body 索引（用于获取位置）
+        self.right_foot_body_id = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_BODY, "right_foot_link"
+        )
+        self.left_foot_body_id = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_BODY, "left_foot_link"
+        )
+
+        # 默认关节位置
+        self.default_qpos = jp.array(model.qpos0)
+
+        # 尝试获取home keyframe
+        try:
+            home_key_id = mujoco.mj_name2id(
+                model, mujoco.mjtObj.mjOBJ_KEY, "home"
+            )
+            if home_key_id >= 0:
+                self.default_qpos = jp.array(
+                    model.key_qpos[
+                        home_key_id * model.nq: (home_key_id + 1) * model.nq
+                    ]
+                )
+        except Exception:
+            pass  # 没有home keyframe，使用qpos0
+
+    def _setup_observation_space(self) -> None:
+        """设置观测空间维度
+
+        观测：四元数(4) + 线速度(3) + 角速度(3) + 关节位置(nu) +
+              关节速度(nu) + 上一动作(nu) + 命令(3) + 接触传感器(num_contacts)
+        """
+        num_contacts = len(self.contact_sensor_indices)
+        self._observation_size = 4 + 3 + 3 + self.nu + self.nu + self.nu + 3 + num_contacts
+
+    @property
+    def observation_size(self) -> int:
+        """观测空间维度"""
+        return self._observation_size
+
+    def _reset_pipeline(self, rng: jax.Array) -> Any:
+        """重置物理状态
+
+        Args:
+            rng: JAX随机数生成器
+
+        Returns:
+            初始化的MJX数据
+        """
+        data = mjx.make_data(self.mjx_model)
+        qpos = jp.array(self.default_qpos).flatten()
+
+        # 随机化初始姿态（行走任务使用较小的随机化范围）
+        if self.floating_base_qpos_addr is not None:
+            rng, key1, key2 = jax.random.split(rng, 3)
+
+            # 随机化xy位置: ±0.02m
+            dxy = jax.random.uniform(key1, (2,), minval=-0.02, maxval=0.02)
+            base_xy = qpos[
+                self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
+            ]
+            qpos = qpos.at[
+                self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
+            ].set(base_xy + dxy)
+
+            # 随机化yaw: ±0.1 rad
+            yaw = jax.random.uniform(key2, minval=-0.1, maxval=0.1)
+            quat = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
+            # 归一化四元数（防止除零）
+            quat_norm = jp.linalg.norm(quat)
+            quat = jp.where(
+                quat_norm > 1e-8,
+                quat / quat_norm,
+                jp.array([1.0, 0.0, 0.0, 0.0])
+            )
+            qpos = qpos.at[
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
+            ].set(quat)
+
+        # 随机化关节位置: ±0.05 rad
+        rng, key3 = jax.random.split(rng)
+        if self.nu > 0:
+            joint_noise = jax.random.uniform(
+                key3, (self.nu,), minval=-0.05, maxval=0.05
+            )
+            indices = jp.array(self.actuator_qpos_indices)
+            joint_pos = qpos[indices]
+            qpos = qpos.at[indices].set(joint_pos + joint_noise)
+
+        qvel = jp.zeros(self.nv)
+        data = data.replace(qpos=qpos, qvel=qvel)
+        data = mjx.forward(self.mjx_model, data)
+
+        return data
+
+    def _get_obs(self, pipeline_state: Any, action: jax.Array) -> jax.Array:
+        """计算观测
+
+        Args:
+            pipeline_state: MJX pipeline状态
+            action: 当前动作
+
+        Returns:
+            观测向量
+        """
+        qpos = pipeline_state.qpos
+        qvel = pipeline_state.qvel
+        sensordata = pipeline_state.sensordata
+
+        # 浮动基座姿态和速度
+        if self.floating_base_qpos_addr is not None:
+            base_quat = qpos[
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
+            ]
+            # 归一化四元数（防止除零）
+            quat_norm = jp.linalg.norm(base_quat)
+            base_quat = jp.where(
+                quat_norm > 1e-8,
+                base_quat / quat_norm,
+                jp.array([1.0, 0.0, 0.0, 0.0])
+            )
+        else:
+            base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
+
+        if self.floating_base_qvel_addr is not None:
+            base_linvel = qvel[
+                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
+            ]
+            base_angvel = qvel[
+                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
+            ]
+        else:
+            base_linvel = jp.zeros(3)
+            base_angvel = jp.zeros(3)
+
+        # 关节状态
+        qpos_indices = jp.array(self.actuator_qpos_indices)
+        qvel_indices = jp.array(self.actuator_qvel_indices)
+        joint_pos = qpos[qpos_indices]
+        joint_vel = qvel[qvel_indices]
+
+        # 接触传感器（使用 contact_sensor_indices 的长度）
+        num_contacts = len(self.contact_sensor_indices)
+        if num_contacts > 0:
+            contact_indices = jp.array(self.contact_sensor_indices)
+            contact_data = sensordata[contact_indices]
+        else:
+            # 如果没有找到传感器，使用与 observation_size 一致的数量（4个零值）
+            contact_data = jp.zeros(num_contacts if num_contacts > 0 else 4)
+
+        # 命令（此处为默认值，将在reset时设置）
+        command = jp.array([self.target_velocity, 0.0, 0.0])
+
+        obs = jp.concatenate([
+            base_quat,       # 4
+            base_linvel,     # 3
+            base_angvel,     # 3
+            joint_pos,       # nu
+            joint_vel,       # nu
+            action,          # nu
+            command,         # 3
+            contact_data,    # num_contacts
+        ])
+
+        # NaN/Inf 检测和替换（防止训练初期数值问题）
+        obs = jp.nan_to_num(obs, nan=0.0, posinf=1e6, neginf=-1e6)
+
+        return obs
+
+    def _get_feet_positions(self, pipeline_state: Any) -> jax.Array:
+        """获取脚部位置（用于 foot_clearance 和 drag_penalty）
+
+        Args:
+            pipeline_state: MJX pipeline状态
+
+        Returns:
+            脚部位置，形状 (2, 3) [right_foot, left_foot]
+        """
+        # 从 xpos 中获取脚部位置
+        right_foot_pos = pipeline_state.xpos[self.right_foot_body_id]
+        left_foot_pos = pipeline_state.xpos[self.left_foot_body_id]
+        return jp.stack([right_foot_pos, left_foot_pos], axis=0)
+
+    def _sample_command(self, rng: jax.Array) -> jax.Array:
+        """采样速度命令
+
+        Args:
+            rng: JAX随机数生成器
+
+        Returns:
+            命令数组 [vx, vy, vyaw]
+        """
+        rng, key1, key2, key3 = jax.random.split(rng, 4)
+
+        cmd_x = jax.random.uniform(
+            key1, minval=self.cmd_x_range[0], maxval=self.cmd_x_range[1]
+        )
+        cmd_y = jax.random.uniform(
+            key2, minval=self.cmd_y_range[0], maxval=self.cmd_y_range[1]
+        )
+        cmd_yaw = jax.random.uniform(
+            key3, minval=self.cmd_yaw_range[0], maxval=self.cmd_yaw_range[1]
+        )
+
+        return jp.array([cmd_x, cmd_y, cmd_yaw])
+
+    def _compute_reward(
+        self,
+        prev_state: EnvState,
+        action: jax.Array,
+        pipeline_state: Any,
+    ) -> jax.Array:
+        """计算行走奖励
+
+        使用 walking_rewards 模块中的 compute_walking_reward 函数。
+
+        Args:
+            prev_state: 上一步的环境状态
+            action: 当前动作
+            pipeline_state: 当前MJX pipeline状态
+
+        Returns:
+            奖励值
+        """
+        from ..rewards.walking_rewards import compute_walking_reward
+
+        qpos = pipeline_state.qpos
+        qvel = pipeline_state.qvel
+        sensordata = pipeline_state.sensordata
+
+        # 获取躯干状态
+        if self.floating_base_qpos_addr is not None:
+            torso_z = qpos[self.floating_base_qpos_addr + 2]
+            base_quat = qpos[
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
+            ]
+        else:
+            torso_z = self.target_height
+            base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
+
+        if self.floating_base_qvel_addr is not None:
+            base_linvel = qvel[
+                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
+            ]
+            base_angvel = qvel[
+                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
+            ]
+        else:
+            base_linvel = jp.zeros(3)
+            base_angvel = jp.zeros(3)
+
+        # 接触传感器数据
+        if self.contact_sensor_indices:
+            contact_indices = jp.array(self.contact_sensor_indices)
+            contact_sensors = sensordata[contact_indices]
+        else:
+            contact_sensors = jp.zeros(4)
+
+        # 脚部位置（可选）
+        try:
+            feet_positions = self._get_feet_positions(pipeline_state)
+        except Exception:
+            feet_positions = None
+
+        torques = pipeline_state.qfrc_actuator
+
+        # 从info中获取命令（如果存在），否则使用默认值
+        command = prev_state.info.get("command", jp.array([self.target_velocity, 0.0, 0.0]))
+        target_vel = command[0]  # 使用命令的x分量作为目标速度
+
+        return compute_walking_reward(
+            torso_z=torso_z,
+            base_quat=base_quat,
+            base_linvel=base_linvel,
+            base_angvel=base_angvel,
+            contact_sensors=contact_sensors,
+            feet_positions=feet_positions,
+            action=action,
+            last_action=prev_state.last_action,
+            torques=torques,
+            target_velocity=target_vel,
+            target_height=self.target_height,
+            reward_weights=self.reward_weights,
+        )
+
+    def _is_done(self, state: EnvState, pipeline_state: Any) -> jax.Array:
+        """检查是否摔倒
+
+        使用 walking_rewards 模块中的 check_walking_termination 函数。
+
+        Args:
+            state: 当前环境状态
+            pipeline_state: 当前MJX pipeline状态
+
+        Returns:
+            是否终止的布尔值
+        """
+        from ..rewards.walking_rewards import check_walking_termination
+
+        qpos = pipeline_state.qpos
+
+        if self.floating_base_qpos_addr is not None:
+            torso_z = qpos[self.floating_base_qpos_addr + 2]
+            base_quat = qpos[
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
+            ]
+            return check_walking_termination(torso_z, base_quat)
+        else:
+            return jp.array(False)
+
+    def _get_info(
+        self,
+        state: EnvState,
+        action: jax.Array,
+        pipeline_state: Any,
+    ) -> Dict[str, jax.Array]:
+        """获取额外信息
+
+        Args:
+            state: 当前环境状态
+            action: 当前动作
+            pipeline_state: 当前MJX pipeline状态
+
+        Returns:
+            额外信息字典（始终包含 command 和 actual_velocity）
+        """
+        # 始终保持相同的字典结构（JAX scan 要求）
+        info = {
+            "command": state.info.get("command", jp.zeros(3)),
+            "actual_velocity": jp.zeros(3),  # 默认值
+        }
+
+        # 提取实际速度（基座线速度和角速度）
+        if self.floating_base_qvel_addr is not None:
+            base_lin_vel = pipeline_state.qvel[
+                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
+            ]
+            base_ang_vel = pipeline_state.qvel[
+                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
+            ]
+
+            info["actual_velocity"] = jp.array([
+                base_lin_vel[0],   # actual_vx
+                base_lin_vel[1],   # actual_vy
+                base_ang_vel[2],   # actual_vyaw (wz)
+            ])
+
+        return info
+
+    def reset(self, rng: jax.Array) -> EnvState:
+        """重置环境（带命令采样）
+
+        Args:
+            rng: JAX随机数生成器
+
+        Returns:
+            环境状态
+        """
+        # 调用父类reset
+        state = super().reset(rng)
+
+        # 采样新的速度命令
+        rng, cmd_rng = jax.random.split(state.rng)
+        command = self._sample_command(cmd_rng)
+
+        # 初始化 info（包含命令和 actual_velocity，保持 pytree 结构一致）
+        info = {
+            "command": command,
+            "actual_velocity": jp.zeros(3),  # 初始速度为零
+        }
+
+        # 重新计算obs（包含命令）
+        # 更新观测的最后3个元素为命令
+        obs = state.obs.at[-3-len(self.contact_sensor_indices):-len(self.contact_sensor_indices)].set(command)
+
+        # 更新state
+        state = state.replace(
+            rng=rng,
+            obs=obs,
+            info=info,
+        )
+
+        return state
+
+
+def create_walking_env(
+    xml_path: str = "assets/xmls/scenes/flat_terrain.xml", **kwargs
+) -> WalkingEnv:
+    """创建行走环境（便捷函数）
+
+    Args:
+        xml_path: MuJoCo XML模型路径
+        **kwargs: 传递给WalkingEnv的其他参数
+
+    Returns:
+        WalkingEnv实例
+    """
+    return WalkingEnv(xml_path=xml_path, **kwargs)

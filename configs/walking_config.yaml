@@ -1,0 +1,170 @@
+# 行走环境配置
+# 基于 JAX/MJX 的四足机器人行走任务
+
+# 环境配置
+env:
+    name: "WalkingEnv"
+    model_path: "assets/xmls/scenes/flat_terrain.xml"  # MuJoCo模型文件路径
+    max_steps: 2000
+    dt: 0.02  # 时间步长 (50Hz)
+    frame_skip: 1  # 动作重复次数
+
+    # 任务参数
+    target_velocity: 0.5  # 默认目标前向速度 (m/s)
+    target_height: 0.35  # 目标躯干高度 (m)
+
+    # 速度命令采样范围
+    cmd_velocity_range:
+        x: [-0.2, 0.8]  # 前向速度范围（允许倒退和快速前进）
+        y: [-0.3, 0.3]  # 侧向速度范围
+        yaw: [-1.0, 1.0]  # 转向角速度范围
+
+    # 奖励权重
+    reward_weights:
+        # 主要目标：前向运动
+        forward_velocity: 1.5  # 前向速度奖励
+        # 步态质量
+        gait_symmetry: 0.3  # 步态对称性
+        foot_clearance: 0.2  # 脚部抬高
+        # 躯干稳定
+        trunk_height: 0.5  # 高度保持
+        orientation: -0.3  # 姿态惩罚（负权重）
+        trunk_lin_vel_z: -0.5  # Z方向速度惩罚
+        drag: -1.0  # 拖地惩罚
+        # 能量效率
+        action_rate: -0.01  # 动作平滑
+        torques: -0.0001  # 扭矩惩罚
+        # 存活
+        alive: 0.3  # 存活奖励
+
+# 模型配置
+model:
+    # 策略网络配置
+    policy:
+        hidden_sizes: [256, 256, 128]  # 隐藏层大小
+        activation: "tanh"  # 使用tanh以获得更平滑的输出
+        output_activation: "tanh"
+
+    # 价值网络配置
+    value:
+        hidden_sizes: [256, 256, 128]
+        activation: "relu"
+
+    # 共享网络配置
+    shared:
+        use_shared_backbone: true
+        shared_hidden_sizes: [256, 256]
+
+# PPO算法配置
+algorithm:
+    name: "PPO"
+
+    # 超参数
+    hyperparameters:
+        learning_rate: 3e-4
+        clip_ratio: 0.2
+        gamma: 0.99
+        lam: 0.95
+        entropy_coef: 0.01
+        value_coef: 0.5
+
+    # 训练配置
+    training:
+        num_epochs: 4
+        batch_size: 64
+        minibatch_size: 16
+        horizon: 2048
+
+    # 优化器配置
+    optimizer:
+        name: "Adam"
+        beta1: 0.9
+        beta2: 0.999
+        epsilon: 1e-7
+
+# 训练配置
+training:
+    total_timesteps: 104857600  # 总训练步数 (100轮次 × 16384环境 × 64步)
+    num_envs: 16384  # 并行环境数量（RTX 4090 24GB 优化配置）
+    save_freq: 50  # 每50轮次保存
+    eval_freq: 25  # 每25轮次评估
+    log_freq: 10  # 每10轮次日志
+
+    # 检查点配置
+    checkpoint:
+        save_dir: "./checkpoints/walking"
+        keep_last: 10
+        save_best: true
+
+    # 学习率调度
+    lr_scheduler:
+        enabled: true
+        scheduler_type: "cosine"
+        start_lr: 3e-4
+        end_lr: 3e-6
+        warmup_steps: 10000
+
+# 评估配置
+evaluation:
+    num_episodes: 10
+    render: false
+    save_video: false
+    video_fps: 30
+
+    # 评估指标
+    metrics:
+        - "episode_return"
+        - "episode_length"
+        - "forward_velocity"
+        - "energy_efficiency"
+
+# 日志配置
+logging:
+    log_dir: "./logs/walking"
+    use_tensorboard: true
+    use_wandb: false
+
+    # TensorBoard配置
+    tensorboard:
+        update_freq: 100
+
+    # 控制台日志
+    console:
+        level: "INFO"
+        format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+    # 详细日志
+    detailed_logs:
+        log_observations: false
+        log_actions: false
+        log_rewards: true
+
+# 硬件配置
+hardware:
+    device: "auto"
+    num_threads: 8
+    gpu_memory_fraction: 0.85
+
+    # 性能优化
+    performance:
+        use_xla: true
+        use_mixed_precision: false
+
+# 随机种子
+seed: 42
+
+# 可视化配置
+visualization:
+    enable_render: false  # 是否启用3D渲染
+    render_freq: 10  # 每N个epoch渲染一次
+    record_video: false  # 是否录制视频
+    video_dir: "videos"  # 视频保存目录
+    video_fps: 30  # 视频帧率
+
+# 调试配置
+debug:
+    verbose: false
+    print_obs: false
+    print_reward: false
+    print_action: false
+    save_trajectories: false
