@@ -39,7 +39,8 @@ def convert_mjcf_to_usd(mjcf_path: str, output_path: str = None) -> str:
     Returns:
         生成的 USD 文件路径
     """
-    from omni.isaac.sim.utils import create_usd_from_mjcf_file
+    import omni.usd
+    from pxr import Usd, UsdGeom, Sdf
 
     mjcf_file = Path(mjcf_path)
     if not mjcf_file.exists():
@@ -54,13 +55,34 @@ def convert_mjcf_to_usd(mjcf_path: str, output_path: str = None) -> str:
     print(f"转换 MJCF: {mjcf_path}")
     print(f"输出 USD: {output_path}")
 
-    # 使用 Isaac Sim 的 MJCF 导入功能
-    usd_path = create_usd_from_mjcf_file(
-        mjcf_file=str(mjcf_file.absolute()),
-        usd_path=str(Path(output_path).absolute()),
-        fix_base=False,  # 不固定基座
-        import_sites=True,  # 导入 site
-        self_collision=False,
+    # 使用 Isaac Sim 的 AssetImporter 导入 MJCF
+    from omni.isaac.core.utils.stage import add_reference_to_stage, get_current_stage
+    from omni.isaac.core.robots import Robot
+
+    # 创建新 Stage
+    stage = Usd.Stage.CreateNew(str(Path(output_path).absolute()))
+
+    # 使用 AssetImporter 扩展导入 MJCF
+    # 注意：这需要 isaacsim.asset.importer.mjcf 扩展
+    from omni.isaac.core.utils.stage import clear_stage
+    import omni.isaac.core.utils.prims as prim_utils
+
+    # 创建默认的 Xform 根节点
+    default_prim = UsdGeom.Xform.Define(stage, Sdf.Path("/root"))
+    stage.SetDefaultPrim(default_prim.GetPrim())
+
+    # 导入 MJCF 到 stage
+    from omni.isaac.core.utils.extensions import enable_extension
+    enable_extension("isaacsim.asset.importer.mjcf")
+
+    # 使用 omni.usd 导入 MJCF
+    from omni.kit.asset_converter import Converter
+
+    # 创建转换器并转换
+    converter = Converter()
+    usd_path = converter.convert(
+        str(mjcf_file.absolute()),
+        str(Path(output_path).absolute()),
     )
 
     print(f"✓ 转换完成: {usd_path}")
