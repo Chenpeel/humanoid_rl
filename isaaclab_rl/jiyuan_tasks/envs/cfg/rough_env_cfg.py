@@ -288,7 +288,7 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
         self.scene.height_scanner = RayCasterCfg(
             prim_path="{ENV_REGEX_NS}/Robot/base_link",
             offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-            attach_yaw_only=True,
+            ray_alignment="yaw",  # 使用新API替代attach_yaw_only
             pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
             debug_vis=False,
             mesh_prim_paths=["/World/ground"],
