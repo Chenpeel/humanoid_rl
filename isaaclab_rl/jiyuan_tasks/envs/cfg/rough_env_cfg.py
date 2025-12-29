@@ -194,7 +194,7 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
         )
         joint_pos_out_of_limits = DoneTerm(
             func=terminations.joint_pos_out_of_limits,
-            params={"margin": 0.01},
+            params={"margin": 0.05},  # 增大到0.05rad (约2.86度),减少误触发
         )
 
     # 事件配置（领域随机化）
