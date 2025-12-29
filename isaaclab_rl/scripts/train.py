@@ -62,6 +62,11 @@ app_launcher_parser = argparse.ArgumentParser(add_help=False)
 AppLauncher.add_app_launcher_args(app_launcher_parser)
 app_launcher_args, remaining_args = app_launcher_parser.parse_known_args()
 
+# 如果启用了视频录制，强制开启相机
+if "--video" in sys.argv:
+    app_launcher_args.enable_cameras = True
+    print("[INFO] 检测到视频录制请求，强制开启相机渲染 (enable_cameras=True)")
+
 # 启动 Isaac Sim 应用
 app_launcher = AppLauncher(app_launcher_args)
 simulation_app = app_launcher.app
