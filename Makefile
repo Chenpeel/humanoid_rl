@@ -225,6 +225,7 @@ video-rough: check-isaaclab
 		--config isaaclab_rl/configs/train_config.yaml \
 		--task rough \
 		--num_envs 64 \
+		--enable_cameras \
 		--video --video_interval 10 --video_length 200 --max_iterations 50
 
 # 平坦地形训练（简化版）
