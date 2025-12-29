@@ -62,12 +62,6 @@ app_launcher_parser = argparse.ArgumentParser(add_help=False)
 AppLauncher.add_app_launcher_args(app_launcher_parser)
 app_launcher_args, remaining_args = app_launcher_parser.parse_known_args()
 
-# 强制开启相机渲染，无论是否录制视频，确保渲染管线初始化
-# 这样可以避免 headless 模式下的 "Cannot render rgb_array" 错误
-app_launcher_args.enable_cameras = True
-if "--video" in sys.argv:
-    print("[INFO] 检测到视频录制请求")
-
 # 启动 Isaac Sim 应用
 app_launcher = AppLauncher(app_launcher_args)
 simulation_app = app_launcher.app
@@ -544,44 +538,13 @@ def main():
     env_cfg.scene.num_envs = config.environment.num_envs
     env_cfg.episode_length_s = config.environment.get("episode_length_s", env_cfg.episode_length_s)
 
-    # 录制视频需要的特殊设置
-    if config.get("logging", {}).get("record_video", {}).get("enable", False):
-        # 强制开启渲染模式，否则无法获取图像数据
-        # 0: NO_GUI_OR_RENDERING, 1: PARTIAL_RENDERING, 2: FULL_RENDERING
-        env_cfg.sim.render_mode = 1
-        print("[INFO] 视频录制已启用，强制设置 sim.render_mode = 1 (PARTIAL_RENDERING)")
-
     # 创建环境
     print(f"\n[INFO] 创建环境: {TASK_ENV_MAP[config.task]}")
     env = gym.make(
         TASK_ENV_MAP[config.task],
         cfg=env_cfg,
-        render_mode="rgb_array" if config.get("logging", {}).get("record_video", {}).get("enable", False) else None,
+        render_mode=None, # 禁用渲染以保证稳定训练
     )
-
-    # 录制视频
-    if config.get("logging", {}).get("record_video", {}).get("enable", False):
-        import gymnasium.wrappers as gym_wrappers
-        video_interval = config.get("logging", {}).get("record_video", {}).get("interval", 2000)
-        video_length = config.get("logging", {}).get("record_video", {}).get("length", 200)
-        
-        # 重新计算 log_dir
-        log_dir_root = config.ppo.runner.get("log_dir", "logs")
-        video_root = os.path.join(log_dir_root, "videos")
-        
-        # 定义触发规则：根据 step 数量触发
-        # RSL_RL 通常每 iter 运行 24 步（num_steps_per_env）。
-        # 所以 interval * 24 大约是对应的 step 数。
-        step_interval = video_interval * 24
-        
-        env = gym_wrappers.RecordVideo(
-            env, 
-            video_root, 
-            step_trigger=lambda step: step % step_interval == 0,
-            video_length=video_length,
-            disable_logger=False
-        )
-        print(f"[INFO] 已开启视频录制: 间隔 {video_interval} iters, 长度 {video_length} 步, 保存至 {video_root}")
 
     # 包装环境以适配 RSL_RL
     print(f"[INFO] 包装环境以适配 RSL_RL")
