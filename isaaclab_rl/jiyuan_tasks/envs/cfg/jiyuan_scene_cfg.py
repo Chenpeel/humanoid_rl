@@ -258,13 +258,14 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     )
 
     # 脚部接触传感器（用于奖励计算和步态检测）
-    # 使用更严格的正则，只匹配 _link 结尾的刚体，避免匹配到 visual/site
-    contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*(foot|toe)_link$",
-        update_period=0.0,  # 每步更新
-        history_length=3,
-        debug_vis=False,
-    )
+    # 暂时禁用以排除路径错误，先验证物理训练是否能跑通
+    contact_forces = None
+    # contact_forces = ContactSensorCfg(
+    #     prim_path="{ENV_REGEX_NS}/Robot/.*foot_link",
+    #     update_period=0.0,  # 每步更新
+    #     history_length=3,
+    #     debug_vis=False,
+    # )
 
     # 高度扫描传感器（可选，用于地形感知）
     # TODO: 如果需要复杂地形导航，可以启用
