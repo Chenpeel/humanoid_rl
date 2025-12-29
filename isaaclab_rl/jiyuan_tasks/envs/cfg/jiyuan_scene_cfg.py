@@ -258,9 +258,9 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     )
 
     # 脚部接触传感器（用于奖励计算和步态检测）
-    # 使用递归匹配，确保能找到嵌套在任意层级下的脚部链接
+    # 使用更严格的正则，只匹配 _link 结尾的刚体，避免匹配到 visual/site
     contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*foot.*",
+        prim_path="{ENV_REGEX_NS}/Robot/.*(foot|toe)_link$",
         update_period=0.0,  # 每步更新
         history_length=3,
         debug_vis=False,
