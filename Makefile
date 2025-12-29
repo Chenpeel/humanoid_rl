@@ -155,7 +155,6 @@ convert-usd: check-isaaclab
 	$(ISAACLAB_PYTHON) dep/IsaacLab/scripts/tools/convert_mjcf.py \
 		$(MJCF) \
 		$(USD_OUT) \
-		--make-instanceable \
 		--import-sites
 	@echo "✓ 转换完成: $(USD_OUT)"
 
