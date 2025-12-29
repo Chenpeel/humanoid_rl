@@ -145,6 +145,12 @@ class RslRlOnPolicyRunnerCfg:
     logger = "tensorboard"
     empirical_normalization = False
 
+    # 观测组配置
+    # 定义如何将环境的观测组映射到actor和critic网络
+    # "policy": actor网络使用的观测组列表
+    # "critic": critic网络使用的观测组列表
+    obs_groups = {"policy": ["policy"], "critic": ["policy"]}
+
     # 算法配置
     algorithm_class_name = "PPO"
     policy: ActorCriticNetworkCfg = ActorCriticNetworkCfg()
