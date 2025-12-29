@@ -259,6 +259,9 @@ clean:
 	find isaaclab_rl -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find isaaclab_rl -type f -name "*.pyc" -delete
 	find isaaclab_rl -type f -name "*.pyo" -delete
+	find utils -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find utils -type f -name "*.pyc" -delete
+	find utils -type f -name "*.pyo" -delete
 	@echo "✓ 清理完成！"
 
 clean-logs:

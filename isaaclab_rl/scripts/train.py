@@ -548,6 +548,14 @@ def main():
 
     # 包装环境以适配 RSL_RL
     print(f"[INFO] 包装环境以适配 RSL_RL")
+
+    # 调试：打印终止条件配置
+    print(f"\n[DEBUG] 终止条件配置检查:")
+    if hasattr(env_cfg, 'terminations') and hasattr(env_cfg.terminations, 'joint_pos_out_of_limits'):
+        term = env_cfg.terminations.joint_pos_out_of_limits
+        print(f"  - joint_pos_out_of_limits.func: {term.func}")
+        print(f"  - joint_pos_out_of_limits.params: {term.params}")
+
     env = RslRlVecEnvWrapper(env)
 
     print(f"[INFO] 环境创建成功")

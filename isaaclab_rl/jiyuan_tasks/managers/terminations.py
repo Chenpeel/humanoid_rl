@@ -264,7 +264,7 @@ def angular_velocity_out_of_bounds(
 
 def joint_pos_out_of_limits(
     env: ManagerBasedRLEnv,
-    margin: float = 0.01,
+    margin: float = 0.05,
 ) -> Tensor:
     """关节位置超出限制终止
 
@@ -272,7 +272,7 @@ def joint_pos_out_of_limits(
 
     Args:
         env: 环境实例
-        margin: 安全边界 (rad)，距离限制的最小距离
+        margin: 安全边界 (rad)，距离限制的最小距离，默认 0.05rad (约2.86度)
 
     Returns:
         终止标志，形状 (num_envs,)
