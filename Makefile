@@ -195,35 +195,35 @@ train: check-isaaclab
 	@echo "开始速度跟踪训练（使用配置文件）..."
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
 		--config isaaclab_rl/configs/train_config.yaml \
-		--task velocity
+		--task velocity $(ARGS)
 
 # 站立平衡训练
 train-standing: check-isaaclab
 	@echo "开始站立平衡训练（使用配置文件）..."
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
 		--config isaaclab_rl/configs/train_config.yaml \
-		--task standing
+		--task standing $(ARGS)
 
 # 行走步态训练
 train-walking: check-isaaclab
 	@echo "开始行走步态训练（使用配置文件）..."
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
 		--config isaaclab_rl/configs/train_config.yaml \
-		--task walking
+		--task walking $(ARGS)
 
 # 粗糙地形训练（台阶、斜坡、障碍）
 train-rough: check-isaaclab
 	@echo "开始粗糙地形训练（使用配置文件）..."
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
 		--config isaaclab_rl/configs/train_config.yaml \
-		--task rough
+		--task rough $(ARGS)
 
 # 平坦地形训练（简化版）
 train-flat: check-isaaclab
 	@echo "开始平坦地形训练（使用配置文件）..."
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
 		--config isaaclab_rl/configs/train_config.yaml \
-		--task flat
+		--task flat $(ARGS)
 
 # 快速测试训练
 train-test: check-isaaclab
@@ -232,7 +232,7 @@ train-test: check-isaaclab
 		--config isaaclab_rl/configs/train_config.yaml \
 		--task velocity \
 		--num_envs 64 \
-		--max_iterations 10
+		--max_iterations 10 $(ARGS)
 
 # ==============================================================================
 # 验证目标
