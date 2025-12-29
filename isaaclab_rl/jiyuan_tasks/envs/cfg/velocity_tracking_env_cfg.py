@@ -275,7 +275,7 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
             mode="startup",
             params={
                 "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-                "mass_distribution_params": (-0.2, 0.2),
+                "mass_distribution_params": (0.8, 1.2),
                 "operation": "scale",
             },
         )
