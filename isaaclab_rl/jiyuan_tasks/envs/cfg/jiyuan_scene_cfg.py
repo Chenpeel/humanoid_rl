@@ -68,7 +68,7 @@ from tkinter.constants import FALSE
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
-from isaaclab.assets import ArticulationCfg
+from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
@@ -146,14 +146,10 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         debug_vis=False,
     )
 
-    # 机器人
-    # USD 文件加载说明：
-    # - prim_path 是在场景中创建引用的位置
-    # - UsdFileCfg 会在这个位置创建对 jiyuan.usd 的引用
-    # - Isaac Lab 会自动查找 articulation root（带有 ArticulationRootAPI 的 prim）
-    robot: ArticulationCfg = ArticulationCfg(
-        # 明确指向 MJCF 导入器生成的 worldBody，解决发现多个根节点的错误
-        prim_path="{ENV_REGEX_NS}/Robot/worldBody",
+    # 机器人资产（仅负责生成 USD）
+    # 将 spawn 和 articulation 分离，以解决多根节点和路径查找问题
+    robot_asset: AssetBaseCfg = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Robot",
         spawn=UsdFileCfg(
             # USD 文件路径（自动根据模型名称查找）
             # 从环境变量 ROBOT_MODEL 读取，默认为 "jiyuan"
@@ -173,6 +169,14 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 solver_velocity_iteration_count=0,
             ),
         ),
+    )
+
+    # 机器人代理（负责物理交互和控制）
+    # 指向已生成的 worldBody 根节点
+    robot: ArticulationCfg = ArticulationCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/worldBody",
+        # 不再在此处 spawn，因为 robot_asset 已经生成了 USD
+        spawn=None,
         init_state=ArticulationCfg.InitialStateCfg(
             # 初始位置：在地面上方约0.3米（MJCF中是0.99m，但那是整个机器人高度）
             pos=(0.0, 0.0, 0.35),
