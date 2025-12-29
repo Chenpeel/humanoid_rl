@@ -171,29 +171,23 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         # 不再在此处 spawn，因为 robot_asset 已经生成了 USD
         spawn=None,
         init_state=ArticulationCfg.InitialStateCfg(
-            # 初始位置：在地面上方约0.3米（MJCF中是0.99m，但那是整个机器人高度）
-            pos=(0.0, 0.0, 0.35),
-            # 初始姿态：保持直立（四元数 [w, x, y, z]）
-            # MJCF 中的 quat="0.70710678 0.70710678 0 0" 可能是为了坐标系转换
-            # Isaac Lab 中直接使用 identity quaternion (w=1)
+            # 初始位置：调整为 0.95m，防止机器人出生在地面下导致物理爆炸
+            pos=(0.0, 0.0, 0.95),
+            # 初始姿态：保持直立
             rot=(1.0, 0.0, 0.0, 0.0),
-            # 关节初始位置（单位：弧度）
-            # 从原始MJX代码的_default_pose()推断
+            # 关节初始位置
             joint_pos={
-                # 髋关节pitch：略微前倾
                 ".*hip_pitch_engine.*": 0.0,
-                # 髋关节yaw：保持中立
                 ".*hip_yaw_engine.*": 0.0,
-                # 髋关节roll：保持中立
                 ".*hip_roll.*": 0.0,
-                # 膝关节：弯曲约30度
-                "right_knee.*": -0.5,
-                "left_knee.*": 0.5,
+                # 膝关节：稍微弯曲 (约17度)
+                "right_knee.*": -0.3,
+                "left_knee.*": 0.3,
                 # 踝关节：串联结构 (Fit 模型)
                 ".*ankle_cube.*": 0.0,
                 ".*ankle_axle.*": 0.0,
                 ".*foot_joint.*": 0.0,
-                # 脚趾关节：略微抬起
+                # 脚趾关节
                 ".*toe.*": 0.0,
             },
             # 初始速度：静止

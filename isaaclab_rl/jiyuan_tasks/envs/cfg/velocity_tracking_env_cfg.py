@@ -232,7 +232,7 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
         joint_pos_out_of_limits = DoneTerm(
             func=terminations.joint_pos_out_of_limits,
             params={
-                "margin": 0.05,
+                "margin": 0.01,
                 "asset_cfg": SceneEntityCfg("robot", joint_names=[
                     ".*hip_.*_joint",
                     ".*knee_joint",
