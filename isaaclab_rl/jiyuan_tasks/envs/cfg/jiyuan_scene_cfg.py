@@ -220,9 +220,11 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 stiffness=80.0,  # 典型值：40-150
                 damping=2.0,  # 典型值：1-5
                 # 力矩限制（从 MJCF ctrlrange="-1 1" 映射）
-                # 实际力矩需要乘以gear ratio，这里假设最大力矩约150Nm
-                effort_limit=150.0,
+                # 使用 effort_limit_sim 替代废弃的 effort_limit
+                effort_limit_sim=150.0,
                 # 速度限制（弧度/秒）
+                # 注意: velocity_limit 不会被隐式执行器使用,仅用于文档
+                # velocity_limit_sim 尚未实现,保留velocity_limit用于记录
                 velocity_limit=10.0,
             ),
             # 踝关节电机（3自由度并联结构）
@@ -235,7 +237,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 # 踝关节可能需要不同的参数
                 stiffness=60.0,
                 damping=1.5,
-                effort_limit=100.0,
+                effort_limit_sim=100.0,
                 velocity_limit=10.0,
             ),
             # 脚趾电机
@@ -244,7 +246,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 # MJCF toe_motor: damping=0.2, armature=0.005
                 stiffness=40.0,
                 damping=1.0,
-                effort_limit=50.0,
+                effort_limit_sim=50.0,
                 velocity_limit=10.0,
             ),
         },
