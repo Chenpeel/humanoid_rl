@@ -209,10 +209,10 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
             # 主要关节电机（hip, knee）
             "main_motors": ImplicitActuatorCfg(
                 joint_names_expr=[
-                    ".*hip_pitch_engine.*",
-                    ".*hip_yaw_engine.*",
-                    ".*hip_roll.*",
-                    ".*knee.*",
+                    ".*hip_pitch_engine_joint",
+                    ".*hip_yaw_engine_joint",
+                    ".*hip_roll_joint",
+                    ".*knee_joint",
                 ],
                 # PD 控制参数（从 MJCF default_classes.xml 映射）
                 # MJCF: damping=0.5, armature=0.01
@@ -230,9 +230,9 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
             # 踝关节电机（3自由度并联结构）
             "ankle_motors": ImplicitActuatorCfg(
                 joint_names_expr=[
-                    ".*ankle_1_3.*",
-                    ".*ankle_2_3.*",
-                    ".*ankle_3_3.*",
+                    ".*ankle_1_3_joint",
+                    ".*ankle_2_3_joint",
+                    ".*ankle_3_3_joint",
                 ],
                 # 踝关节可能需要不同的参数
                 stiffness=60.0,
@@ -242,7 +242,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
             ),
             # 脚趾电机
             "toe_motors": ImplicitActuatorCfg(
-                joint_names_expr=[".*toe.*"],
+                joint_names_expr=[".*toe_joint"],
                 # MJCF toe_motor: damping=0.2, armature=0.005
                 stiffness=40.0,
                 damping=1.0,
