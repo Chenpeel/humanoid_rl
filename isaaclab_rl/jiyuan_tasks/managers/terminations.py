@@ -262,9 +262,12 @@ def angular_velocity_out_of_bounds(
 ##
 
 
+from isaaclab.managers import SceneEntityCfg
+
 def joint_pos_out_of_limits(
     env: ManagerBasedRLEnv,
     margin: float = 0.05,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ) -> Tensor:
     """关节位置超出限制终止
 
@@ -273,12 +276,28 @@ def joint_pos_out_of_limits(
     Args:
         env: 环境实例
         margin: 安全边界 (rad)，距离限制的最小距离，默认 0.05rad (约2.86度)
+        asset_cfg: 资产配置，用于指定要检查的关节。默认为 "robot" 的所有关节。
 
     Returns:
         终止标志，形状 (num_envs,)
     """
-    joint_pos = env.scene["robot"].data.joint_pos
-    joint_limits = env.scene["robot"].data.soft_joint_pos_limits
+    # 获取资产
+    asset = env.scene[asset_cfg.name]
+    
+    # 获取关节位置和限制
+    joint_pos = asset.data.joint_pos
+    joint_limits = asset.data.soft_joint_pos_limits
+
+    # 如果指定了特定关节，进行筛选
+    if asset_cfg.joint_names is not None:
+        # 解析关节索引
+        # 注意：这里每步都会解析，可能会有微小的性能开销。
+        # 但这是目前在无状态函数中支持过滤的最简单方法。
+        indices, _ = asset.find_joints(asset_cfg.joint_names)
+        
+        # 筛选数据
+        joint_pos = joint_pos[:, indices]
+        joint_limits = joint_limits[:, indices]
 
     # 检查是否超出限制
     lower_limits = joint_limits[:, :, 0] + margin
