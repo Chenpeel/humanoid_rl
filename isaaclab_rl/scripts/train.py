@@ -543,6 +543,13 @@ def main():
     env_cfg.scene.num_envs = config.environment.num_envs
     env_cfg.episode_length_s = config.environment.get("episode_length_s", env_cfg.episode_length_s)
 
+    # 录制视频需要的特殊设置
+    if config.get("logging", {}).get("record_video", {}).get("enable", False):
+        # 强制开启渲染模式，否则无法获取图像数据
+        # 0: NO_GUI_OR_RENDERING, 1: PARTIAL_RENDERING, 2: FULL_RENDERING
+        env_cfg.sim.render_mode = 1
+        print("[INFO] 视频录制已启用，强制设置 sim.render_mode = 1 (PARTIAL_RENDERING)")
+
     # 创建环境
     print(f"\n[INFO] 创建环境: {TASK_ENV_MAP[config.task]}")
     env = gym.make(
