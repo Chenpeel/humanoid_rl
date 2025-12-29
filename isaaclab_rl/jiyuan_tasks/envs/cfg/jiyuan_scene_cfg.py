@@ -172,9 +172,9 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     )
 
     # 机器人代理（负责物理交互和控制）
-    # 指向已生成的 worldBody 根节点
+    # 指向 base_link，因为 worldBody 可能只是容器
     robot: ArticulationCfg = ArticulationCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/worldBody",
+        prim_path="{ENV_REGEX_NS}/Robot/.*base_link",
         # 不再在此处 spawn，因为 robot_asset 已经生成了 USD
         spawn=None,
         init_state=ArticulationCfg.InitialStateCfg(
