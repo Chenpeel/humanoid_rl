@@ -34,7 +34,7 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unif
+from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 # 导入场景配置
 from .jiyuan_scene_cfg import JiyuanSceneCfg
@@ -77,16 +77,16 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
             """策略观测（不包含命令）"""
 
             # 基础状态（17维）
-            base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unif(-0.1, 0.1))  # 3
-            base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unif(-0.2, 0.2))  # 3
-            projected_gravity = ObsTerm(func=mdp.projected_gravity, noise=Unif(-0.05, 0.05))  # 3
+            base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))  # 3
+            base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))  # 3
+            projected_gravity = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05))  # 3
 
             # 高度信息（相对于目标）
             base_height = ObsTerm(func=mdp.base_pos_z)  # 1
 
             # 关节状态（32维）
-            joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unif(-0.01, 0.01))  # 16
-            joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unif(-1.5, 1.5))  # 16
+            joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))  # 16
+            joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5))  # 16
 
             # 上一步动作（16维）
             actions = ObsTerm(func=mdp.last_action)  # 16
