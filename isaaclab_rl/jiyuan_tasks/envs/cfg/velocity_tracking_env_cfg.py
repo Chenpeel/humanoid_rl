@@ -236,7 +236,9 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
                 "asset_cfg": SceneEntityCfg("robot", joint_names=[
                     ".*hip_.*_joint",
                     ".*knee_joint",
-                    ".*ankle_[1-3]_3_joint",
+                    ".*ankle_cube_joint",
+                    ".*ankle_axle_joint",
+                    ".*foot_joint",
                     ".*toe_joint"
                 ]),
             },

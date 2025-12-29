@@ -83,7 +83,7 @@ from isaaclab.utils import configclass
 ISAAC_LAB_RL_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 
 # 默认模型名称（可通过环境变量 ROBOT_MODEL 覆盖）
-DEFAULT_ROBOT_MODEL = "jiyuan"
+DEFAULT_ROBOT_MODEL = "jiyuan_fit"
 
 
 def get_usd_path(model_name: str | None = None) -> str:
@@ -92,20 +92,13 @@ def get_usd_path(model_name: str | None = None) -> str:
     Args:
         model_name: 机器人模型名称
                    - 如果为 None，从环境变量 ROBOT_MODEL 读取
-                   - 如果环境变量也不存在，使用默认值 "jiyuan"
+                   - 如果环境变量也不存在，使用默认值 "jiyuan_fit"
 
     Returns:
         USD 文件的绝对路径字符串
 
     路径规则：
         assets/usd/{model_name}/{model_name}.usd
-
-    示例：
-        >>> get_usd_path("jiyuan")
-        '/path/to/project/assets/usd/jiyuan/jiyuan.usd'
-        >>> os.environ["ROBOT_MODEL"] = "unitree_go2"
-        >>> get_usd_path()
-        '/path/to/project/assets/usd/unitree_go2/unitree_go2.usd'
     """
     if model_name is None:
         model_name = os.environ.get("ROBOT_MODEL", DEFAULT_ROBOT_MODEL)
@@ -194,15 +187,12 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 # 髋关节roll：保持中立
                 ".*hip_roll.*": 0.0,
                 # 膝关节：弯曲约30度
-                # USD中左右膝关节限制相反（坐标系不同）
-                # right_knee: [-2.094, 0.000] -> 使用-0.5
-                # left_knee: [0.000, 2.094] -> 使用+0.5
                 "right_knee.*": -0.5,
                 "left_knee.*": 0.5,
-                # 踝关节：保持中立（3自由度并联结构）
-                ".*ankle_1_3.*": 0.0,
-                ".*ankle_2_3.*": 0.0,
-                ".*ankle_3_3.*": 0.0,
+                # 踝关节：串联结构 (Fit 模型)
+                ".*ankle_cube.*": 0.0,
+                ".*ankle_axle.*": 0.0,
+                ".*foot_joint.*": 0.0,
                 # 脚趾关节：略微抬起
                 ".*toe.*": 0.0,
             },
@@ -219,27 +209,18 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                     ".*hip_roll_joint",
                     ".*knee_joint",
                 ],
-                # PD 控制参数（从 MJCF default_classes.xml 映射）
-                # MJCF: damping=0.5, armature=0.01
-                # Isaac Lab: stiffness和damping需要根据实际调优
-                stiffness=80.0,  # 典型值：40-150
-                damping=2.0,  # 典型值：1-5
-                # 力矩限制（从 MJCF ctrlrange="-1 1" 映射）
-                # 使用 effort_limit_sim 替代废弃的 effort_limit
+                stiffness=80.0,
+                damping=2.0,
                 effort_limit_sim=150.0,
-                # 速度限制（弧度/秒）
-                # 注意: velocity_limit 不会被隐式执行器使用,仅用于文档
-                # velocity_limit_sim 尚未实现,保留velocity_limit用于记录
                 velocity_limit=10.0,
             ),
-            # 踝关节电机（3自由度并联结构）
+            # 踝关节电机（串联结构 - Fit 模型）
             "ankle_motors": ImplicitActuatorCfg(
                 joint_names_expr=[
-                    ".*ankle_1_3_joint",
-                    ".*ankle_2_3_joint",
-                    ".*ankle_3_3_joint",
+                    ".*ankle_cube_joint",
+                    ".*ankle_axle_joint",
+                    ".*foot_joint",
                 ],
-                # 踝关节可能需要不同的参数
                 stiffness=60.0,
                 damping=1.5,
                 effort_limit_sim=100.0,
@@ -248,7 +229,6 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
             # 脚趾电机
             "toe_motors": ImplicitActuatorCfg(
                 joint_names_expr=[".*toe_joint"],
-                # MJCF toe_motor: damping=0.2, armature=0.005
                 stiffness=40.0,
                 damping=1.0,
                 effort_limit_sim=50.0,
@@ -258,14 +238,13 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     )
 
     # 脚部接触传感器（用于奖励计算和步态检测）
-    # 暂时禁用以排除路径错误，先验证物理训练是否能跑通
-    contact_forces = None
-    # contact_forces = ContactSensorCfg(
-    #     prim_path="{ENV_REGEX_NS}/Robot/.*foot_link",
-    #     update_period=0.0,  # 每步更新
-    #     history_length=3,
-    #     debug_vis=False,
-    # )
+    # 重新启用，并使用更稳健的匹配方式
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*foot_link",
+        update_period=0.0,  # 每步更新
+        history_length=3,
+        debug_vis=False,
+    )
 
     # 高度扫描传感器（可选，用于地形感知）
     # TODO: 如果需要复杂地形导航，可以启用
