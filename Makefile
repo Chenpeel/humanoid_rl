@@ -218,6 +218,15 @@ train-rough: check-isaaclab
 		--config isaaclab_rl/configs/train_config.yaml \
 		--task rough $(ARGS)
 
+# 录制粗糙地形训练视频（短跑测试）
+video-rough: check-isaaclab
+	@echo "开始录制粗糙地形训练视频（50 iter, 200 steps）..."
+	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+		--config isaaclab_rl/configs/train_config.yaml \
+		--task rough \
+		--num_envs 64 \
+		--video --video_interval 10 --video_length 200 --max_iterations 50
+
 # 平坦地形训练（简化版）
 train-flat: check-isaaclab
 	@echo "开始平坦地形训练（使用配置文件）..."

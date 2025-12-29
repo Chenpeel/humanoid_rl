@@ -300,14 +300,25 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.ground.physics_material
 
-        # 设置 PhysX GPU 缓冲区
-        self.sim.physx.gpu_max_rigid_contact_count = 2**26
-        self.sim.physx.gpu_max_rigid_patch_count = 2**19
-        self.sim.physx.gpu_found_lost_pairs_capacity = 2**24
-        self.sim.physx.gpu_total_aggregate_pairs_capacity = 2**24
-        self.sim.physx.gpu_collision_stack_size = 2**28
-        self.sim.physx.gpu_heap_capacity = 2**28
-        self.sim.physx.gpu_temp_buffer_capacity = 2**26
+        # 动态设置 PhysX GPU 缓冲区
+        # 如果环境数较少（测试/录视频），使用小缓冲区以加快启动速度
+        if self.scene.num_envs <= 64:
+            self.sim.physx.gpu_max_rigid_contact_count = 2**21
+            self.sim.physx.gpu_max_rigid_patch_count = 2**13
+            self.sim.physx.gpu_found_lost_pairs_capacity = 2**21
+            self.sim.physx.gpu_total_aggregate_pairs_capacity = 2**21
+            self.sim.physx.gpu_collision_stack_size = 2**26
+            self.sim.physx.gpu_heap_capacity = 2**26
+            self.sim.physx.gpu_temp_buffer_capacity = 2**24
+        else:
+            # 大规模训练配置
+            self.sim.physx.gpu_max_rigid_contact_count = 2**26
+            self.sim.physx.gpu_max_rigid_patch_count = 2**19
+            self.sim.physx.gpu_found_lost_pairs_capacity = 2**24
+            self.sim.physx.gpu_total_aggregate_pairs_capacity = 2**24
+            self.sim.physx.gpu_collision_stack_size = 2**28
+            self.sim.physx.gpu_heap_capacity = 2**28
+            self.sim.physx.gpu_temp_buffer_capacity = 2**26
 
         # 设置传感器更新周期
         if self.scene.height_scanner is not None:
