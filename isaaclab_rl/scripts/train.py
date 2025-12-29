@@ -459,8 +459,8 @@ def create_runner(env: ManagerBasedRLEnv, ppo_cfg, config: ConfigDict, args):
         "num_steps_per_env": ppo_cfg.num_steps_per_env,
         "save_interval": ppo_cfg.save_interval,
         "seed": ppo_cfg.seed,
-        "empirical_normalization": ppo_cfg.empirical_normalization,
-        "obs_groups": ppo_cfg.obs_groups,  # 使用配置类中定义的obs_groups
+        "empirical_normalization": getattr(ppo_cfg, "empirical_normalization", None),
+        "obs_groups": ppo_cfg.obs_groups,
     }
 
     # 直接传入 RslRlVecEnvWrapper 包装的环境（已经实现了 VecEnv 接口）
