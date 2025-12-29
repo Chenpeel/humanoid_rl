@@ -548,30 +548,26 @@ def main():
 
     # 录制视频
     if config.get("logging", {}).get("record_video", {}).get("enable", False):
-        from isaaclab.utils.wrappers import VideoRecorder
-        video_interval = config.get("logging", {}).get("record_video", {}).get("interval", 50)
+        import gymnasium.wrappers as gym_wrappers
+        video_interval = config.get("logging", {}).get("record_video", {}).get("interval", 2000)
         video_length = config.get("logging", {}).get("record_video", {}).get("length", 200)
-        # 注意：这里的目录会在之后重置时被指定，但我们需要给一个基础路径
-        # 此时 runner 还没创建，log_dir 还没确定。
-        # 我们暂时使用临时路径，或者稍后在 create_runner 里再做些什么？
-        # VideoRecorder 需要一个固定的目录。
-        # 让我们提前计算 log_dir。
         
-        # 重新计算 log_dir (复制自 create_runner 的逻辑)
+        # 重新计算 log_dir
         log_dir_root = config.ppo.runner.get("log_dir", "logs")
-        ppo_cfg_temp = TASK_PPO_CFG_MAP[config.task]
-        exp_name = ppo_cfg_temp.experiment_name
-        
-        # 这里比较麻烦，因为 create_runner 会根据时间戳创建新目录。
-        # 我们最好还是把 VideoRecorder 的包装推迟到 runner 创建并确定目录之后？
-        # 但是 VideoRecorder 必须包裹 env，而 runner 需要 env。这是一个鸡生蛋的问题。
-        
-        # 妥协：我们使用一个通用的 video 目录，或者让 create_runner 逻辑提前。
-        # 或者，我们接受 video 存在 logs/videos 下，而不是 logs/exp_name/timestamp/videos 下。
-        # 还是让它存在 logs/videos 比较简单。
         video_root = os.path.join(log_dir_root, "videos")
         
-        env = VideoRecorder(env, video_root, step_interval=video_interval, video_length=video_length)
+        # 定义触发规则：根据 step 数量触发
+        # RSL_RL 通常每 iter 运行 24 步（num_steps_per_env）。
+        # 所以 interval * 24 大约是对应的 step 数。
+        step_interval = video_interval * 24
+        
+        env = gym_wrappers.RecordVideo(
+            env, 
+            video_root, 
+            step_trigger=lambda step: step % step_interval == 0,
+            video_length=video_length,
+            disable_logger=False
+        )
         print(f"[INFO] 已开启视频录制: 间隔 {video_interval} iters, 长度 {video_length} 步, 保存至 {video_root}")
 
     # 包装环境以适配 RSL_RL
