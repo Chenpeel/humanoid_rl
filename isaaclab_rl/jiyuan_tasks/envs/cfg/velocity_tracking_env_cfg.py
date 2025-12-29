@@ -228,21 +228,21 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
         )
 
         # 关节位置超限
-        # 只检查主动关节（电机），忽略被动关节（cube, page, axle等）
-        joint_pos_out_of_limits = DoneTerm(
-            func=terminations.joint_pos_out_of_limits,
-            params={
-                "margin": 0.01,
-                "asset_cfg": SceneEntityCfg("robot", joint_names=[
-                    ".*hip_.*_joint",
-                    ".*knee_joint",
-                    ".*ankle_cube_joint",
-                    ".*ankle_axle_joint",
-                    ".*foot_joint",
-                    ".*toe_joint"
-                ]),
-            },
-        )
+        # 暂时禁用，排查是否为误报
+        # joint_pos_out_of_limits = DoneTerm(
+        #     func=terminations.joint_pos_out_of_limits,
+        #     params={
+        #         "margin": 0.01,
+        #         "asset_cfg": SceneEntityCfg("robot", joint_names=[
+        #             ".*hip_.*_joint",
+        #             ".*knee_joint",
+        #             ".*ankle_cube_joint",
+        #             ".*ankle_axle_joint",
+        #             ".*foot_joint",
+        #             ".*toe_joint"
+        #         ]),
+        #     },
+        # )
 
     # 事件配置（领域随机化）
     @configclass
