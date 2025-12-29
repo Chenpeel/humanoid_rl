@@ -165,8 +165,8 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
             ),
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                 enabled_self_collisions=False,
-                solver_position_iteration_count=4,
-                solver_velocity_iteration_count=0,
+                solver_position_iteration_count=16,
+                solver_velocity_iteration_count=1,
             ),
         ),
     )
