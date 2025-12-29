@@ -455,8 +455,22 @@ def main():
     console.print(f"✓ 日志系统创建完成")
     console.print(f"  日志目录: {log_dir}")
 
+    # ==================== 创建检查点管理器 ====================
+    console.print("\n[bold cyan]9. 创建检查点管理器[/bold cyan]")
+
+    checkpoint_manager = create_checkpoint_manager(
+        log_dir=log_dir,
+        max_to_keep=5,
+        keep_best=True,
+        metric_name="mean_reward",
+        metric_mode="max",
+    )
+
+    console.print(f"✓ 检查点管理器创建完成")
+    console.print(f"  检查点目录: {log_dir}/checkpoints")
+
     # ==================== 创建训练器 ====================
-    console.print("\n[bold cyan]9. 创建PPO训练器[/bold cyan]")
+    console.print("\n[bold cyan]10. 创建PPO训练器[/bold cyan]")
 
     trainer = PPOTrainer(
         config=config,
@@ -471,7 +485,7 @@ def main():
     video_recorder = None
 
     if args.enable_video:
-        console.print("\n[bold cyan]10. 创建视频录制器[/bold cyan]")
+        console.print("\n[bold cyan]11. 创建视频录制器[/bold cyan]")
         from rl.utils.renderer import VideoRecorder
 
         try:
@@ -496,7 +510,7 @@ def main():
             video_recorder = None
 
     # ==================== JIT编译 ====================
-    step_number = "11" if args.enable_video else "10"
+    step_number = "12" if args.enable_video else "11"
     console.print(f"\n[bold cyan]{step_number}. JIT编译[/bold cyan]")
 
     # 检查缓存状态
