@@ -144,7 +144,7 @@ check-env: check-isaaclab
 #   make convert-usd MJCF=path/to/model.xml            # 指定输入文件
 #   make convert-usd USD_OUT=path/to/output.usd        # 指定输出文件
 #   make convert-usd MJCF=input.xml USD_OUT=output.usd # 同时指定
-MJCF ?= assets/xmls/models/jiyuan.fit.xml
+MJCF ?= assets/xmls/models/jiyuan_fit.xml
 USD_OUT ?= assets/usd/jiyuan_fit/jiyuan_fit.usd
 
 convert-usd: check-isaaclab
