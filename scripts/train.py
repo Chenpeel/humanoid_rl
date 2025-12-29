@@ -64,7 +64,7 @@ if True:
     from rl.training.logger import Logger, MetricsLogger
     from rl.training.ppo_trainer import PPOConfig, PPOTrainer, create_train_step_fn
     from rl.training.train_state import create_train_state
-    from rl.utils.performance_monitor import PerformanceMonitor, benchmark_train_step
+    from rl.utils.performance_monitor import PerformanceMonitor
     from rl.utils.checkpoint import create_checkpoint_manager
 
 
@@ -585,6 +585,10 @@ def main():
             env_idx = 0
             current_full_state = env_state  # 保持完整批量状态
 
+            # 从train_state中split出独立的RNG用于视频录制
+            # 避免污染训练状态的RNG
+            video_rng = jax.random.fold_in(train_state.rng, update)
+
             # 录制指定帧数
             for frame_idx in range(num_frames):
                 # 提取单个环境的 MJX 数据
@@ -606,7 +610,8 @@ def main():
 
                     if "command" in info_dict:
                         cmd = info_dict["command"]
-                        if hasattr(cmd, "__getitem__"):  # 检查是否可索引
+                        # 检查是否可索引且有shape属性
+                        if hasattr(cmd, "__getitem__") and hasattr(cmd, "shape"):
                             cmd_single = cmd[env_idx] if len(
                                 cmd.shape) > 1 else cmd
                             metrics.update({
@@ -617,7 +622,8 @@ def main():
 
                     if "actual_velocity" in info_dict:
                         vel = info_dict["actual_velocity"]
-                        if hasattr(vel, "__getitem__"):
+                        # 检查是否可索引且有shape属性
+                        if hasattr(vel, "__getitem__") and hasattr(vel, "shape"):
                             vel_single = vel[env_idx] if len(
                                 vel.shape) > 1 else vel
                             metrics.update({
@@ -643,7 +649,7 @@ def main():
 
                 # 检测 episode 终止，自动重置
                 if new_single_state.done:
-                    rng, reset_rng = jax.random.split(train_state.rng)
+                    video_rng, reset_rng = jax.random.split(video_rng)
                     new_single_state = env.reset(reset_rng)
 
                 # 更新批量状态（仅更新 env_idx=0）
@@ -708,12 +714,13 @@ def main():
             # 计算当前学习率（近似值）
             current_step = update
             if current_step < warmup_steps:
+                # 防止warmup_steps为0导致除零
                 current_lr = args.learning_rate * \
-                    (current_step / warmup_steps)
+                    (current_step / max(1, warmup_steps))
             else:
-                progress_ratio = (current_step - warmup_steps) / (
-                    total_updates - warmup_steps
-                )
+                # 防止total_updates == warmup_steps导致除零
+                denominator = max(1, total_updates - warmup_steps)
+                progress_ratio = (current_step - warmup_steps) / denominator
                 current_lr = 0.5 * args.learning_rate * \
                     (1 + jp.cos(jp.pi * progress_ratio))
 
