@@ -152,7 +152,8 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     # - UsdFileCfg 会在这个位置创建对 jiyuan.usd 的引用
     # - Isaac Lab 会自动查找 articulation root（带有 ArticulationRootAPI 的 prim）
     robot: ArticulationCfg = ArticulationCfg(
-        prim_path="{ENV_REGEX_NS}/Robot",
+        # 明确指向 MJCF 导入器生成的 worldBody，解决发现多个根节点的错误
+        prim_path="{ENV_REGEX_NS}/Robot/worldBody",
         spawn=UsdFileCfg(
             # USD 文件路径（自动根据模型名称查找）
             # 从环境变量 ROBOT_MODEL 读取，默认为 "jiyuan"
@@ -253,9 +254,9 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     )
 
     # 脚部接触传感器（用于奖励计算和步态检测）
-    # 已修复：为foot/toe bodies添加了CollisionAPI
+    # 使用递归匹配，确保能找到嵌套在任意层级下的脚部链接
     contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/base_link/.*foot.*",
+        prim_path="{ENV_REGEX_NS}/Robot/.*foot.*",
         update_period=0.0,  # 每步更新
         history_length=3,
         debug_vis=False,
