@@ -1,4 +1,4 @@
-<mujoco model="jiyuan_fit_rough_terrain">
+<mujoco model="jiyuan_fit_flat_terrain">
   <compiler angle="radian" />
 
   <!-- 仿真选项 -->
@@ -98,35 +98,9 @@
     <!-- 光照 -->
     <light diffuse="0.8 0.8 0.8" pos="0 0 4" dir="0 0 -1" />
 
-    <!-- 地面：粗糙地形（较低摩擦力） -->
+    <!-- 地面：平坦地形 -->
     <geom name="ground" type="plane" size="0 0 0.05" material="ground"
-      condim="3" contype="1" conaffinity="62" friction="0.8 0.01 0.01" />
-
-    <!-- 障碍物：随机分布的箱形障碍物（避免圆柱体与mesh碰撞） -->
-    <body name="obstacle_box_1" pos="1.0 0.5 0.05">
-      <geom name="obstacle_box_1_geom" type="box" size="0.1 0.1 0.05" rgba="0.6 0.3 0.2 1" />
-    </body>
-    <body name="obstacle_box_2" pos="1.5 -0.3 0.08">
-      <geom name="obstacle_box_2_geom" type="box" size="0.08 0.08 0.08" rgba="0.6 0.3 0.2 1" />
-    </body>
-    <body name="obstacle_box_3" pos="2.0 0.2 0.06">
-      <geom name="obstacle_box_3_geom" type="box" size="0.06 0.06 0.06" rgba="0.4 0.4 0.5 1" />
-    </body>
-    <body name="obstacle_box_4" pos="-1.0 0.8 0.04">
-      <geom name="obstacle_box_4_geom" type="box" size="0.12 0.12 0.04" rgba="0.6 0.3 0.2 1" />
-    </body>
-    <body name="obstacle_box_5" pos="-1.5 -0.5 0.07">
-      <geom name="obstacle_box_5_geom" type="box" size="0.07 0.05 0.07" rgba="0.4 0.4 0.5 1" />
-    </body>
-    <body name="obstacle_box_6" pos="0.5 1.5 0.05">
-      <geom name="obstacle_box_6_geom" type="box" size="0.1 0.1 0.05" rgba="0.6 0.3 0.2 1" />
-    </body>
-    <body name="obstacle_box_7" pos="-0.8 -1.2 0.05">
-      <geom name="obstacle_box_7_geom" type="box" size="0.09 0.09 0.05" rgba="0.5 0.3 0.4 1" />
-    </body>
-    <body name="obstacle_box_8" pos="2.2 -0.8 0.06">
-      <geom name="obstacle_box_8_geom" type="box" size="0.08 0.12 0.06" rgba="0.3 0.5 0.4 1" />
-    </body>
+      condim="3" contype="1" conaffinity="62" friction="1.0 0.01 0.01" />
 
     <!-- 机器人 -->
     <body name="base_link" pos="0.00000000 0.00000000 0.99150000" quat="0.70710678 0.70710678 0.00000000 0.00000000" childclass="robot">

@@ -4,7 +4,7 @@
 # 环境配置
 env:
     name: "WalkingEnv"
-    model_path: "assets/xmls/scenes/flat_terrain.xml"  # MuJoCo模型文件路径
+    model_path: "assets/xmls/scenes/jiyuan_fit_flat_terrain.xml"  # MuJoCo场景文件路径
     max_steps: 2000
     dt: 0.02  # 时间步长 (50Hz)
     frame_skip: 1  # 动作重复次数

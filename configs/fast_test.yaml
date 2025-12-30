@@ -1,19 +1,19 @@
-# ==================== Fast Test Configuration ====================
-# Optimized for GTX 1080ti 11GB GPU
-# Goal: Quickly test all walking rewards within ~5-10 minutes
+# ==================== GTX 1080ti 优化配置 ====================
+# 专为 GTX 1080ti 11GB GPU 优化
+# 降低内存使用，避免段错误
 #
 # ==================== Scene Configuration ====================
-scene: flat_terrain
+scene: jiyuan_fit_flat
 env_type: walking
 
 # ==================== Environment Configuration ====================
-num_envs: 4096
+# 降低并行环境数以减少内存使用
+num_envs: 512
 num_steps: 64
 max_episode_steps: 2000
 
-# Batch size = 4096 x 64 = 262,144
-# Memory usage: ~8-10GB (safe for GTX 1080ti 11GB)
-# Compilation time: ~10-20 minutes first time (faster than 4090 config)
+# Batch size = 512 x 64 = 32,768 (减半)
+# Memory usage: ~4-6GB (安全用于 GTX 1080ti 11GB)
 
 # ==================== PPO Hyperparameters ====================
 num_epochs: 4
@@ -26,31 +26,30 @@ entropy_coef: 0.01
 max_grad_norm: 0.5
 
 # ==================== Training Configuration ====================
-# Quick test: only 10 iterations, ~5-10 minutes
-total_timesteps: 2621440 # 10 iterations x 4096 envs x 64 steps
-log_interval: 2 # More frequent logging
-eval_interval: 5
-save_interval: 10
+# 保持相同的训练步数，但用更小的batch
+# 训练时间会增加，但内存使用降低
+total_timesteps: 2621440 # iterations x 512 envs x 64 steps
+log_interval: 2
+eval_interval: 10
+save_interval: 20
 
 # ==================== Optimizer Configuration ====================
 learning_rate: 3.0e-4
 final_lr_fraction: 0.02
 
 # ==================== Network Configuration ====================
-# Smaller network for faster compilation and training
+# 保持较小的网络结构
 hidden_dims: [256, 256, 128]
 shared_backbone: true
 
 # ==================== Video Recording Configuration ====================
-# Enable video recording for quick visual verification
-enable_video: true
-video_interval: 5 # Record every 5 updates
-video_frames: 180 # 3 seconds @ 60fps
+# 禁用视频录制以减少内存压力
+enable_video: false
+video_interval: 10
+video_frames: 180
 video_camera: "track"
 
 # ==================== Walking Task Reward Weights ====================
-# Complete test of all 10 walking rewards
-# Reference: src/rl/rewards/walking_rewards.py:481-497
 reward_weights:
     # 1. Main objective: forward movement
     forward_velocity: 1.5
