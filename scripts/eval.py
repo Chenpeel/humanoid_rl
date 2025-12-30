@@ -34,13 +34,14 @@ console = Console()
 
 def load_checkpoint(checkpoint_path: str, network, rng):
     """加载检查点"""
-    import orbax.checkpoint as ocp
+    from flax import serialization
 
-    checkpointer = ocp.PyTreeCheckpointer()
-    restored = checkpointer.restore(checkpoint_path)
+    # 读取Flax序列化的检查点文件
+    with open(checkpoint_path, 'rb') as f:
+        checkpoint_data = serialization.msgpack_restore(f.read())
 
-    params = restored['params']
-    step = restored['step']
+    params = checkpoint_data['params']
+    step = checkpoint_data['step']
 
     console.print(f"[green]✓ 加载检查点: step={step}[/green]")
     return params, step
@@ -89,15 +90,14 @@ def evaluate_policy(
             # 尝试交互式查看器
             console.print("[cyan]启动交互式查看器...[/cyan]")
             import mujoco
-            mj_model = mujoco.MjModel.from_xml_path(env.xml_path)
+            mj_model = env.mj_model
             mj_data = mujoco.MjData(mj_model)
             viewer = InteractiveViewer(mj_model, mj_data)
             console.print("[green]✓ 交互式查看器已启动[/green]")
         except Exception as e:
             console.print(f"[yellow]⚠ 无法启动交互式查看器: {e}[/yellow]")
             console.print("[cyan]使用离线渲染器...[/cyan]")
-            import mujoco
-            mj_model = mujoco.MjModel.from_xml_path(env.xml_path)
+            mj_model = env.mj_model
             renderer = MujocoRenderer(mj_model, width=1280, height=720)
 
             if save_video and video_path:
@@ -125,6 +125,11 @@ def evaluate_policy(
                 rng, reset_rng = jax.random.split(rng)
                 env_state = env.reset(reset_rng)
 
+                # 获取并显示命令
+                if "command" in env_state.info:
+                    cmd = env_state.info["command"]
+                    console.print(f"[yellow]Episode {episode+1} 命令: vx={cmd[0]:.3f}, vy={cmd[1]:.3f}, vyaw={cmd[2]:.3f}[/yellow]")
+
                 episode_return = 0.0
                 episode_length = 0
                 done = False
@@ -135,6 +140,10 @@ def evaluate_policy(
                     mean, log_std, _ = network.apply(
                         params, env_state.obs[None, :])
                     action = mean[0]  # 使用均值，不加噪声
+
+                    # 调试：显示前几步的动作和奖励
+                    if step_count < 5:
+                        console.print(f"  Step {step_count}: action range=[{action.min():.3f}, {action.max():.3f}], reward={env_state.reward:.3f}")
 
                     # 环境步进
                     env_state = env.step(env_state, action)
@@ -216,8 +225,8 @@ def main():
     parser.add_argument('--checkpoint', type=str, required=True, help='检查点路径')
     parser.add_argument('--xml-path', type=str, default=None,
                         help='MuJoCo XML路径（默认使用Open_Duck_Playground）')
-    parser.add_argument('--use-local-urdf', action='store_true',
-                        help='使用本地assets/urdf中的URDF模型')
+    parser.add_argument('--use-local-mjcf', action='store_true',
+                        help='使用本地assets/mjcf中的MJCF模型')
     parser.add_argument('--num-episodes', type=int,
                         default=10, help='评估episode数')
     parser.add_argument('--render', type=int, default=0,
@@ -244,10 +253,9 @@ def main():
 
     # 处理XML路径
     xml_path = args.xml_path
-    if args.use_local_urdf:
-        console.print("[cyan]使用本地URDF模型...[/cyan]")
-        from rl.utils import setup_urdf
-        xml_path = setup_urdf()
+    if args.use_local_mjcf:
+        console.print("[cyan]使用本地MJCF模型...[/cyan]")
+        xml_path = "assets/xmls/scenes/flat_terrain.xml"
     elif xml_path is None:
         # 默认使用场景文件
         xml_path = "../assets/xmls/scene.xml"

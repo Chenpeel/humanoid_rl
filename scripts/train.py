@@ -153,8 +153,14 @@ def main():
         "--scene",
         type=str,
         default=yaml_config.get("scene", "flat_terrain"),
-        choices=["flat_terrain", "rough_terrain"],
-        help="选择训练场景"
+        choices=["flat_terrain", "rough_terrain", "jiyuan_fit_rough"],
+        help="选择训练场景: flat_terrain=平坦地面, rough_terrain=粗糙地形(jiyuan), jiyuan_fit_rough=粗糙地形(jiyuan_fit)"
+    )
+    parser.add_argument(
+        "--xml-path",
+        type=str,
+        default=None,
+        help="直接指定XML场景文件路径（覆盖--scene参数）"
     )
 
     # 环境类型配置
@@ -306,9 +312,13 @@ def main():
     # ==================== 创建环境 ====================
     console.print("\n[bold cyan]3. 创建MJX环境[/bold cyan]")
 
-    scene_path = f"assets/xmls/scenes/{args.scene}.xml"
-    if not os.path.exists(os.path.join(os.path.dirname(__file__), scene_path)):
-        pass
+    # 确定场景路径
+    if args.xml_path:
+        scene_path = args.xml_path
+        console.print(f"使用自定义XML路径: {scene_path}")
+    else:
+        scene_path = f"assets/xmls/scenes/{args.scene}.xml"
+        console.print(f"使用预设场景: {args.scene}")
 
     # 根据环境类型创建环境
     if args.env_type == "walking":

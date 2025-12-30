@@ -187,6 +187,15 @@ class PPOTrainer:
             "mean_advantage": jp.mean(advantages),
         }
 
+        # 从环境的 info 字典中收集额外统计信息
+        # 注意：env_state.info 包含每个环境的统计信息
+        if env_state.info:
+            for key, value in env_state.info.items():
+                # 跳过已经存在的键，避免覆盖
+                if key not in info:
+                    # 计算所有环境的平均值
+                    info[key] = jp.mean(value)
+
         return batch, env_state, info
 
     def update_policy(
@@ -440,6 +449,15 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
             "mean_value": jp.mean(values),
             "mean_advantage": jp.mean(advantages),
         }
+
+        # 从环境的 info 字典中收集额外统计信息
+        # 注意：env_state.info 包含每个环境的统计信息
+        if env_state.info:
+            for key, value in env_state.info.items():
+                # 跳过已经存在的键，避免覆盖
+                if key not in info:
+                    # 计算所有环境的平均值
+                    info[key] = jp.mean(value)
 
         return batch, env_state, info
 
