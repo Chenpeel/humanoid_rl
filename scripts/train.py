@@ -324,7 +324,15 @@ def main():
         scene_path = args.xml_path
         console.print(f"使用自定义XML路径: {scene_path}")
     else:
-        scene_path = f"assets/xmls/scenes/{args.scene}.xml"
+        # 场景名称到文件名的映射
+        scene_file_map = {
+            "flat_terrain": "flat_terrain",
+            "rough_terrain": "rough_terrain",
+            "jiyuan_fit_flat": "jiyuan_fit_flat_terrain",
+            "jiyuan_fit_rough": "jiyuan_fit_rough_terrain",
+        }
+        scene_file = scene_file_map.get(args.scene, args.scene)
+        scene_path = f"assets/xmls/scenes/{scene_file}.xml"
         console.print(f"使用预设场景: {args.scene}")
 
     # 根据环境类型创建环境
