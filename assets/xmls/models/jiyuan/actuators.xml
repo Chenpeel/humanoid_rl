@@ -2,17 +2,17 @@
 <mujoco>
   <!-- Actuators -->
   <actuator>
-    <motor name="right_hip_pitch_engine_joint_ctrl" joint="right_hip_pitch_engine_joint"
+    <motor name="right_hip_pitch_joint_ctrl" joint="right_hip_cube_joint"
       class="motor" />
-    <motor name="right_hip_yaw_engine_joint_ctrl" joint="right_hip_yaw_engine_joint" class="motor" />
+    <motor name="right_hip_yaw_joint_ctrl" joint="right_thigh_joint" class="motor" />
     <motor name="right_hip_roll_joint_ctrl" joint="right_hip_roll_joint" class="motor" />
     <motor name="right_knee_joint_ctrl" joint="right_knee_joint" class="motor" />
     <motor name="right_ankle_1_3_joint_ctrl" joint="right_ankle_1_3_joint" class="motor" />
     <motor name="right_ankle_2_3_joint_ctrl" joint="right_ankle_2_3_joint" class="motor" />
     <motor name="right_ankle_3_3_joint_ctrl" joint="right_ankle_3_3_joint" class="motor" />
     <motor name="right_toe_joint_ctrl" joint="right_toe_joint" class="motor" />
-    <motor name="left_hip_pitch_engine_joint_ctrl" joint="left_hip_pitch_engine_joint" class="motor" />
-    <motor name="left_hip_yaw_engine_joint_ctrl" joint="left_hip_yaw_engine_joint" class="motor" />
+    <motor name="left_hip_pitch_joint_ctrl" joint="left_hip_cube_joint" class="motor" />
+    <motor name="left_hip_yaw_joint_ctrl" joint="left_thigh_joint" class="motor" />
     <motor name="left_hip_roll_joint_ctrl" joint="left_hip_roll_joint" class="motor" />
     <motor name="left_knee_joint_ctrl" joint="left_knee_joint" class="motor" />
     <motor name="left_ankle_1_3_joint_ctrl" joint="left_ankle_1_3_joint" class="motor" />

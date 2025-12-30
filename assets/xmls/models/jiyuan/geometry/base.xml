@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <mujoco>
-  <geom name="base_link_collision" type="sphere" size="0.12"
-    pos="0 0.05 0" class="collision" />
+  <geom name="base_link_collision" type="capsule" fromto="0 0.04 0 0 0.14 0" size="0.10"
+    class="collision" />
   <geom name="base_link_visual" pos="0 0 0" quat="1.0 0.0 0.0 0.0" type="mesh" mesh="base_link.STL"
     class="visual" />
   <site name="base_link_site" pos="0 0 0" quat="1 0 0 0" />

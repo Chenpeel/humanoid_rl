@@ -1,64 +1,68 @@
 <?xml version='1.0' encoding='utf-8'?>
 <mujoco>
-  <!-- Mesh assets -->
+  <!-- Mesh assets extracted from jiyuan_fit.xml -->
   <asset>
     <mesh name="base_link.STL" file="../../../../meshes/base_link.STL" />
-    <mesh name="right_hip_pitch_engine_link.STL"
-      file="../../../../meshes/right_hip_pitch_engine_link.STL" />
-    <mesh name="right_hip_yaw_engine_link.STL"
-      file="../../../../meshes/right_hip_yaw_engine_link.STL" />
+    <mesh name="right_hip_pitch_engine_link.STL" file="../../../../meshes/right_hip_pitch_engine_link.STL" />
+    <mesh name="right_hip_yaw_engine_link.STL" file="../../../../meshes/right_hip_yaw_engine_link.STL" />
     <mesh name="right_hip_roll_link.STL" file="../../../../meshes/right_hip_roll_link.STL" />
     <mesh name="right_hip_cube_link.STL" file="../../../../meshes/right_hip_cube_link.STL" />
     <mesh name="right_thigh_link.STL" file="../../../../meshes/right_thigh_link.STL" />
     <mesh name="right_shin_link.STL" file="../../../../meshes/right_shin_link.STL" />
     <mesh name="right_ankle_1_3_link.STL" file="../../../../meshes/right_ankle_1_3_link.STL" />
-    <mesh name="right_ankle_1_3_cube_link.STL"
-      file="../../../../meshes/right_ankle_1_3_cube_link.STL" />
-    <mesh name="right_ankle_1_3_page_link.STL"
-      file="../../../../meshes/right_ankle_1_3_page_link.STL" />
+    <mesh name="right_ankle_1_3_cube_link.STL" file="../../../../meshes/right_ankle_1_3_cube_link.STL" />
+    <mesh name="right_ankle_1_3_page_link.STL" file="../../../../meshes/right_ankle_1_3_page_link.STL" />
     <mesh name="right_ankle_2_3_link.STL" file="../../../../meshes/right_ankle_2_3_link.STL" />
-    <mesh name="right_ankle_2_3_cube_link.STL"
-      file="../../../../meshes/right_ankle_2_3_cube_link.STL" />
-    <mesh name="right_ankle_2_3_page_link.STL"
-      file="../../../../meshes/right_ankle_2_3_page_link.STL" />
+    <mesh name="right_ankle_2_3_cube_link.STL" file="../../../../meshes/right_ankle_2_3_cube_link.STL" />
+    <mesh name="right_ankle_2_3_page_link.STL" file="../../../../meshes/right_ankle_2_3_page_link.STL" />
     <mesh name="right_ankle_3_3_link.STL" file="../../../../meshes/right_ankle_3_3_link.STL" />
-    <mesh name="right_ankle_3_3_cube_link.STL"
-      file="../../../../meshes/right_ankle_3_3_cube_link.STL" />
-    <mesh name="right_ankle_3_3_page_link.STL"
-      file="../../../../meshes/right_ankle_3_3_page_link.STL" />
+    <mesh name="right_ankle_3_3_cube_link.STL" file="../../../../meshes/right_ankle_3_3_cube_link.STL" />
+    <mesh name="right_ankle_3_3_page_link.STL" file="../../../../meshes/right_ankle_3_3_page_link.STL" />
     <mesh name="right_ankle_cube_link.STL" file="../../../../meshes/right_ankle_cube_link.STL" />
     <mesh name="right_ankle_axle_link.STL" file="../../../../meshes/right_ankle_axle_link.STL" />
     <mesh name="right_foot_link.STL" file="../../../../meshes/right_foot_link.STL" />
     <mesh name="right_toe_link.STL" file="../../../../meshes/right_toe_link.STL" />
-    <!-- 左腿 STL 文件（已预先镜像，不再使用 scale 参数）-->
-    <!-- 注意：使用独立的左腿 STL 文件以避免 Isaac Sim MJCF 导入器 bug -->
-    <!-- 参考: https://github.com/isaac-sim/IsaacSim/issues/340 -->
-    <mesh name="left_hip_pitch_engine_link.STL"
-      file="../../../../meshes/left_hip_pitch_engine_link.STL" />
-    <mesh name="left_hip_yaw_engine_link.STL"
-      file="../../../../meshes/left_hip_yaw_engine_link.STL" />
+    <mesh name="left_hip_pitch_engine_link.STL" file="../../../../meshes/left_hip_pitch_engine_link.STL" />
+    <mesh name="left_hip_yaw_engine_link.STL" file="../../../../meshes/left_hip_yaw_engine_link.STL" />
     <mesh name="left_hip_roll_link.STL" file="../../../../meshes/left_hip_roll_link.STL" />
     <mesh name="left_hip_cube_link.STL" file="../../../../meshes/left_hip_cube_link.STL" />
     <mesh name="left_thigh_link.STL" file="../../../../meshes/left_thigh_link.STL" />
     <mesh name="left_shin_link.STL" file="../../../../meshes/left_shin_link.STL" />
     <mesh name="left_ankle_1_3_link.STL" file="../../../../meshes/left_ankle_1_3_link.STL" />
-    <mesh name="left_ankle_1_3_cube_link.STL"
-      file="../../../../meshes/left_ankle_1_3_cube_link.STL" />
-    <mesh name="left_ankle_1_3_page_link.STL"
-      file="../../../../meshes/left_ankle_1_3_page_link.STL" />
+    <mesh name="left_ankle_1_3_cube_link.STL" file="../../../../meshes/left_ankle_1_3_cube_link.STL" />
+    <mesh name="left_ankle_1_3_page_link.STL" file="../../../../meshes/left_ankle_1_3_page_link.STL" />
     <mesh name="left_ankle_2_3_link.STL" file="../../../../meshes/left_ankle_2_3_link.STL" />
-    <mesh name="left_ankle_2_3_cube_link.STL"
-      file="../../../../meshes/left_ankle_2_3_cube_link.STL" />
-    <mesh name="left_ankle_2_3_page_link.STL"
-      file="../../../../meshes/left_ankle_2_3_page_link.STL" />
+    <mesh name="left_ankle_2_3_cube_link.STL" file="../../../../meshes/left_ankle_2_3_cube_link.STL" />
+    <mesh name="left_ankle_2_3_page_link.STL" file="../../../../meshes/left_ankle_2_3_page_link.STL" />
     <mesh name="left_ankle_3_3_link.STL" file="../../../../meshes/left_ankle_3_3_link.STL" />
-    <mesh name="left_ankle_3_3_cube_link.STL"
-      file="../../../../meshes/left_ankle_3_3_cube_link.STL" />
-    <mesh name="left_ankle_3_3_page_link.STL"
-      file="../../../../meshes/left_ankle_3_3_page_link.STL" />
+    <mesh name="left_ankle_3_3_cube_link.STL" file="../../../../meshes/left_ankle_3_3_cube_link.STL" />
+    <mesh name="left_ankle_3_3_page_link.STL" file="../../../../meshes/left_ankle_3_3_page_link.STL" />
     <mesh name="left_ankle_cube_link.STL" file="../../../../meshes/left_ankle_cube_link.STL" />
     <mesh name="left_ankle_axle_link.STL" file="../../../../meshes/left_ankle_axle_link.STL" />
     <mesh name="left_foot_link.STL" file="../../../../meshes/left_foot_link.STL" />
     <mesh name="left_toe_link.STL" file="../../../../meshes/left_toe_link.STL" />
+    
+    <!-- Custom Collision Meshes -->
+    <mesh name="toe_wedge" vertex="
+      -0.035  0.025 -0.025
+       0.035  0.025 -0.025
+      -0.035  0.025  0.025
+       0.035  0.025  0.025
+      -0.035 -0.025 -0.025
+       0.035 -0.025 -0.025
+      -0.035 -0.025 -0.015
+       0.035 -0.025 -0.015" />
+       
+    <mesh name="foot_wedge" vertex="
+        -0.028  0.030 -0.048
+         0.028  0.030 -0.048
+        -0.028  0.030  0.064
+         0.028  0.030  0.064
+        -0.028 -0.030  0.064
+         0.028 -0.030  0.064
+        -0.028 -0.090 -0.028
+         0.028 -0.090 -0.028
+        -0.028 -0.090 -0.048
+         0.028 -0.090 -0.048" />
   </asset>
 </mujoco>
