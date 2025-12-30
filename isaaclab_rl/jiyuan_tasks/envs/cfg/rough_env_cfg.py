@@ -186,7 +186,7 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
         time_out = DoneTerm(func=mdp.time_out, time_out=True)
         fallen = DoneTerm(
             func=terminations.is_fallen,
-            params={"min_height": 0.15, "max_roll": 1.0, "max_pitch": 1.0},
+            params={"min_height": 0.25, "max_roll": 0.7, "max_pitch": 0.7},
         )
         velocity_out_of_bounds = DoneTerm(
             func=terminations.linear_velocity_out_of_bounds,

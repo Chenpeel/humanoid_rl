@@ -55,7 +55,7 @@ ppo:
 
   # 训练循环参数
   runner:
-    seed: 42
+    seed: 78
     device: "cuda:0"
     num_steps_per_env: 24
     max_iterations: 30000
