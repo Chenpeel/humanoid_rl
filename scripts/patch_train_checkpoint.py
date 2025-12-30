@@ -86,11 +86,12 @@ if 'checkpoint_manager.save_checkpoint' not in content:
 if '最终检查点' not in content and '训练完成' in content:
     content = content.replace(
         '''        # ==================== 训练完成 ====================
-        logger.print_summary(
+        print_summary(
             "✓ 训练完成！\\n"
             f"总步数: {train_state.step}\\n"
             f"总环境步数: {train_state.env_steps:,}",
             style="green",
+            console=console,
         )''',
         '''        # ==================== 训练完成 ====================
         # 保存最终检查点
@@ -109,11 +110,12 @@ if '最终检查点' not in content and '训练完成' in content:
             for key, value in best_info.items():
                 console.print(f"  {key}: {value}")
 
-        logger.print_summary(
+        print_summary(
             "✓ 训练完成！\\n"
             f"总步数: {train_state.step}\\n"
             f"总环境步数: {train_state.env_steps:,}",
             style="green",
+            console=console,
         )'''
     )
 

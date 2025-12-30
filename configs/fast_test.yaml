@@ -9,7 +9,7 @@ env_type: walking
 # ==================== Environment Configuration ====================
 # 降低并行环境数以减少内存使用
 num_envs: 512
-num_steps: 64
+num_steps: 8
 max_episode_steps: 2000
 
 # Batch size = 512 x 64 = 32,768 (减半)
@@ -28,7 +28,7 @@ max_grad_norm: 0.5
 # ==================== Training Configuration ====================
 # 保持相同的训练步数，但用更小的batch
 # 训练时间会增加，但内存使用降低
-total_timesteps: 2621440 # iterations x 512 envs x 64 steps
+total_timesteps: 262144 # iterations x 512 envs x 64 steps
 log_interval: 2
 eval_interval: 10
 save_interval: 20

@@ -61,7 +61,9 @@ if True:
     )
     from rl.models.networks import ActorCriticNetwork, count_parameters
     from rl.models.optimizer import create_ppo_optimizer_cosine
-    from rl.training.logger import Logger, MetricsLogger
+    from rl.training.logger import (
+        Logger, MetricsLogger, create_training_display, print_summary
+    )
     from rl.training.ppo_trainer import PPOConfig, PPOTrainer, create_train_step_fn
     from rl.training.train_state import create_train_state
     from rl.utils.performance_monitor import PerformanceMonitor
@@ -773,14 +775,6 @@ def main():
                     prefix="train",
                 )
 
-                # 终端输出
-                logger.print_training_status(
-                    step=train_state.step,
-                    total_steps=config.num_updates,
-                    env_steps=train_state.env_steps,
-                    metrics=avg_metrics,
-                )
-
                 # 重置指标累积器
                 metrics_logger.reset()
 
@@ -797,7 +791,8 @@ def main():
         return train_state, env_state, info
 
     # ==================== UI层：创建显示并绑定回调 ====================
-    training_display = logger.create_training_display(
+    training_display = create_training_display(
+        console=console,
         total=config.num_updates,
         steps_per_epoch=1,  # 每个update作为一个epoch
         description="PPO训练"
@@ -842,18 +837,19 @@ def main():
             for key, value in best_info.items():
                 console.print(f"  {key}: {value}")
 
-        logger.print_summary(
+        print_summary(
             "✓ 训练完成！\n"
             f"总步数: {train_state.step}\n"
             f"总环境步数: {train_state.env_steps:,}",
             style="green",
+            console=console,
         )
 
     except KeyboardInterrupt:
-        logger.print_summary("训练被用户中断", style="yellow")
+        print_summary("训练被用户中断", style="yellow", console=console)
 
     except Exception as e:
-        logger.print_summary(f"训练出错: {e}", style="red")
+        print_summary(f"训练出错: {e}", style="red", console=console)
         import traceback
 
         console.print(traceback.format_exc())
