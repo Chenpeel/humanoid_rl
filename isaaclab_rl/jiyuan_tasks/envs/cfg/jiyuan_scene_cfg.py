@@ -243,16 +243,15 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     #     debug_vis=False,
     # )
 
-    # 高度扫描传感器（可选，用于地形感知）
-    # TODO: 如果需要复杂地形导航，可以启用
-    # height_scanner = RayCasterCfg(
-    #     prim_path="{ENV_REGEX_NS}/Robot/base_link",
-    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-    #     attach_yaw_only=True,
-    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
-    #     debug_vis=False,
-    #     mesh_prim_paths=["/World/ground"],
-    # )
+    # 高度扫描传感器（用于地形感知和课程学习兼容性）
+    height_scanner = RayCasterCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*base_link",
+        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
+        ray_alignment="yaw",
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
+        debug_vis=False,
+        mesh_prim_paths=["/World/ground"],
+    )
 
 
 ##

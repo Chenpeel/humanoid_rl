@@ -421,8 +421,17 @@ def create_runner(env: ManagerBasedRLEnv, ppo_cfg, config: ConfigDict, args):
     # 如果恢复训练，确定运行目录
     if args.resume:
         if args.load_run:
-            # 指定了运行目录
-            log_dir = os.path.join(log_root_path, args.load_run)
+            # 检查是否是绝对路径或相对于当前目录的路径
+            if os.path.exists(args.load_run):
+                log_dir = os.path.abspath(args.load_run)
+            # 检查是否是相对于实验根目录的路径
+            elif os.path.exists(os.path.join(log_root_path, args.load_run)):
+                log_dir = os.path.join(log_root_path, args.load_run)
+            # 检查是否是相对于日志总目录的路径（支持跨实验加载，如 ../experiment/run）
+            elif os.path.exists(os.path.join(log_dir_root, args.load_run)):
+                log_dir = os.path.join(log_dir_root, args.load_run)
+            else:
+                raise ValueError(f"找不到运行目录: {args.load_run}")
         else:
             # 加载最新的运行
             runs = [d for d in os.listdir(log_root_path) if os.path.isdir(os.path.join(log_root_path, d))]

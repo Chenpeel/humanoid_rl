@@ -97,12 +97,12 @@ class StandingPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     # 观测组映射
     obs_groups = {"policy": ["policy"], "critic": ["policy"]}
 
-    # Actor-Critic 网络配置（稍小一些）
+    # Actor-Critic 网络配置（与速度跟踪任务保持一致，以便课程学习切换）
     policy = RslRlPpoActorCriticCfg(
         class_name="ActorCritic",
         init_noise_std=0.5,  # 站立任务探索较少
-        actor_hidden_dims=[256, 128, 64],
-        critic_hidden_dims=[256, 128, 64],
+        actor_hidden_dims=[512, 256, 128],
+        critic_hidden_dims=[512, 256, 128],
         activation="elu",
     )
 

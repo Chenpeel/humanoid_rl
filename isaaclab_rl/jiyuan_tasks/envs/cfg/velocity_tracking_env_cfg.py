@@ -106,6 +106,15 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
             # 速度命令（3维）
             velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})  # 3
 
+            # 高度信息（1维）- 为了与站立任务维度兼容
+            base_height = ObsTerm(func=mdp.base_pos_z)  # 1
+
+            # 高度扫描（187 维）- 确保课程学习维度兼容
+            height_scan = ObsTerm(
+                func=mdp.height_scan,
+                params={"sensor_cfg": SceneEntityCfg("height_scanner")}
+            )
+
             # 关节状态（32维）
             joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))  # 16
             joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5))  # 16

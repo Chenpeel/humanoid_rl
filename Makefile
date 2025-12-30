@@ -73,6 +73,13 @@ help:
 	@echo "  make train-flat              - 平坦地形训练（简化版）"
 	@echo "  make train-test              - 快速测试训练（64 envs, 10 iters）"
 	@echo ""
+	@echo "课程学习 (Curriculum Training):"
+	@echo "  make train-curriculum        - 执行全流程课程学习（阶段1-4）"
+	@echo "  make train-stage1            - 阶段1: 站立平衡 (2000 iters)"
+	@echo "  make train-stage2            - 阶段2: 平坦地形小步 (5000 iters)"
+	@echo "  make train-stage3            - 阶段3: 正常速度行走 (10000 iters)"
+	@echo "  make train-stage4            - 阶段4: 粗糙地形适应 (30000 iters)"
+	@echo ""
 	@echo "验证命令:"
 	@echo "  make verify                  - 验证安装是否成功"
 	@echo ""
@@ -243,6 +250,64 @@ train-test: check-isaaclab
 		--task velocity \
 		--num_envs 64 \
 		--max_iterations 10 $(ARGS)
+
+# ==============================================================================
+# 课程学习 (Curriculum Training)
+# ==============================================================================
+
+# 阶段 1: 站立平衡
+# 目标：学会基本站立，摔倒率<20%
+train-stage1: check-isaaclab
+	@echo ">>> [阶段 1/4] 开始站立平衡训练 (2000 iterations)..."
+	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+		--task standing \
+		--num_envs 4096 \
+		--max_iterations 2000 $(ARGS)
+
+# 阶段 2: 平坦地形小步行走
+# 目标：学会迈步，保持平衡
+# 自动加载 stage1 最新的 checkpoint
+train-stage2: check-isaaclab
+	@echo ">>> [阶段 2/4] 开始平坦地形小步训练 (5000 iterations)..."
+	@LATEST_STANDING=$$(ls -td logs/jiyuan_standing/*/ 2>/dev/null | head -1 | xargs -I {} basename {}); \
+	if [ -z "$$LATEST_STANDING" ]; then echo "Error: 未找到阶段 1 的训练记录"; exit 1; fi; \
+	echo "加载站立模型: jiyuan_standing/$$LATEST_STANDING"; \
+	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+		--task flat \
+		--num_envs 4096 \
+		--max_iterations 5000 \
+		--resume --load_run jiyuan_standing/$$LATEST_STANDING $(ARGS)
+
+# 阶段 3: 正常速度行走
+# 目标：跟踪速度命令，提高动态稳定性
+# 自动加载 stage2 (jiyuan_velocity_tracking) 最新的 checkpoint
+train-stage3: check-isaaclab
+	@echo ">>> [阶段 3/4] 开始正常速度行走训练 (10000 iterations)..."
+	@LATEST_VEL=$$(ls -td logs/jiyuan_velocity_tracking/*/ 2>/dev/null | head -1 | xargs -I {} basename {}); \
+	if [ -z "$$LATEST_VEL" ]; then echo "Error: 未找到阶段 2 的训练记录"; exit 1; fi; \
+	echo "加载平坦地形模型: jiyuan_velocity_tracking/$$LATEST_VEL"; \
+	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+		--task velocity \
+		--num_envs 4096 \
+		--max_iterations 10000 \
+		--resume --load_run jiyuan_velocity_tracking/$$LATEST_VEL $(ARGS)
+
+# 阶段 4: 地形适应
+# 目标：在粗糙地形上稳定行走
+train-stage4: check-isaaclab
+	@echo ">>> [阶段 4/4] 开始粗糙地形适应训练 (30000 iterations)..."
+	@LATEST_VEL=$$(ls -td logs/jiyuan_velocity_tracking/*/ 2>/dev/null | head -1 | xargs -I {} basename {}); \
+	if [ -z "$$LATEST_VEL" ]; then echo "Error: 未找到阶段 3 的训练记录"; exit 1; fi; \
+	echo "加载行走模型: jiyuan_velocity_tracking/$$LATEST_VEL"; \
+	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+		--task rough \
+		--num_envs 4096 \
+		--max_iterations 30000 \
+		--resume --load_run jiyuan_velocity_tracking/$$LATEST_VEL $(ARGS)
+
+# 一键启动全流程
+train-curriculum: train-stage1 train-stage2 train-stage3 train-stage4
+	@echo "✓ 课程学习全流程训练完成！"
 
 # ==============================================================================
 # 验证目标

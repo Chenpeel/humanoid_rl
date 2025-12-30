@@ -67,6 +67,22 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
     decimation = 4  # 控制频率：50Hz / 4 = 12.5Hz
     episode_length_s = 30.0  # 每个episode 30秒（更长，鼓励稳定性）
 
+    # 命令配置（固定为 0，为了与行走任务保持维度兼容）
+    @configclass
+    class CommandsCfg:
+        """命令生成器配置"""
+        base_velocity = mdp.UniformVelocityCommandCfg(
+            asset_name="robot",
+            resampling_time_range=(10.0, 10.0),
+            rel_standing_envs=1.0,  # 100% 站立
+            heading_command=False,
+            ranges=mdp.UniformVelocityCommandCfg.Ranges(
+                lin_vel_x=(0.0, 0.0),
+                lin_vel_y=(0.0, 0.0),
+                ang_vel_z=(0.0, 0.0),
+            ),
+        )
+
     # 观测配置
     @configclass
     class ObservationsCfg:
@@ -74,15 +90,24 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
 
         @configclass
         class PolicyCfg(ObsGroup):
-            """策略观测（不包含命令）"""
+            """策略观测（包含命令，确保维度兼容）"""
 
             # 基础状态（17维）
             base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))  # 3
             base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))  # 3
             projected_gravity = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05))  # 3
 
+            # 速度命令（3维）- 即使是站立也保留，为了维度兼容
+            velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})  # 3
+
             # 高度信息（相对于目标）
             base_height = ObsTerm(func=mdp.base_pos_z)  # 1
+
+            # 高度扫描（187 维）- 确保课程学习维度兼容
+            height_scan = ObsTerm(
+                func=mdp.height_scan,
+                params={"sensor_cfg": SceneEntityCfg("height_scanner")}
+            )
 
             # 关节状态（32维）
             joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))  # 16
@@ -91,7 +116,7 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
             # 上一步动作（16维）
             actions = ObsTerm(func=mdp.last_action)  # 16
 
-            # 总维度: 3 + 3 + 3 + 1 + 16 + 16 + 16 = 58 维
+            # 总维度: 3 + 3 + 3 + 3 + 1 + 16 + 16 + 16 = 61 维
 
             def __post_init__(self):
                 self.enable_corruption = True
@@ -276,6 +301,7 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
         )
 
     # 配置实例
+    commands: CommandsCfg = CommandsCfg()
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
     rewards: RewardsCfg = RewardsCfg()

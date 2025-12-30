@@ -104,12 +104,15 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
             # 速度命令
             velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
 
+            # 高度信息 (1维)
+            base_height = ObsTerm(func=mdp.base_pos_z)
+
+            # 地形高度扫描 (187维)
+            height_scan = ObsTerm(func=mdp.height_scan, params={"sensor_cfg": SceneEntityCfg("height_scanner")})
+
             # 关节状态
             joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
             joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5))
-
-            # 高度扫描（地形感知）
-            height_scan = ObsTerm(func=mdp.height_scan, params={"sensor_cfg": SceneEntityCfg("height_scanner")})
 
             # 上一步动作
             actions = ObsTerm(func=mdp.last_action)
@@ -344,20 +347,14 @@ class JiyuanFlatEnvCfg(JiyuanRoughEnvCfg):
     """Jiyuan 平坦地形环境（用于初期训练）"""
 
     def __post_init__(self):
-        # 调用父类初始化（设置粗糙地形）
+        # 调用父类初始化（设置基础场景）
         super().__post_init__()
 
-        # 将地形替换为平面
+        # 将地形固定为平面，但保留传感器和观测维度以兼容课程学习
         self.scene.ground.terrain_type = "plane"
         self.scene.ground.terrain_generator = None
 
-        # 移除高度扫描传感器
-        self.scene.height_scanner = None
-
-        # 移除高度扫描观测
-        self.observations.policy.height_scan = None
-
-        # 禁用课程学习
+        # 禁用地形课程学习
         self.curriculum.terrain_levels = None
 
 
