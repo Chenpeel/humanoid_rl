@@ -177,8 +177,9 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
             rot=(1.0, 0.0, 0.0, 0.0),
             # 关节初始位置
             joint_pos={
-                ".*hip_pitch_engine.*": 0.0,
-                ".*hip_yaw_engine.*": 0.0,
+                # 修改：初始化串行链关节
+                ".*hip_cube_joint": 0.0,
+                ".*thigh_joint": 0.0,
                 ".*hip_roll.*": 0.0,
                 # 膝关节：接近直立 (-0.1/0.1)，确保脚掌放平
                 "right_knee.*": -0.1,
@@ -196,12 +197,13 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         # 执行器配置
         actuators={
             # 主要关节电机（hip, knee）
+            # 修改：直接驱动串行链上的关节，而非 Engine 关节
             "main_motors": ImplicitActuatorCfg(
                 joint_names_expr=[
-                    ".*hip_pitch_engine_joint",
-                    ".*hip_yaw_engine_joint",
-                    ".*hip_roll_joint",
-                    ".*knee_joint",
+                    ".*hip_cube_joint",   # 替代 pitch_engine (Pitch)
+                    ".*thigh_joint",      # 替代 yaw_engine (Yaw)
+                    ".*hip_roll_joint",   # Roll (保持不变)
+                    ".*knee_joint",       # Knee (保持不变)
                 ],
                 stiffness=80.0,
                 damping=6.0,
@@ -273,9 +275,9 @@ def get_joint_names() -> list[str]:
     """
     # 右腿（8个）
     right_leg = [
-        "right_hip_pitch_engine_joint",
-        "right_hip_yaw_engine_joint",
-        "right_hip_roll_joint",
+        "right_hip_cube_joint",      # Pitch
+        "right_thigh_joint",         # Yaw
+        "right_hip_roll_joint",      # Roll
         "right_knee_joint",
         "right_ankle_1_3_joint",
         "right_ankle_2_3_joint",
@@ -285,9 +287,9 @@ def get_joint_names() -> list[str]:
 
     # 左腿（8个）
     left_leg = [
-        "left_hip_pitch_engine_joint",
-        "left_hip_yaw_engine_joint",
-        "left_hip_roll_joint",
+        "left_hip_cube_joint",       # Pitch
+        "left_thigh_joint",          # Yaw
+        "left_hip_roll_joint",       # Roll
         "left_knee_joint",
         "left_ankle_1_3_joint",
         "left_ankle_2_3_joint",
