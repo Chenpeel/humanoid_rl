@@ -1726,8 +1726,8 @@
     <exclude body1="base_link" body2="right_hip_pitch_engine_link" />
     <exclude body1="base_link" body2="right_hip_yaw_engine_link" />
     <exclude body1="base_link" body2="right_hip_roll_link" />
-    <exclude body1="base_link" body2="right_hip_cube_link" />
     <exclude body1="base_link" body2="right_thigh_link" />
+    <exclude body1="base_link" body2="right_hip_cube_link" />
     <exclude body1="right_hip_roll_link" body2="right_hip_cube_link" />
     <exclude body1="right_hip_cube_link" body2="right_thigh_link" />
     <exclude body1="right_thigh_link" body2="right_shin_link" />
@@ -1774,8 +1774,8 @@
     <exclude body1="base_link" body2="left_hip_pitch_engine_link" />
     <exclude body1="base_link" body2="left_hip_yaw_engine_link" />
     <exclude body1="base_link" body2="left_hip_roll_link" />
-    <exclude body1="base_link" body2="left_hip_cube_link" />
     <exclude body1="base_link" body2="left_thigh_link" />
+    <exclude body1="base_link" body2="left_hip_cube_link" />
     <exclude body1="left_hip_roll_link" body2="left_hip_cube_link" />
     <exclude body1="left_hip_cube_link" body2="left_thigh_link" />
     <exclude body1="left_thigh_link" body2="left_shin_link" />
