@@ -19,335 +19,152 @@ from rich.columns import Columns
 from rich.align import Align
 from rich import box
 
-# TensorBoard 支持（默认禁用，避免 torch 依赖冲突）
-# 如需启用，设置环境变量: export ENABLE_TENSORBOARD=1
-# 并安装: pip install torch --index-url https://download.pytorch.org/whl/cpu
-HAS_TENSORBOARD = False
-SummaryWriter = None
 
-if os.environ.get("ENABLE_TENSORBOARD", "0") == "1":
-    try:
-        from torch.utils.tensorboard import SummaryWriter
-        HAS_TENSORBOARD = True
-    except ImportError:
-        print("警告: ENABLE_TENSORBOARD=1 但未安装 torch，TensorBoard 日志已禁用")
-        print("安装方法: pip install torch --index-url https://download.pytorch.org/whl/cpu")
-
+# ==================== Rich进度列定制 ====================
 
 class MetricsColumn(ProgressColumn):
-    """自定义列：显示训练指标"""
+    """显示自定义指标"""
+
+    def __init__(self, metric_name: str, format_spec: str = ".2f"):
+        self.metric_name = metric_name
+        self.format_spec = format_spec
+        super().__init__()
 
     def render(self, task: Task) -> Text:
-        """渲染训练指标"""
-        if task.fields:
-            metrics = []
-            # 学习率
-            if "lr" in task.fields:
-                metrics.append(f"LR: {task.fields['lr']:.2e}")
-            # 奖励
-            if "reward" in task.fields:
-                metrics.append(f"奖励: {task.fields['reward']:.2f}")
-            # 损失
-            if "loss" in task.fields:
-                metrics.append(f"Loss: {task.fields['loss']:.4f}")
-            # FPS
-            if "fps" in task.fields:
-                metrics.append(f"FPS: {task.fields['fps']:.0f}")
-
-            if metrics:
-                return Text(" | ".join(metrics), style="dim")
-
+        if self.metric_name in task.fields:
+            value = task.fields[self.metric_name]
+            return Text(f"{value:{self.format_spec}}", style="cyan")
         return Text("")
 
 
-class Logger:
-    """训练日志记录器"""
+# ==================== TensorBoard日志 ====================
 
-    def __init__(
-        self,
-        log_dir: str,
-        use_tensorboard: bool = True,
-        use_rich: bool = True,
-    ):
+class Logger:
+    """TensorBoard日志记录器"""
+
+    def __init__(self, log_dir: str = "logs", use_tensorboard: bool = True, use_rich: bool = True):
         """初始化日志记录器
 
         Args:
-            log_dir: 日志目录
-            use_tensorboard: 是否使用TensorBoard
-            use_rich: 是否使用Rich终端输出
+            log_dir: 日志保存目录
+            use_tensorboard: 是否使用TensorBoard（保留参数以兼容）
+            use_rich: 是否使用Rich终端输出（保留参数以兼容）
         """
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
-
-        self.use_tensorboard = use_tensorboard and HAS_TENSORBOARD
         self.use_rich = use_rich
 
-        # TensorBoard writer
-        if self.use_tensorboard:
-            self.writer = SummaryWriter(str(self.log_dir))
+        # 尝试导入TensorBoard
+        if use_tensorboard:
+            try:
+                from torch.utils.tensorboard import SummaryWriter
+                self.writer = SummaryWriter(log_dir=str(self.log_dir), flush_secs=10)
+                self.disabled = False
+            except ImportError:
+                self.writer = None
+                self.disabled = True
+                print(f"警告: TensorBoard未安装，日志将被禁用")
         else:
             self.writer = None
+            self.disabled = True
 
-        # Rich console
-        if self.use_rich:
-            self.console = Console()
-        else:
-            self.console = None
+    def log_scalar(self, name: str, value: float, step: int):
+        """记录标量
 
-        # 记录开始时间
-        self.start_time = time.time()
-        self.last_log_time = self.start_time
+        Args:
+            name: 指标名称
+            value: 指标值
+            step: 训练步数
+        """
+        if not self.disabled and self.writer is not None:
+            self.writer.add_scalar(name, value, step)
 
-    def log_scalars(
-        self,
-        metrics: Dict[str, float],
-        step: int,
-        prefix: str = "",
-    ):
-        """记录标量指标
+    def log_scalars(self, metrics: Dict[str, float], step: int, prefix: str = ""):
+        """批量记录标量
 
         Args:
             metrics: 指标字典
-            step: 当前步数
-            prefix: 指标名前缀
+            step: 训练步数
+            prefix: 名称前缀
         """
-        if self.use_tensorboard and self.writer:
-            for key, value in metrics.items():
-                full_key = f"{prefix}/{key}" if prefix else key
-                self.writer.add_scalar(full_key, value, step)
-
-    def log_histogram(
-        self,
-        name: str,
-        values: jp.ndarray,
-        step: int,
-    ):
-        """记录直方图
-
-        Args:
-            name: 直方图名称
-            values: 数值数组
-            step: 当前步数
-        """
-        if self.use_tensorboard and self.writer:
-            import numpy as np
-            self.writer.add_histogram(name, np.array(values), step)
-
-    def print_training_status(
-        self,
-        step: int,
-        total_steps: int,
-        env_steps: int,
-        metrics: Dict[str, Any],
-    ):
-        """打印训练状态（使用Rich）
-
-        Args:
-            step: 当前训练步数
-            total_steps: 总训练步数
-            env_steps: 环境交互总步数
-            metrics: 当前指标
-        """
-        if not self.use_rich or not self.console:
-            return
-
-        # 计算耗时
-        current_time = time.time()
-        elapsed = current_time - self.start_time
-        time_per_step = (current_time - self.last_log_time) / \
-            max(1, metrics.get('steps_since_last_log', 1))
-        self.last_log_time = current_time
-
-        # 创建状态表格
-        table = Table(
-            title=f"训练进度 - Step {step}/{total_steps}", box=box.ROUNDED)
-        table.add_column("指标", style="cyan", no_wrap=True)
-        table.add_column("值", style="green", justify="right")
-
-        # 基础信息
-        table.add_row(
-            "训练进度", f"{step}/{total_steps} ({100*step/total_steps:.1f}%)")
-        table.add_row("环境步数", f"{env_steps:,}")
-        table.add_row("已用时间", self._format_time(elapsed))
-        table.add_row("每步耗时", f"{time_per_step:.3f}s")
-
-        # 性能指标
-        if 'episode_reward' in metrics:
-            table.add_row("回合奖励", f"{metrics['episode_reward']:.3f}")
-        if 'episode_length' in metrics:
-            table.add_row("回合长度", f"{metrics['episode_length']:.0f}")
-
-        # 训练指标
-        if 'policy_loss' in metrics:
-            table.add_row("策略损失", f"{metrics['policy_loss']:.4f}")
-        if 'value_loss' in metrics:
-            table.add_row("价值损失", f"{metrics['value_loss']:.4f}")
-        if 'entropy' in metrics:
-            table.add_row("熵", f"{metrics['entropy']:.4f}")
-        if 'approx_kl' in metrics:
-            table.add_row("近似KL", f"{metrics['approx_kl']:.4f}")
-        if 'clip_fraction' in metrics:
-            table.add_row("裁剪比例", f"{metrics['clip_fraction']:.2%}")
-
-        self.console.print(table)
-
-    def print_section(self, title: str):
-        """打印分节标题
-
-        Args:
-            title: 标题文本
-        """
-        if self.use_rich and self.console:
-            self.console.print()
-            self.console.print(
-                Panel(f"[bold cyan]{title}[/bold cyan]", box=box.DOUBLE))
-
-    def print_summary(self, message: str, style: str = "green"):
-        """打印总结信息
-
-        Args:
-            message: 消息内容
-            style: 样式（green/red/yellow）
-        """
-        if self.use_rich and self.console:
-            self.console.print()
-            self.console.print(Panel.fit(
-                f"[bold {style}]{message}[/bold {style}]",
-                border_style=style
-            ))
-
-    def create_progress_bar(self, total: int, description: str = "训练中"):
-        """创建Rich进度条（简单版本，仅进度条）
-
-        Args:
-            total: 总步数
-            description: 描述文本
-
-        Returns:
-            Progress对象
-        """
-        if not self.use_rich:
-            return None
-
-        return Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TextColumn("•"),
-            TextColumn("[cyan]步数: {task.completed}/{task.total}[/cyan]"),
-            TimeElapsedColumn(),
-            TextColumn("•"),
-            TimeRemainingColumn(),
-            console=self.console,
-        )
-
-    def create_training_display(self, total: int, steps_per_epoch: int = 1, description: str = "PPO训练"):
-        """创建训练进度显示（多区域丰富布局）
-
-        第一区：总轮次进度 + 当前步数进度 + 时间信息
-        第二区：奖励与回合信息
-        第三区：训练损失指标
-        第四区：性能指标
-
-        Args:
-            total: 总训练轮次（epochs）
-            steps_per_epoch: 每轮的步数
-            description: 描述文本
-
-        Returns:
-            TrainingDisplay对象，提供update()方法更新显示
-        """
-        if not self.use_rich:
-            return None
-
-        return TrainingDisplay(
-            console=self.console,
-            total=total,
-            steps_per_epoch=steps_per_epoch,
-            description=description,
-        )
+        if not self.disabled and self.writer is not None:
+            for name, value in metrics.items():
+                if isinstance(value, (int, float)):
+                    full_name = f"{prefix}/{name}" if prefix else name
+                    self.writer.add_scalar(full_name, value, step)
 
     def close(self):
         """关闭日志记录器"""
-        if self.writer:
+        if not self.disabled and self.writer is not None:
             self.writer.close()
 
-    def _format_time(self, seconds: float) -> str:
-        """格式化时间
+    def __enter__(self):
+        return self
 
-        Args:
-            seconds: 秒数
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
-        Returns:
-            格式化的时间字符串
-        """
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        secs = int(seconds % 60)
 
-        if hours > 0:
-            return f"{hours}h {minutes}m {secs}s"
-        elif minutes > 0:
-            return f"{minutes}m {secs}s"
-        else:
-            return f"{secs}s"
-
+# ==================== 指标统计（类rsl_rl实现）====================
 
 class MetricsLogger:
-    """指标累积器（用于多步平均）"""
+    """指标统计器（带Episode统计）- 参考rsl_rl实现"""
 
-    def __init__(self):
+    def __init__(self, window_size: int = 100):
+        """初始化指标统计器
+
+        Args:
+            window_size: 滑动窗口大小
+        """
+        self.window_size = window_size
+        from collections import deque
         self.metrics = {}
         self.counts = {}
 
-    def log(self, key: str, value: float):
-        """记录单个指标值
-
-        Args:
-            key: 指标名
-            value: 指标值
-        """
-        if key not in self.metrics:
-            self.metrics[key] = 0.0
-            self.counts[key] = 0
-
-        self.metrics[key] += float(value)
-        self.counts[key] += 1
-
-    def log_dict(self, metrics: Dict[str, float]):
-        """批量记录指标
+    def log_dict(self, metrics: Dict[str, Any], weight: float = 1.0):
+        """记录指标字典
 
         Args:
             metrics: 指标字典
+            weight: 权重（用于加权平均）
         """
         for key, value in metrics.items():
-            self.log(key, value)
+            if isinstance(value, (int, float, jp.ndarray)):
+                # 转换JAX数组为Python标量
+                if isinstance(value, jp.ndarray):
+                    value = float(value)
+                self._log(key, value, weight)
+
+    def _log(self, key: str, value: float, weight: float):
+        """记录单个指标"""
+        if key not in self.metrics:
+            self.metrics[key] = value * weight
+            self.counts[key] = weight
+        else:
+            self.metrics[key] += value * weight
+            self.counts[key] += weight
 
     def get_averages(self) -> Dict[str, float]:
-        """获取平均值
-
-        Returns:
-            平均值字典
-        """
+        """获取平均值"""
         return {
             key: self.metrics[key] / self.counts[key]
-            for key in self.metrics.keys()
+            for key in self.metrics
         }
 
     def reset(self):
-        """重置累积器"""
+        """重置统计"""
         self.metrics.clear()
         self.counts.clear()
 
 
-class TrainingDisplay:
-    """训练进度显示（无边框设计）
+# ==================== 训练进度显示（参考rsl_rl格式）====================
 
-    使用 Live + Group 实现无边框显示：
-    - 标题区：居中显示任务名称
-    - 进度区：Rich进度条
-    - 内容区：简洁的文本格式指标，无底边框
+class TrainingDisplay:
+    """训练进度显示（参考 rsl_rl 格式）
+
+    格式：
+    - 上方：详细信息（性能、损失、奖励等）
+    - 下方：Rich 进度条（无边框）
     """
 
     def __init__(self, console: Console, total: int, steps_per_epoch: int = 1, description: str = "PPO训练"):
@@ -366,120 +183,51 @@ class TrainingDisplay:
         self.start_time = None
         self.warmup_steps = 2  # 跳过前2步（包含JIT编译）
         self.current_metrics = {}
-        self.metrics_text = ""
 
-        # 创建总轮次进度条（使用独立的进度条对象）
-        self.progress_renderable = Progress(
+        # 创建进度条（放在底部）
+        self.progress_bar = Progress(
             TextColumn("  "),
-            BarColumn(bar_width=50),
+            BarColumn(bar_width=60),
             TextColumn("[progress.percentage]{task.percentage:>3.1f}%"),
+            TextColumn("•"),
+            TextColumn("{task.completed}/{task.total}"),
             console=console,
-            expand=False,
         )
 
-        # 创建Live显示（初始内容为空）
+        # 创建Live显示
         self.live = Live(
             self._build_content(),
             console=console,
             refresh_per_second=4,
         )
 
-        self.epoch_task_id = None
         self.progress_task_id = None
         self.started = False
 
     def _build_content(self):
-        """构建完整的显示内容"""
-        # 标题行
-        title_line = self._center_text(self.description, 78)
-
-        # 进度条描述
-        progress_desc = f"Learning iteration {self.current_epoch}/{self.total}"
-
-        # 分隔线
-        separator = "├" + "─" * 76 + "┤"
+        """构建完整的显示内容（上方详情，下方进度条）"""
+        # 详情文本
+        details_text = self._format_details()
 
         return Group(
-            Text("┌" + "─" * 76 + "┐", style="cyan"),
-            Text("│" + title_line + "│", style="cyan bold"),
-            Text(separator, style="cyan"),
-            Text(f"│ {progress_desc:<76}│", style="cyan"),
-            # 进度条（嵌入到边框中）
-            self._embed_progress_in_border(),
-            Text(separator, style="cyan"),
-            # 指标内容（无底边框）
-            self._render_metrics_lines(),
+            Text(details_text),
+            Text(""),
+            self.progress_bar,
         )
 
-    def _center_text(self, text: str, width: int) -> str:
-        """居中文本"""
-        padding = (width - len(text)) // 2
-        return " " * padding + text + " " * (width - padding - len(text))
+    def _format_details(self):
+        """格式化详情信息（参考 rsl_rl 格式）"""
+        if not self.current_metrics:
+            return "等待训练数据..."
 
-    def _embed_progress_in_border(self):
-        """将进度条嵌入到边框中"""
-        # 进度条行：使用 Columns 实现水平布局
-        from rich.columns import Columns
-        from rich.align import Align
-
-        # 居中的进度条
-        centered_progress = Align.center(
-            self.progress_renderable,
-            width=72,  # 留出边框空间
-        )
-
-        # 使用 Columns 水平排列：左边框、空格、进度条、空格、右边框
-        return Columns(
-            [
-                Text("│", style="cyan"),
-                Text(" ", style=""),
-                centered_progress,
-                Text(" ", style=""),
-                Text("│", style="cyan"),
-            ],
-            expand=False,
-        )
-
-    def _render_metrics_lines(self):
-        """渲染指标内容行"""
-        if not self.metrics_text:
-            return Text("│" + " " * 76 + "│", style="cyan")
-
-        lines = self.metrics_text.split("\n")
-        rendered = []
-
-        for line in lines:
-            # 每行添加左边框，填充右侧空格，添加右边框
-            padded = line[:76].ljust(76)
-            rendered.append(Text("│" + padded + "│", style="dim"))
-
-        return Group(*rendered)
-
-    def _format_metrics_text(self, metrics: Dict[str, Any]) -> str:
-        """格式化指标为文本
-
-        Args:
-            metrics: 指标字典
-
-        Returns:
-            格式化的文本字符串
-        """
         lines = []
 
-        # 辅助函数：获取指标值，支持多种键名格式
-        def get_value(*keys):
-            for key in keys:
-                if key in metrics:
-                    return metrics[key]
-            return None
-
-        # 时间信息
+        # ==================== 性能指标 ====================
         if self.start_time:
             import time
-            current_time = time.time()
-            elapsed = current_time - self.start_time
+            elapsed = time.time() - self.start_time
 
-            # 计算预计剩余时间
+            # ETA
             if self.current_epoch > self.warmup_steps and self.total > 0:
                 time_per_epoch = elapsed / max(1, self.current_epoch - self.warmup_steps)
                 remaining = time_per_epoch * (self.total - self.current_epoch)
@@ -490,128 +238,97 @@ class TrainingDisplay:
             if remaining is not None:
                 lines.append(f"{'ETA:':<30}{self._format_hms(remaining)}")
 
-        # 总步数（支持多种键名格式）
-        env_steps = get_value("env_steps", "perf/total_env_steps")
+        # 总步数
+        env_steps = self._get_value("env_steps", "perf/total_env_steps")
         if env_steps is not None:
             lines.append(f"{'Total steps:':<30}{int(env_steps):,}")
 
-        # SPS (Steps per second) - 支持多种键名格式
-        sps = get_value("sps", "perf/steps_per_sec", "perf/avg_steps_per_sec")
+        # SPS
+        sps = self._get_value("sps", "perf/steps_per_sec", "perf/avg_steps_per_sec")
         if sps is not None:
             lines.append(f"{'Steps per second:':<30}{int(sps)}")
 
-        # 环境步每秒
-        env_sps = get_value("perf/env_steps_per_sec", "perf/avg_env_steps_per_sec")
-        if env_sps is not None:
-            lines.append(f"{'Env steps per second:':<30}{int(env_sps):,}")
-
         # Collection/Learning time
-        if "collection_time" in metrics:
-            lines.append(f"{'Collection time:':<30}{metrics['collection_time']:.3f}s")
-        if "learning_time" in metrics:
-            lines.append(f"{'Learning time:':<30}{metrics['learning_time']:.3f}s")
-
-        # Iteration time
-        iteration_time = get_value("iteration_time", "perf/step_time")
-        if iteration_time is not None:
-            lines.append(f"{'Iteration time:':<30}{iteration_time:.3f}s")
-        elif self.start_time and self.current_epoch > 0:
-            import time
-            elapsed = time.time() - self.start_time
-            lines.append(f"{'Iteration time:':<30}{elapsed / max(1, self.current_epoch):.3f}s")
+        if "collection_time" in self.current_metrics:
+            lines.append(f"{'Collection time:':<30}{self.current_metrics['collection_time']:.3f}s")
+        if "learning_time" in self.current_metrics:
+            lines.append(f"{'Learning time:':<30}{self.current_metrics['learning_time']:.3f}s")
 
         lines.append("")  # 空行
 
-        # === 损失指标 ===
-        # Value loss
-        value_loss = get_value("value_loss", "train/value_loss", "loss/value_loss")
+        # ==================== 损失指标 ====================
+        value_loss = self._get_value("value_loss", "train/value_loss")
         if value_loss is not None:
             lines.append(f"{'Mean value loss:':<30}{value_loss:.4f}")
 
-        # Policy/Surrogate loss
-        policy_loss = get_value("surrogate_loss", "policy_loss", "train/surrogate_loss", "train/policy_loss")
+        policy_loss = self._get_value("surrogate_loss", "policy_loss", "train/surrogate_loss")
         if policy_loss is not None:
             lines.append(f"{'Mean policy loss:':<30}{policy_loss:.4f}")
 
-        # Entropy loss
-        entropy_loss = get_value("entropy_loss", "entropy", "train/entropy_loss", "train/entropy")
-        if entropy_loss is not None:
-            lines.append(f"{'Mean entropy loss:':<30}{entropy_loss:.4f}")
+        entropy = self._get_value("entropy_loss", "entropy", "train/entropy_loss")
+        if entropy is not None:
+            lines.append(f"{'Mean entropy loss:':<30}{entropy:.4f}")
 
-        # KL divergence
-        kl = get_value("approx_kl", "kl", "train/approx_kl")
+        kl = self._get_value("approx_kl", "kl", "train/approx_kl")
         if kl is not None:
             lines.append(f"{'Mean KL divergence:':<30}{kl:.4f}")
 
-        # Clip fraction
-        clip_frac = get_value("clip_fraction", "train/clip_fraction")
+        clip_frac = self._get_value("clip_fraction", "train/clip_fraction")
         if clip_frac is not None:
             lines.append(f"{'Clip fraction:':<30}{clip_frac:.2%}")
 
         lines.append("")  # 空行
 
-        # === 奖励与统计指标 ===
-        # Episode reward
-        episode_reward = get_value("episode_reward", "train/episode_reward", "reward")
+        # ==================== 奖励与统计 ====================
+        episode_reward = self._get_value("episode_reward", "train/episode_reward", "mean_reward")
         if episode_reward is not None:
             lines.append(f"{'Mean reward:':<30}{episode_reward:.2f}")
 
-        # Episode length
-        episode_length = get_value("episode_length", "train/episode_length")
+        episode_length = self._get_value("episode_length", "train/episode_length")
         if episode_length is not None:
             lines.append(f"{'Mean episode length:':<30}{episode_length:.1f}")
 
-        # 动作噪声
-        action_noise = get_value("action_noise_std", "train/action_noise_std")
-        if action_noise is not None:
-            lines.append(f"{'Mean action noise std:':<30}{action_noise:.3f}")
-
-        # 学习率
-        lr = get_value("learning_rate", "train/learning_rate")
+        lr = self._get_value("learning_rate", "train/learning_rate")
         if lr is not None:
             lines.append(f"{'Learning rate:':<30}{lr:.6f}")
 
-        lines.append("")  # 空行
-
-        # === 详细指标（Episode_Reward, Metrics, Curriculum, Episode_Termination） ===
-        # 收集所有需要详细显示的指标
-        detail_keys = []
-        for key in metrics.keys():
+        # ==================== 详细指标 ====================
+        # 收集其他详细指标
+        detail_lines = []
+        for key in sorted(self.current_metrics.keys()):
             if any(key.startswith(prefix) for prefix in [
                 "Episode_Reward/", "Metrics/", "Curriculum/", "Episode_Termination/",
                 "train/Episode_Reward/", "train/Metrics/", "train/Curriculum/", "train/Episode_Termination/"
             ]):
-                # 跳过已经显示过的核心指标
+                # 跳过已显示的核心指标
                 if not any(x in key for x in ["episode_reward", "episode_length", "action_noise_std"]):
-                    detail_keys.append(key)
+                    value = self.current_metrics[key]
+                    display_key = key
+                    for prefix in ["train/Episode_Reward/", "train/Metrics/", "train/Curriculum/", "train/Episode_Termination/",
+                                  "Episode_Reward/", "Metrics/", "Curriculum/", "Episode_Termination/"]:
+                        if key.startswith(prefix):
+                            display_key = key[len(prefix):]
+                    display_key = display_key.replace("_", " ")
+                    detail_lines.append(f"{display_key:<30}{float(value):.4f}")
 
-        # 排序并显示（限制数量，避免过长）
-        for key in sorted(detail_keys)[:20]:  # 最多显示20个详细指标
-            value = metrics[key]
-            # 格式化键名：移除前缀，替换下划线为空格
-            display_key = key
-            for prefix in ["train/Episode_Reward/", "train/Metrics/", "train/Curriculum/", "train/Episode_Termination/",
-                          "Episode_Reward/", "Metrics/", "Curriculum/", "Episode_Termination/"]:
-                if key.startswith(prefix):
-                    display_key = key[len(prefix):]
-            display_key = display_key.replace("_", " ")
-            lines.append(f"{display_key:<30}{float(value):.4f}")
+        if detail_lines:
+            lines.append("")
+            lines.extend(detail_lines)
 
         return "\n".join(lines)
 
+    def _get_value(self, *keys):
+        """获取指标值，支持多种键名格式"""
+        for key in keys:
+            if key in self.current_metrics:
+                return self.current_metrics[key]
+        return None
+
     def _format_hms(self, seconds: float) -> str:
-        """格式化时间为 HH:MM:SS
-
-        Args:
-            seconds: 秒数
-
-        Returns:
-            格式化的时间字符串
-        """
+        """格式化时间为 HH:MM:SS"""
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         secs = int(seconds % 60)
-
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
     def start(self):
@@ -619,7 +336,7 @@ class TrainingDisplay:
         if not self.started:
             self.live.start()
             # 添加进度条任务
-            self.progress_task_id = self.progress_renderable.add_task(
+            self.progress_task_id = self.progress_bar.add_task(
                 "",
                 total=self.total
             )
@@ -642,12 +359,11 @@ class TrainingDisplay:
         if epoch is not None:
             if epoch > self.current_epoch:
                 self.current_epoch = epoch
-                self.progress_renderable.update(self.progress_task_id, completed=epoch)
+                self.progress_bar.update(self.progress_task_id, completed=epoch)
 
         # 更新指标
         if metrics:
             self.current_metrics = metrics.copy()
-            self.metrics_text = self._format_metrics_text(metrics)
 
         # 更新Live显示内容
         self.live.update(self._build_content())
@@ -666,3 +382,55 @@ class TrainingDisplay:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """上下文管理器出口"""
         self.stop()
+
+
+# ==================== 便捷函数 ====================
+
+def create_logger(log_dir: str = "logs") -> Logger:
+    """创建日志记录器
+
+    Args:
+        log_dir: 日志保存目录
+
+    Returns:
+        Logger实例
+    """
+    return Logger(log_dir=log_dir)
+
+
+def create_training_display(
+    console: Console,
+    total: int,
+    steps_per_epoch: int = 1,
+    description: str = "PPO训练"
+) -> TrainingDisplay:
+    """创建训练显示
+
+    Args:
+        console: Rich Console对象
+        total: 总训练轮次
+        steps_per_epoch: 每轮步数
+        description: 任务描述
+
+    Returns:
+        TrainingDisplay实例
+    """
+    return TrainingDisplay(
+        console=console,
+        total=total,
+        steps_per_epoch=steps_per_epoch,
+        description=description
+    )
+
+
+def print_summary(message: str, style: str = "cyan", console: Optional[Console] = None):
+    """打印总结信息
+
+    Args:
+        message: 消息内容
+        style: Rich样式
+        console: Console对象（可选）
+    """
+    if console is None:
+        console = Console()
+    console.print(f"[{style}]{message}[/{style}]")
