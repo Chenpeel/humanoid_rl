@@ -38,27 +38,27 @@
         </default>
         <default class="collision">
           <!-- 躯干/髋部碰撞：组8，只碰撞地面(1) -->
-          <geom condim="3" contype="8" conaffinity="1" priority="1" group="1" solref="0.005 1"
+          <geom condim="3" contype="8" conaffinity="1" priority="1" group="4" solref="0.005 1"
             solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
         </default>
         <default class="right_leg_collision">
           <!-- 右腿主体碰撞：组2，碰撞地面(1)和左腿(4) -->
-          <geom condim="3" contype="2" conaffinity="5" priority="1" group="1" solref="0.005 1"
+          <geom condim="3" contype="2" conaffinity="5" priority="1" group="4" solref="0.005 1"
             solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
         </default>
         <default class="left_leg_collision">
           <!-- 左腿主体碰撞：组4，碰撞地面(1)和右腿(2) -->
-          <geom condim="3" contype="4" conaffinity="3" priority="1" group="1" solref="0.005 1"
+          <geom condim="3" contype="4" conaffinity="3" priority="1" group="4" solref="0.005 1"
             solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
         </default>
         <default class="right_leg_minor_collision">
           <!-- 右腿细小部件（ankle）：组16，只碰撞地面(1) -->
-          <geom condim="3" contype="16" conaffinity="1" priority="1" group="1" solref="0.005 1"
+          <geom condim="3" contype="16" conaffinity="1" priority="1" group="4" solref="0.005 1"
             solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
         </default>
         <default class="left_leg_minor_collision">
           <!-- 左腿细小部件（ankle）：组32，只碰撞地面(1) -->
-          <geom condim="3" contype="32" conaffinity="1" priority="1" group="1" solref="0.005 1"
+          <geom condim="3" contype="32" conaffinity="1" priority="1" group="4" solref="0.005 1"
             solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
         </default>
         <default class="thigh_equality">
