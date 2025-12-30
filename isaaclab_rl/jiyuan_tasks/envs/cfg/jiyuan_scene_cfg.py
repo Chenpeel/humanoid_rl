@@ -171,8 +171,8 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         # 不再在此处 spawn，因为 robot_asset 已经生成了 USD
         spawn=None,
         init_state=ArticulationCfg.InitialStateCfg(
-            # 初始位置：调整为 0.95m，防止机器人出生在地面下导致物理爆炸
-            pos=(0.0, 0.0, 0.95),
+            # 初始位置：调整为 0.92m (直腿高度约0.89m)，减少落地冲击
+            pos=(0.0, 0.0, 0.92),
             # 初始姿态：保持直立
             rot=(1.0, 0.0, 0.0, 0.0),
             # 关节初始位置
@@ -180,9 +180,9 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 ".*hip_pitch_engine.*": 0.0,
                 ".*hip_yaw_engine.*": 0.0,
                 ".*hip_roll.*": 0.0,
-                # 膝关节：稍微弯曲 (约17度)
-                "right_knee.*": -0.3,
-                "left_knee.*": 0.3,
+                # 膝关节：接近直立 (-0.1/0.1)，确保脚掌放平
+                "right_knee.*": -0.1,
+                "left_knee.*": 0.1,
                 # 踝关节：串联结构 (Fit 模型)
                 ".*ankle_cube.*": 0.0,
                 ".*ankle_axle.*": 0.0,
