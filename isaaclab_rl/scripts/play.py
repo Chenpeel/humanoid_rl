@@ -2,10 +2,10 @@
 """
 Jiyuan 机器人策略评估脚本
 
-加载训练好的策略并在 Isaac Sim 中可视化。
+加载训练好的策略并在 Isaac Sim 中可视化和录制视频。
 
 运行方式:
-    # 评估速度跟踪策略
+    # 评估速度跟踪策略（GUI可视化）
     python scripts/play.py --task velocity --checkpoint logs/jiyuan_velocity_tracking/20250122_143000/model_30000.pt
 
     # 评估站立策略
@@ -14,11 +14,20 @@ Jiyuan 机器人策略评估脚本
     # 自动加载最新的检查点
     python scripts/play.py --task velocity
 
-    # 评估多个环境（对比不同种子）
+    # 评估多个环境（对比不同初始化）
     python scripts/play.py --task velocity --num_envs 4
 
-    # 录制视频
-    python scripts/play.py --task velocity --video --video_length 500
+    # 录制视频（自动保存到 logs/<实验名>/<运行ID>/videos/play/）
+    python scripts/play.py --task velocity --video --video_length 500 --num_envs 1
+
+    # 使用确定性策略（无探索噪声）
+    python scripts/play.py --task velocity --deterministic
+
+功能说明:
+    - 自动加载最新检查点：不指定 --checkpoint 时自动查找最新模型
+    - 视频录制：使用 --video 参数启用，视频保存到检查点目录下的 videos/play/ 文件夹
+    - 支持多环境并行评估（用于对比不同随机种子）
+    - 支持确定性/随机策略评估
 
 参考:
 - Isaac Lab CLI: isaaclab.sh -p source/standalone/workflows/rsl_rl/play.py
@@ -244,9 +253,21 @@ def evaluate_policy(env: ManagerBasedRLEnv, runner: OnPolicyRunner, args):
 
     print(f"\n[INFO] 开始评估，目标 episode 数: {args.num_episodes}")
     print(f"[INFO] 确定性策略: {args.deterministic}")
+
+    # 如果录制视频，限制步数
+    if args.video:
+        max_steps = args.video_length
+        print(f"[INFO] 视频录制模式：最多运行 {max_steps} 步")
+    else:
+        max_steps = None
+
     print("=" * 80)
 
     while num_completed_episodes < args.num_episodes:
+        # 视频录制时，在达到步数后退出
+        if max_steps is not None and step_count >= max_steps:
+            print(f"\n[INFO] 达到视频长度限制 ({max_steps} 步)，结束录制")
+            break
         # 获取动作
         with torch.no_grad():
             actions = policy(obs, deterministic=args.deterministic)
@@ -276,17 +297,28 @@ def evaluate_policy(env: ManagerBasedRLEnv, runner: OnPolicyRunner, args):
             current_episode_length[dones] = 0
 
     # 计算统计信息
-    episode_rewards = torch.tensor(episode_rewards)
-    episode_lengths = torch.tensor(episode_lengths)
+    if len(episode_rewards) > 0:
+        episode_rewards = torch.tensor(episode_rewards)
+        episode_lengths = torch.tensor(episode_lengths)
 
-    stats = {
-        "mean_reward": episode_rewards.mean().item(),
-        "std_reward": episode_rewards.std().item(),
-        "min_reward": episode_rewards.min().item(),
-        "max_reward": episode_rewards.max().item(),
-        "mean_length": episode_lengths.mean().item(),
-        "total_steps": step_count,
-    }
+        stats = {
+            "mean_reward": episode_rewards.mean().item(),
+            "std_reward": episode_rewards.std().item(),
+            "min_reward": episode_rewards.min().item(),
+            "max_reward": episode_rewards.max().item(),
+            "mean_length": episode_lengths.mean().item(),
+            "total_steps": step_count,
+        }
+    else:
+        # 视频模式可能没有完成的 episode
+        stats = {
+            "mean_reward": 0.0,
+            "std_reward": 0.0,
+            "min_reward": 0.0,
+            "max_reward": 0.0,
+            "mean_length": 0.0,
+            "total_steps": step_count,
+        }
 
     return stats
 
@@ -318,11 +350,35 @@ def main():
 
     # 创建环境
     print(f"\n[INFO] 创建环境: {TASK_ENV_MAP[args.task]}")
+
+    # 如果需要录制视频，设置 render_mode
+    render_mode = "rgb_array" if args.video else None
+
     env = gym.make(
         TASK_ENV_MAP[args.task],
         num_envs=args.num_envs,
         headless=False,  # 评估时始终显示 GUI
+        render_mode=render_mode,
     )
+
+    # 如果需要录制视频，包装环境
+    if args.video:
+        log_dir = os.path.dirname(checkpoint_path)
+        video_folder = os.path.join(log_dir, "videos", "play")
+        os.makedirs(video_folder, exist_ok=True)
+
+        video_kwargs = {
+            "video_folder": video_folder,
+            "step_trigger": lambda step: step == 0,  # 从第一步开始录制
+            "video_length": args.video_length,
+            "disable_logger": True,
+        }
+
+        print(f"\n[INFO] 启用视频录制")
+        print(f"  - 视频保存路径: {video_folder}")
+        print(f"  - 视频长度: {args.video_length} 步")
+
+        env = gym.wrappers.RecordVideo(env, **video_kwargs)
 
     print(f"[INFO] 环境创建成功")
     print(f"  - 观测空间: {env.observation_space}")
@@ -351,17 +407,21 @@ def main():
     print("\n" + "=" * 80)
     print("评估结果")
     print("=" * 80)
-    print(f"Episode 数量: {args.num_episodes}")
-    print(f"平均奖励: {stats['mean_reward']:.2f} ± {stats['std_reward']:.2f}")
-    print(f"奖励范围: [{stats['min_reward']:.2f}, {stats['max_reward']:.2f}]")
-    print(f"平均 episode 长度: {stats['mean_length']:.1f}")
-    print(f"总步数: {stats['total_steps']}")
-    print("=" * 80)
 
-    # 如果需要录制视频
     if args.video:
-        print(f"\n[INFO] 录制视频功能待实现")
-        # TODO: 集成 Isaac Sim 的视频录制功能
+        print(f"视频录制完成！")
+        log_dir = os.path.dirname(checkpoint_path)
+        video_folder = os.path.join(log_dir, "videos", "play")
+        print(f"视频保存路径: {video_folder}")
+        print(f"录制步数: {stats['total_steps']}")
+    else:
+        print(f"Episode 数量: {args.num_episodes}")
+        print(f"平均奖励: {stats['mean_reward']:.2f} ± {stats['std_reward']:.2f}")
+        print(f"奖励范围: [{stats['min_reward']:.2f}, {stats['max_reward']:.2f}]")
+        print(f"平均 episode 长度: {stats['mean_length']:.1f}")
+        print(f"总步数: {stats['total_steps']}")
+
+    print("=" * 80)
 
     # 关闭环境
     env.close()

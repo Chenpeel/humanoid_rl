@@ -164,6 +164,16 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
             weight=0.5,  # 中等权重，鼓励自然步态
         )
 
+        # 脚部滑动惩罚（借鉴H1/G1，防止拖地）
+        feet_slide = RewTerm(
+            func=mdp.feet_slide,
+            weight=-0.25,
+            params={
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*ankle"),
+                "asset_cfg": SceneEntityCfg("robot", body_names=".*ankle"),
+            },
+        )
+
         # 足部间隙（避免绊倒）
         foot_clearance = RewTerm(
             func=walking_rewards.foot_clearance_reward,
@@ -182,6 +192,9 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
             weight=0.3,
             params={"tolerance": 0.3},
         )
+
+        # 姿态平坦性（借鉴H1，强化直立姿态）
+        flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-0.5)
 
         # 惩罚项
         lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
@@ -225,6 +238,14 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
             func=rewards.joint_vel_limits,
             weight=-0.8,
             params={"margin_factor": 0.9},
+        )
+
+        # 非关键关节保持默认姿态（借鉴H1/G1）
+        # 髋部Roll关节不应偏离太多（主要用于平衡微调）
+        joint_deviation_hip = RewTerm(
+            func=mdp.joint_deviation_l1,
+            weight=-0.1,
+            params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_hip_roll_joint", ".*_hip_cube_joint"])},
         )
 
     # 终止条件

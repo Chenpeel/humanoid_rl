@@ -1,20 +1,23 @@
 # ==============================================================================
 # Makefile - 双足机器人 RL 项目快速命令
 # ==============================================================================
-# 使用方式:
+# 推荐使用方式（课程学习）:
+#   make train-curriculum   - 全流程课程学习训练（推荐！）
+#   make train-standing     - 站立平衡训练
+#   make train-flat         - 平坦地形行走训练
+#   make train-walking      - 正常速度行走训练
+#   make train-rough        - 粗糙地形适应训练
+#   make play               - 评估最新训练的策略
+#   make play-video         - 录制策略视频
+#
+# 环境配置:
 #   make submodule-update   - 初始化并更新git子模块
 #   make install            - 安装项目（开发模式）
-#   make install-dev        - 安装项目 + 开发工具
-#   make install-vis        - 安装项目 + 可视化工具
 #   make install-all        - 安装所有依赖
-#   make train              - 开始速度跟踪训练（平坦地形）
-#   make train-standing     - 开始站立平衡训练
-#   make train-walking      - 开始行走步态训练
-#   make train-rough        - 开始粗糙地形训练
-#   make train-flat         - 开始平坦地形训练
-#   make train-test         - 快速测试训练（64 envs, 10 iters）
+#
+# 其他命令:
+#   make help               - 显示完整帮助信息
 #   make clean              - 清理构建文件
-#   make help               - 显示帮助信息
 # ==============================================================================
 
 # Isaac Lab 路径配置
@@ -31,13 +34,43 @@ export VK_ICD_FILENAMES = /usr/share/vulkan/icd.d/nvidia_icd.json
 export CARB_LOG_LEVEL = ERROR
 
 
-.PHONY: help install install-dev install-vis install-all train train-standing train-walking train-rough train-flat train-test clean clean-logs verify
+.PHONY: help install install-dev install-vis install-all clean clean-logs verify
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
 .PHONY: check-env check-isaaclab convert-usd
+.PHONY: train-curriculum train-standing train-flat train-walking train-rough
+.PHONY: play play-velocity play-standing play-walking play-video play-video-velocity play-video-standing
 
 # 默认目标
 help:
 	@echo "双足机器人 RL 项目 - 可用命令:"
+	@echo ""
+	@echo "==================================================================="
+	@echo "📚 推荐工作流（课程学习）"
+	@echo "==================================================================="
+	@echo ""
+	@echo "课程学习训练（推荐）:"
+	@echo "  make train-curriculum        - 全流程课程学习（推荐！）"
+	@echo "  make train-standing          - 站立平衡训练 (2000 iters)"
+	@echo "  make train-flat              - 平坦地形行走训练 (5000 iters)"
+	@echo "  make train-walking           - 正常速度行走训练 (10000 iters)"
+	@echo "  make train-rough             - 粗糙地形适应训练 (30000 iters)"
+	@echo ""
+	@echo "策略评估和视频录制:"
+	@echo "  make play                    - 加载最新模型并可视化（速度跟踪任务）"
+	@echo "  make play-velocity           - 评估速度跟踪策略"
+	@echo "  make play-standing           - 评估站立平衡策略"
+	@echo "  make play-walking            - 评估行走步态策略"
+	@echo "  make play-video              - 录制速度跟踪视频（默认500步）"
+	@echo "  make play-video-velocity     - 录制速度跟踪视频"
+	@echo "  make play-video-standing     - 录制站立平衡视频"
+	@echo "    可选参数:"
+	@echo "      CHECKPOINT=path/to/model.pt  指定检查点文件"
+	@echo "      VIDEO_LENGTH=500             视频长度（步数）"
+	@echo "      NUM_ENVS=1                   并行环境数"
+	@echo ""
+	@echo "==================================================================="
+	@echo "🔧 环境配置"
+	@echo "==================================================================="
 	@echo ""
 	@echo "子模块管理:"
 	@echo "  make submodule-init          - 初始化git子模块"
@@ -64,21 +97,6 @@ help:
 	@echo "  make install-dev             - 安装项目 + 开发工具"
 	@echo "  make install-vis             - 安装项目 + 可视化工具"
 	@echo "  make install-all             - 安装所有依赖"
-	@echo ""
-	@echo "训练命令:"
-	@echo "  make train                   - 速度跟踪训练（平坦地形，默认配置）"
-	@echo "  make train-standing          - 站立平衡训练"
-	@echo "  make train-walking           - 行走步态训练"
-	@echo "  make train-rough             - 粗糙地形训练（台阶、斜坡、障碍）"
-	@echo "  make train-flat              - 平坦地形训练（简化版）"
-	@echo "  make train-test              - 快速测试训练（64 envs, 10 iters）"
-	@echo ""
-	@echo "课程学习 (Curriculum Training):"
-	@echo "  make train-curriculum        - 执行全流程课程学习（阶段1-4）"
-	@echo "  make train-stage1            - 阶段1: 站立平衡 (2000 iters)"
-	@echo "  make train-stage2            - 阶段2: 平坦地形小步 (5000 iters)"
-	@echo "  make train-stage3            - 阶段3: 正常速度行走 (10000 iters)"
-	@echo "  make train-stage4            - 阶段4: 粗糙地形适应 (30000 iters)"
 	@echo ""
 	@echo "验证命令:"
 	@echo "  make verify                  - 验证安装是否成功"
@@ -194,83 +212,25 @@ install-all: check-isaaclab
 	@echo "✓ 安装完成（包含所有依赖）！"
 
 # ==============================================================================
-# 训练目标
+# 课程学习训练（推荐使用）
 # ==============================================================================
-
-# 速度跟踪训练（平坦地形）
-train: check-isaaclab
-	@echo "开始速度跟踪训练（使用配置文件）..."
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
-		--config isaaclab_rl/configs/train_config.yaml \
-		--task velocity $(ARGS)
 
 # 站立平衡训练
-train-standing: check-isaaclab
-	@echo "开始站立平衡训练（使用配置文件）..."
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
-		--config isaaclab_rl/configs/train_config.yaml \
-		--task standing $(ARGS)
-
-# 行走步态训练
-train-walking: check-isaaclab
-	@echo "开始行走步态训练（使用配置文件）..."
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
-		--config isaaclab_rl/configs/train_config.yaml \
-		--task walking $(ARGS)
-
-# 粗糙地形训练（台阶、斜坡、障碍）
-train-rough: check-isaaclab
-	@echo "开始粗糙地形训练（使用配置文件）..."
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
-		--config isaaclab_rl/configs/train_config.yaml \
-		--task rough $(ARGS)
-
-# 录制粗糙地形训练视频（短跑测试）
-video-rough: check-isaaclab
-	@echo "开始录制粗糙地形训练视频（50 iter, 200 steps）..."
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
-		--config isaaclab_rl/configs/train_config.yaml \
-		--task rough \
-		--num_envs 64 \
-		--enable_cameras \
-		--video --video_interval 10 --video_length 200 --max_iterations 50
-
-# 平坦地形训练（简化版）
-train-flat: check-isaaclab
-	@echo "开始平坦地形训练（使用配置文件）..."
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
-		--config isaaclab_rl/configs/train_config.yaml \
-		--task flat $(ARGS)
-
-# 快速测试训练
-train-test: check-isaaclab
-	@echo "快速测试训练（64 envs, 10 iters）..."
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
-		--config isaaclab_rl/configs/train_config.yaml \
-		--task velocity \
-		--num_envs 64 \
-		--max_iterations 10 $(ARGS)
-
-# ==============================================================================
-# 课程学习 (Curriculum Training)
-# ==============================================================================
-
-# 阶段 1: 站立平衡
 # 目标：学会基本站立，摔倒率<20%
-train-stage1: check-isaaclab
-	@echo ">>> [阶段 1/4] 开始站立平衡训练 (2000 iterations)..."
+train-standing: check-isaaclab
+	@echo ">>> [站立平衡] 开始训练 (2000 iterations)..."
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
 		--task standing \
 		--num_envs 4096 \
 		--max_iterations 2000 $(ARGS)
 
-# 阶段 2: 平坦地形小步行走
+# 平坦地形行走训练
 # 目标：学会迈步，保持平衡
-# 自动加载 stage1 最新的 checkpoint
-train-stage2: check-isaaclab
-	@echo ">>> [阶段 2/4] 开始平坦地形小步训练 (5000 iterations)..."
+# 自动加载站立训练最新的 checkpoint
+train-flat: check-isaaclab
+	@echo ">>> [平坦地形] 开始训练 (5000 iterations)..."
 	@LATEST_STANDING=$$(ls -td logs/jiyuan_standing/*/ 2>/dev/null | head -1 | xargs -I {} basename {}); \
-	if [ -z "$$LATEST_STANDING" ]; then echo "Error: 未找到阶段 1 的训练记录"; exit 1; fi; \
+	if [ -z "$$LATEST_STANDING" ]; then echo "Error: 未找到站立训练记录"; exit 1; fi; \
 	echo "加载站立模型: jiyuan_standing/$$LATEST_STANDING"; \
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
 		--task flat \
@@ -278,13 +238,13 @@ train-stage2: check-isaaclab
 		--max_iterations 5000 \
 		--resume --load_run jiyuan_standing/$$LATEST_STANDING $(ARGS)
 
-# 阶段 3: 正常速度行走
+# 正常速度行走训练
 # 目标：跟踪速度命令，提高动态稳定性
-# 自动加载 stage2 (jiyuan_velocity_tracking) 最新的 checkpoint
-train-stage3: check-isaaclab
-	@echo ">>> [阶段 3/4] 开始正常速度行走训练 (10000 iterations)..."
+# 自动加载平坦地形训练最新的 checkpoint
+train-walking: check-isaaclab
+	@echo ">>> [正常行走] 开始训练 (10000 iterations)..."
 	@LATEST_VEL=$$(ls -td logs/jiyuan_velocity_tracking/*/ 2>/dev/null | head -1 | xargs -I {} basename {}); \
-	if [ -z "$$LATEST_VEL" ]; then echo "Error: 未找到阶段 2 的训练记录"; exit 1; fi; \
+	if [ -z "$$LATEST_VEL" ]; then echo "Error: 未找到平坦地形训练记录"; exit 1; fi; \
 	echo "加载平坦地形模型: jiyuan_velocity_tracking/$$LATEST_VEL"; \
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
 		--task velocity \
@@ -292,12 +252,12 @@ train-stage3: check-isaaclab
 		--max_iterations 10000 \
 		--resume --load_run jiyuan_velocity_tracking/$$LATEST_VEL $(ARGS)
 
-# 阶段 4: 地形适应
+# 粗糙地形适应训练
 # 目标：在粗糙地形上稳定行走
-train-stage4: check-isaaclab
-	@echo ">>> [阶段 4/4] 开始粗糙地形适应训练 (30000 iterations)..."
+train-rough: check-isaaclab
+	@echo ">>> [粗糙地形] 开始训练 (30000 iterations)..."
 	@LATEST_VEL=$$(ls -td logs/jiyuan_velocity_tracking/*/ 2>/dev/null | head -1 | xargs -I {} basename {}); \
-	if [ -z "$$LATEST_VEL" ]; then echo "Error: 未找到阶段 3 的训练记录"; exit 1; fi; \
+	if [ -z "$$LATEST_VEL" ]; then echo "Error: 未找到行走训练记录"; exit 1; fi; \
 	echo "加载行走模型: jiyuan_velocity_tracking/$$LATEST_VEL"; \
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
 		--task rough \
@@ -306,8 +266,129 @@ train-stage4: check-isaaclab
 		--resume --load_run jiyuan_velocity_tracking/$$LATEST_VEL $(ARGS)
 
 # 一键启动全流程
-train-curriculum: train-stage1 train-stage2 train-stage3 train-stage4
+train-curriculum: train-standing train-flat train-walking train-rough
 	@echo "✓ 课程学习全流程训练完成！"
+
+# ==============================================================================
+# 策略评估和视频录制
+# ==============================================================================
+
+# 可选参数
+CHECKPOINT ?=
+VIDEO_LENGTH ?= 500
+NUM_ENVS ?= 1
+
+# 默认 play：评估速度跟踪策略（GUI 可视化）
+play: play-velocity
+
+# 评估速度跟踪策略
+play-velocity: check-isaaclab
+	@echo "评估速度跟踪策略（GUI 可视化）..."
+	@if [ -n "$(CHECKPOINT)" ]; then \
+		echo "使用指定检查点: $(CHECKPOINT)"; \
+		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+			--task velocity \
+			--checkpoint $(CHECKPOINT) \
+			--num_envs $(NUM_ENVS) $(ARGS); \
+	else \
+		echo "自动加载最新检查点"; \
+		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+			--task velocity \
+			--num_envs $(NUM_ENVS) $(ARGS); \
+	fi
+
+# 评估站立平衡策略
+play-standing: check-isaaclab
+	@echo "评估站立平衡策略（GUI 可视化）..."
+	@if [ -n "$(CHECKPOINT)" ]; then \
+		echo "使用指定检查点: $(CHECKPOINT)"; \
+		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+			--task standing \
+			--checkpoint $(CHECKPOINT) \
+			--num_envs $(NUM_ENVS) $(ARGS); \
+	else \
+		echo "自动加载最新检查点"; \
+		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+			--task standing \
+			--num_envs $(NUM_ENVS) $(ARGS); \
+	fi
+
+# 评估行走步态策略
+play-walking: check-isaaclab
+	@echo "评估行走步态策略（GUI 可视化）..."
+	@if [ -n "$(CHECKPOINT)" ]; then \
+		echo "使用指定检查点: $(CHECKPOINT)"; \
+		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+			--task walking \
+			--checkpoint $(CHECKPOINT) \
+			--num_envs $(NUM_ENVS) $(ARGS); \
+	else \
+		echo "自动加载最新检查点"; \
+		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+			--task walking \
+			--num_envs $(NUM_ENVS) $(ARGS); \
+	fi
+
+# 默认视频录制：速度跟踪任务
+play-video: play-video-velocity
+
+# 录制速度跟踪视频
+play-video-velocity: check-isaaclab
+	@echo "录制速度跟踪视频（$(VIDEO_LENGTH) 步）..."
+	@if [ -n "$(CHECKPOINT)" ]; then \
+		echo "使用指定检查点: $(CHECKPOINT)"; \
+		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+			--task velocity \
+			--checkpoint $(CHECKPOINT) \
+			--video --video_length $(VIDEO_LENGTH) \
+			--num_envs 1 $(ARGS); \
+	else \
+		echo "自动加载最新检查点"; \
+		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+			--task velocity \
+			--video --video_length $(VIDEO_LENGTH) \
+			--num_envs 1 $(ARGS); \
+	fi
+	@echo "✓ 视频录制完成！查看 logs/<实验名>/<运行ID>/videos/play/"
+
+# 录制站立平衡视频
+play-video-standing: check-isaaclab
+	@echo "录制站立平衡视频（$(VIDEO_LENGTH) 步）..."
+	@if [ -n "$(CHECKPOINT)" ]; then \
+		echo "使用指定检查点: $(CHECKPOINT)"; \
+		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+			--task standing \
+			--checkpoint $(CHECKPOINT) \
+			--video --video_length $(VIDEO_LENGTH) \
+			--num_envs 1 $(ARGS); \
+	else \
+		echo "自动加载最新检查点"; \
+		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+			--task standing \
+			--video --video_length $(VIDEO_LENGTH) \
+			--num_envs 1 $(ARGS); \
+	fi
+	@echo "✓ 视频录制完成！查看 logs/<实验名>/<运行ID>/videos/play/"
+
+# 录制行走步态视频
+play-video-walking: check-isaaclab
+	@echo "录制行走步态视频（$(VIDEO_LENGTH) 步）..."
+	@if [ -n "$(CHECKPOINT)" ]; then \
+		echo "使用指定检查点: $(CHECKPOINT)"; \
+		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+			--task walking \
+			--checkpoint $(CHECKPOINT) \
+			--video --video_length $(VIDEO_LENGTH) \
+			--num_envs 1 $(ARGS); \
+	else \
+		echo "自动加载最新检查点"; \
+		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+			--task walking \
+			--video --video_length $(VIDEO_LENGTH) \
+			--num_envs 1 $(ARGS); \
+	fi
+	@echo "✓ 视频录制完成！查看 logs/<实验名>/<运行ID>/videos/play/"
+
 
 # ==============================================================================
 # 验证目标
