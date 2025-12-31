@@ -20,16 +20,23 @@ cmd_yaw_range: [-0.1, 0.1]     # 微小转动
 
 # ==================== 奖励权重（踏步优化） ====================
 reward_weights:
+  # 基础踏步奖励
   forward_velocity: 0.0        # 不要求前进
-  gait_symmetry: 0.5           # 开启步态对称性（重点）
-  foot_clearance: 0.3          # 开启脚部抬高（重点）
-  trunk_height: 1.0            # 高度保持奖励（降低避免过拟合）
-  orientation: -0.5            # 姿态惩罚（降低避免负奖励爆炸）
-  trunk_lin_vel_z: -0.5        # Z方向速度惩罚（降低）
-  drag: -0.5                   # 开启拖地惩罚
-  alive: 1.0
-  action_rate: -0.015
-  torques: -0.00015
+  gait_symmetry: 0.5           # 步态对称性（核心）
+  foot_clearance: 0.3          # 脚部抬高（重点）
+  trunk_height: 1.0            # 高度保持
+  orientation: -0.3            # 姿态惩罚（降低强度）
+  trunk_lin_vel_z: -0.3        # Z方向速度惩罚（降低）
+  drag: -0.3                   # 拖地惩罚（降低）
+  alive: 0.5                   # 存活奖励（降低）
+  action_rate: -0.005          # 动作平滑（大幅降低）
+  torques: -0.00005            # 扭矩惩罚（降低）
+  # 新增增强奖励项（基于Unitree踏步研究）
+  gait_periodicity: 0.6        # 步态周期性（踏步核心）
+  swing_trajectory: 0.4        # 摆动轨迹（平滑抬脚）
+  landing_impact: 0.2          # 着地冲击控制
+  energy_efficiency: 0.1       # 能量效率
+  stability: 0.4               # 综合稳定性
 
 # ==================== PPO超参数 ====================
 num_epochs: 4
@@ -52,7 +59,7 @@ learning_rate: 3.0e-4
 final_lr_fraction: 0.02
 
 # ==================== 网络配置 ====================
-hidden_dims: [256, 256, 128]
+hidden_dims: [512, 512, 256]  # 增大网络容量处理复杂奖励
 shared_backbone: true
 
 # ==================== 视频录制配置 ====================

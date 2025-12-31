@@ -19,17 +19,27 @@ cmd_y_range: [-0.5, 0.5]      # 扩大侧向范围
 cmd_yaw_range: [-1.0, 1.0]    # 扩大转动范围
 
 # ==================== 奖励权重（高速适应优化） ====================
+# 基础奖励权重（高速优化调整）
 reward_weights:
-  forward_velocity: 2.0       # 加强速度奖励（重点）
-  gait_symmetry: 0.3
-  foot_clearance: 0.2
-  trunk_height: 1.0          # 高度保持奖励（降低避免过拟合）
-  orientation: -0.5          # 姿态惩罚（降低避免负奖励爆炸）
-  trunk_lin_vel_z: -0.5      # Z方向速度惩罚（降低）
-  drag: -1.0
-  alive: 0.3
-  action_rate: -0.01
-  torques: -0.0001
+  # 基础运动奖励（针对高速调整）
+  forward_velocity: 1.8       # 保持较高的前向速度奖励
+  gait_symmetry: 0.4          # 保持步态对称性奖励
+  foot_clearance: 0.4         # 增加脚部抬高奖励（高速需要更大摆动）
+  trunk_height: 0.8           # 降低高度保持奖励
+  orientation: -0.4           # 降低姿态惩罚强度
+  trunk_lin_vel_z: -0.4       # 降低Z方向速度惩罚
+  drag: -0.8                  # 保持拖地惩罚（高速更关键）
+  alive: 0.3                  # 保持存活奖励
+  action_rate: -0.01          # 保持动作变化率惩罚
+  torques: -0.0001            # 保持力矩惩罚
+
+  # Unitree增强奖励项（重点强化速度跟踪和摆动轨迹）
+  gait_periodicity: 1.0       # 步态周期性（高速下保持节奏）
+  swing_trajectory: 1.5       # 摆动轨迹（重点，高速需要优化摆动路径）
+  landing_impact: -1.0        # 着地冲击（强化惩罚，高速着地更危险）
+  energy_efficiency: 0.5      # 能量效率（适度要求）
+  velocity_tracking: 2.5      # 增强速度跟踪（重点，高速跟踪更困难）
+  stability: 1.5              # 综合稳定性（重点，高速需要更强稳定性）
 
 # ==================== PPO超参数 ====================
 num_epochs: 4
@@ -52,7 +62,7 @@ learning_rate: 3.0e-4
 final_lr_fraction: 0.02
 
 # ==================== 网络配置 ====================
-hidden_dims: [256, 256, 128]
+hidden_dims: [512, 512, 256]
 shared_backbone: true
 
 # ==================== 视频录制配置 ====================

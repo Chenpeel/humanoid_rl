@@ -20,16 +20,19 @@ cmd_yaw_range: [0.0, 0.0]    # 角速度0
 
 # ==================== 奖励权重（站立优化） ====================
 reward_weights:
-  forward_velocity: 0.0      # 关闭前向速度奖励
-  gait_symmetry: 0.0         # 关闭步态对称性
-  foot_clearance: 0.0        # 关闭脚部抬高
-  trunk_height: 1.0          # 高度保持奖励（降低避免过拟合）
-  orientation: -0.5          # 姿态惩罚（降低避免负奖励爆炸）
-  trunk_lin_vel_z: -0.5      # Z方向速度惩罚（降低）
-  drag: 0.0                  # 关闭拖地惩罚
-  alive: 1.0                 # 保持存活奖励
-  action_rate: -0.02         # 动作平滑惩罚
-  torques: -0.0002           # 扭矩惩罚
+  # 基础站立奖励（基于Unitree研究成果优化）
+  height: 1.0                # 高度保持（核心奖励）
+  orientation: 0.8            # 姿态稳定（稍降低避免过拟合）
+  lin_vel: -0.3              # 线速度惩罚（降低惩罚强度）
+  ang_vel: -0.2              # 角速度惩罚（降低惩罚强度）
+  alive: 0.5                 # 存活奖励（提高基础奖励）
+  action_rate: -0.005        # 动作平滑（大幅降低）
+  torques: -0.00005          # 能量效率（大幅降低）
+  # 新增奖励项（基于Unitree研究）
+  foot_clearance: 0.3        # 脚部抬高（小幅抬脚奖励）
+  swing_time: 0.2            # 摆动时间（微小摆动奖励）
+  contact_force: 0.1         # 接触力控制（减少冲击）
+  stability: 0.6             # 综合稳定性（重要奖励）
 
 # ==================== PPO超参数 ====================
 num_epochs: 4
@@ -52,7 +55,7 @@ learning_rate: 3.0e-4
 final_lr_fraction: 0.02
 
 # ==================== 网络配置 ====================
-hidden_dims: [256, 256, 128]
+hidden_dims: [512, 512, 256]  # 增大网络容量以处理更复杂的奖励
 shared_backbone: true
 
 # ==================== 视频录制配置 ====================

@@ -19,17 +19,27 @@ cmd_y_range: [-0.4, 0.4]
 cmd_yaw_range: [-0.8, 0.8]
 
 # ==================== 奖励权重（地形适应优化） ====================
+# 基础奖励权重（地形适应专用调整）
 reward_weights:
-  forward_velocity: 1.2       # 降低速度要求，优先稳定性
-  gait_symmetry: 0.3
-  foot_clearance: 0.4         # 加强脚部抬高（重点）
-  trunk_height: 1.0          # 高度保持奖励（降低避免过拟合）
-  orientation: -0.5          # 姿态惩罚（降低避免负奖励爆炸）
-  trunk_lin_vel_z: -0.5      # Z方向速度惩罚（降低）
-  drag: -1.0
-  alive: 0.5                  # 提高存活奖励
-  action_rate: -0.01
-  torques: -0.0001
+  # 基础运动奖励（地形适应优化）
+  forward_velocity: 1.0       # 降低速度要求，专注稳定性
+  gait_symmetry: 0.4          # 增加步态对称性奖励（地形需要对称适应）
+  foot_clearance: 0.6         # 大幅加强脚部抬高（重点，地形需要高抬腿）
+  trunk_height: 0.8           # 降低高度保持奖励
+  orientation: -0.4           # 降低姿态惩罚强度
+  trunk_lin_vel_z: -0.6       # 增加Z方向速度惩罚（地形起伏更敏感）
+  drag: -1.2                  # 增强拖地惩罚（地形更危险）
+  alive: 0.5                  # 保持存活奖励
+  action_rate: -0.015         # 增加动作变化率惩罚（地形需要平滑动作）
+  torques: -0.00015           # 增加力矩惩罚（地形需要控制用力）
+
+  # Unitree增强奖励项（重点强化摆动轨迹和着地冲击控制）
+  gait_periodicity: 0.8       # 步态周期性（地形下适度保持节奏）
+  swing_trajectory: 2.0       # 摆动轨迹（重点，地形需要精确摆动控制）
+  landing_impact: -1.5        # 着地冲击（重点惩罚，地形着地更关键）
+  energy_efficiency: 0.4      # 能量效率（地形下适度要求）
+  velocity_tracking: 1.0      # 降低速度跟踪要求（地形优先稳定性）
+  stability: 2.0              # 综合稳定性（重点，地形需要极强稳定性）
 
 # ==================== PPO超参数 ====================
 num_epochs: 4
@@ -52,7 +62,7 @@ learning_rate: 2.5e-4         # 略微降低学习率以稳定适应
 final_lr_fraction: 0.02
 
 # ==================== 网络配置 ====================
-hidden_dims: [256, 256, 128]
+hidden_dims: [512, 512, 256]
 shared_backbone: true
 
 # ==================== 视频录制配置 ====================
