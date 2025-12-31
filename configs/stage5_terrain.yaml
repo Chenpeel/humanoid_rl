@@ -8,7 +8,7 @@ scene: jiyuan_fit_rough  # 粗糙地形（关键变化）
 env_type: walking
 
 # ==================== 环境配置 ====================
-num_envs: 512
+num_envs: 2048
 num_steps: 32
 max_episode_steps: 2000
 
@@ -23,9 +23,9 @@ reward_weights:
   forward_velocity: 1.2       # 降低速度要求，优先稳定性
   gait_symmetry: 0.3
   foot_clearance: 0.4         # 加强脚部抬高（重点）
-  trunk_height: 0.8           # 加强高度保持（重点）
-  orientation: -0.5           # 加强姿态控制（重点）
-  trunk_lin_vel_z: -0.8
+  trunk_height: 1.0          # 高度保持奖励（降低避免过拟合）
+  orientation: -0.5          # 姿态惩罚（降低避免负奖励爆炸）
+  trunk_lin_vel_z: -0.5      # Z方向速度惩罚（降低）
   drag: -1.0
   alive: 0.5                  # 提高存活奖励
   action_rate: -0.01
@@ -42,7 +42,7 @@ entropy_coef: 0.008           # 提高熵以探索适应策略
 max_grad_norm: 0.5
 
 # ==================== 训练配置 ====================
-total_timesteps: 524288000   # 500M步 (约500 iterations，从3000到5000)
+total_timesteps: 262144000   # 250M步 (减半，约250 iterations)
 log_interval: 10
 eval_interval: 25
 save_interval: 50
@@ -65,7 +65,7 @@ video_camera: "track"
 stage_config:
   stage_id: 5
   stage_name: "terrain_adaptation"
-  min_iterations: 1600
+  min_iterations: 15       # 进一步减小最小迭代次数（快速测试）
   transition_criteria:
     min_velocity_ratio: 0.7    # 平均速度达到平坦地形的70%
     max_fall_rate: 0.15        # 摔倒率 < 15%

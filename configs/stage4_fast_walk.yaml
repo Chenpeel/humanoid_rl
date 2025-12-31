@@ -8,7 +8,7 @@ scene: jiyuan_fit_flat  # 平坦地形
 env_type: walking
 
 # ==================== 环境配置 ====================
-num_envs: 512
+num_envs: 2048
 num_steps: 32
 max_episode_steps: 2000
 
@@ -23,9 +23,9 @@ reward_weights:
   forward_velocity: 2.0       # 加强速度奖励（重点）
   gait_symmetry: 0.3
   foot_clearance: 0.2
-  trunk_height: 0.5
-  orientation: -0.3
-  trunk_lin_vel_z: -0.5
+  trunk_height: 1.0          # 高度保持奖励（降低避免过拟合）
+  orientation: -0.5          # 姿态惩罚（降低避免负奖励爆炸）
+  trunk_lin_vel_z: -0.5      # Z方向速度惩罚（降低）
   drag: -1.0
   alive: 0.3
   action_rate: -0.01
@@ -42,7 +42,7 @@ entropy_coef: 0.005
 max_grad_norm: 0.5
 
 # ==================== 训练配置 ====================
-total_timesteps: 262144000   # 250M步 (约250 iterations，从2000到3000)
+total_timesteps: 131072000   # 125M步 (减半，约125 iterations)
 log_interval: 10
 eval_interval: 25
 save_interval: 50
@@ -65,7 +65,7 @@ video_camera: "track"
 stage_config:
   stage_id: 4
   stage_name: "fast_walk"
-  min_iterations: 933
+  min_iterations: 15       # 进一步减小最小迭代次数（快速测试）
   transition_criteria:
     min_velocity_tracking: 0.75  # 速度跟踪准确率 > 75%
     min_max_velocity: 0.9        # 最大稳定速度 > 0.9 m/s

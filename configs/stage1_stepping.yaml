@@ -8,7 +8,7 @@ scene: jiyuan_fit_flat  # 平坦地形
 env_type: walking
 
 # ==================== 环境配置 ====================
-num_envs: 512
+num_envs: 2048
 num_steps: 32
 max_episode_steps: 500
 
@@ -23,9 +23,9 @@ reward_weights:
   forward_velocity: 0.0        # 不要求前进
   gait_symmetry: 0.5           # 开启步态对称性（重点）
   foot_clearance: 0.3          # 开启脚部抬高（重点）
-  trunk_height: 1.5            # 保持高度奖励
-  orientation: -0.5            # 姿态惩罚
-  trunk_lin_vel_z: -0.8
+  trunk_height: 1.0            # 高度保持奖励（降低避免过拟合）
+  orientation: -0.5            # 姿态惩罚（降低避免负奖励爆炸）
+  trunk_lin_vel_z: -0.5        # Z方向速度惩罚（降低）
   drag: -0.5                   # 开启拖地惩罚
   alive: 1.0
   action_rate: -0.015
@@ -42,7 +42,7 @@ entropy_coef: 0.01            # 保持熵以探索步态
 max_grad_norm: 0.5
 
 # ==================== 训练配置 ====================
-total_timesteps: 78643200    # 75M步 (约75 iterations，从200到500)
+total_timesteps: 39321600    # 37.5M步 (减半，约37 iterations)
 log_interval: 10
 eval_interval: 25
 save_interval: 25
@@ -65,7 +65,7 @@ video_camera: "track"
 stage_config:
   stage_id: 1
   stage_name: "stepping"
-  min_iterations: 133
+  min_iterations: 15       # 进一步减小最小迭代次数（快速测试）
   transition_criteria:
     min_gait_symmetry: 0.5    # 步态对称性奖励 > 0.5
     min_foot_clearance: 0.3   # 脚部抬高奖励 > 0.3
