@@ -171,8 +171,8 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Robot/.*base_link",
         spawn=None,
         init_state=ArticulationCfg.InitialStateCfg(
-            # 初始位置：恢复为 0.92m
-            pos=(0.0, 0.0, 0.92),
+            # 初始位置：恢复为 1.05m (避免穿地)
+            pos=(0.0, 0.0, 1.05),
             # 初始姿态：保持直立
             rot=(1.0, 0.0, 0.0, 0.0),
             # 关节初始位置
