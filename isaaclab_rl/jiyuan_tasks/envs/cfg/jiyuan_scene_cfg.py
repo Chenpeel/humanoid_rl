@@ -139,100 +139,81 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         debug_vis=False,
     )
 
-    # 机器人资产（仅负责生成 USD）
-    # 将 spawn 和 articulation 分离，以解决多根节点和路径查找问题
-    robot_asset: AssetBaseCfg = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Robot",
-        spawn=UsdFileCfg(
-            # USD 文件路径（自动根据模型名称查找）
-            # 从环境变量 ROBOT_MODEL 读取，默认为 "jiyuan"
-            usd_path=get_usd_path(),
-            # 启用contact sensors以支持contact_forces传感器
-            activate_contact_sensors=True,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                rigid_body_enabled=True,
-                max_linear_velocity=1000.0,
-                max_angular_velocity=1000.0,
-                max_depenetration_velocity=100.0,
-                enable_gyroscopic_forces=True,
-            ),
-            articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                enabled_self_collisions=False,
-                solver_position_iteration_count=16,
-                solver_velocity_iteration_count=1,
-            ),
-        ),
-    )
-
-        # 机器人代理（负责物理交互和控制）
-        # 指向 base_link，因为 worldBody 可能只是容器
+        # 机器人资产与代理统一配置
         robot: ArticulationCfg = ArticulationCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/base_link",
-            # 不再在此处 spawn，因为 robot_asset 已经生成了 USD
-            spawn=None,
+            prim_path="{ENV_REGEX_NS}/Robot",
+            spawn=UsdFileCfg(
+                usd_path=get_usd_path(),
+                activate_contact_sensors=True,
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                    rigid_body_enabled=True,
+                    max_linear_velocity=100.0,
+                    max_angular_velocity=100.0,
+                    max_depenetration_velocity=1.0, # 限制穿透后的弹射速度
+                    enable_gyroscopic_forces=True,
+                ),
+                articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+                    enabled_self_collisions=False,
+                    solver_position_iteration_count=8,
+                    solver_velocity_iteration_count=4, # 增加速度迭代次数
+                ),
+            ),
             init_state=ArticulationCfg.InitialStateCfg(
-                # 初始位置：调整为 1.05m，避免地面穿透导致的弹飞
-                pos=(0.0, 0.0, 1.05),
+                # 初始位置：恢复为 0.92m
+                pos=(0.0, 0.0, 0.92),
                 # 初始姿态：保持直立
                 rot=(1.0, 0.0, 0.0, 0.0),
                 # 关节初始位置
                 joint_pos={
-                    # 修改：初始化串行链关节
                     ".*hip_cube_joint": 0.0,
                     ".*thigh_joint": 0.0,
                     ".*hip_roll.*": 0.0,
-                    # 膝关节：弯曲 (-0.3/0.3)，避免奇异点
-                    "right_knee.*": -0.3,
-                    "left_knee.*": 0.3,
-                    # 踝关节：串联结构 (Fit 模型)
+                    # 膝关节：弯曲 (-0.4/0.4)，避免奇异点
+                    "right_knee.*": -0.4,
+                    "left_knee.*": 0.4,
                     ".*ankle_cube.*": 0.0,
                     ".*ankle_axle.*": 0.0,
                     ".*foot_joint.*": 0.0,
-                    # 脚趾关节
                     ".*toe.*": 0.0,
                 },
-                # 初始速度：静止
                 joint_vel={".*": 0.0},
             ),
-            # 执行器配置
             actuators={
-                # 主要关节电机（hip, knee）
-                # 修改：直接驱动串行链上的关节，而非 Engine 关节
                 "main_motors": ImplicitActuatorCfg(
                     joint_names_expr=[
-                        ".*hip_cube_joint",   # 替代 pitch_engine (Pitch)
-                        ".*thigh_joint",      # 替代 yaw_engine (Yaw)
-                        ".*hip_roll_joint",   # Roll (保持不变)
-                        ".*knee_joint",       # Knee (保持不变)
+                        ".*hip_cube_joint",
+                        ".*thigh_joint",
+                        ".*hip_roll_joint",
+                        ".*knee_joint",
                     ],
-                    stiffness=20.0,
-                    damping=10.0,
+                    stiffness=40.0,
+                    damping=5.0,
                     effort_limit_sim=150.0,
                     velocity_limit_sim=10.0,
                 ),
-                # 踝关节电机（串联结构 - Fit 模型）
                 "ankle_motors": ImplicitActuatorCfg(
                     joint_names_expr=[
                         ".*ankle_cube_joint",
                         ".*ankle_axle_joint",
                         ".*foot_joint",
                     ],
-                    stiffness=15.0,
-                    damping=8.0,
+                    stiffness=20.0,
+                    damping=2.0,
                     effort_limit_sim=100.0,
                     velocity_limit_sim=10.0,
                 ),
-                # 脚趾电机
                 "toe_motors": ImplicitActuatorCfg(
                     joint_names_expr=[".*toe_joint"],
                     stiffness=10.0,
-                    damping=4.0,
+                    damping=1.0,
                     effort_limit_sim=50.0,
                     velocity_limit_sim=10.0,
                 ),
             },
         )
-    # 脚部接触传感器（用于奖励计算和步态检测）
+    
+        # 移除旧的 robot_asset 定义，因为它已合并到 robot 中
+        robot_asset = None    # 脚部接触传感器（用于奖励计算和步态检测）
     # 暂时禁用以排除路径错误，先验证物理训练是否能跑通
     contact_forces = None
     # contact_forces = ContactSensorCfg(
