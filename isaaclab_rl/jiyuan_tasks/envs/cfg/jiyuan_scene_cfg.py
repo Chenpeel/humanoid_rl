@@ -197,22 +197,16 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                     velocity_limit_sim=10.0,
                 ),
             },
-        )
-    
-        # 移除旧的 robot_asset 定义，因为它已合并到 robot 中
-        robot_asset = None    # 脚部接触传感器（用于奖励计算和步态检测）
+        },
+    )
+
+    # 脚部接触传感器（用于奖励计算和步态检测）
     # 暂时禁用以排除路径错误，先验证物理训练是否能跑通
     contact_forces = None
-    # contact_forces = ContactSensorCfg(
-    #     prim_path="{ENV_REGEX_NS}/Robot/.*foot_link",
-    #     update_period=0.0,  # 每步更新
-    #     history_length=3,
-    #     debug_vis=False,
-    # )
 
     # 高度扫描传感器（用于地形感知和课程学习兼容性）
     height_scanner = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/base_link",
+        prim_path="{ENV_REGEX_NS}/Robot/base_link/base_link",
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
