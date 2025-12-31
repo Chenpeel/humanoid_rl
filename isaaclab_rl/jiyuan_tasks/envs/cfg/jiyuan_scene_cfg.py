@@ -159,7 +159,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     # 机器人代理（负责物理交互和控制）
     # 指向 worldBody (MJCF 导入后的 Articulation Root)
     robot: ArticulationCfg = ArticulationCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/worldBody",
+        prim_path="{ENV_REGEX_NS}/Robot/.*worldBody",
         spawn=None,
         init_state=ArticulationCfg.InitialStateCfg(
             # 初始位置：恢复为 0.92m

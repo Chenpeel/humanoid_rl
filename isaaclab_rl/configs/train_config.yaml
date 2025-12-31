@@ -28,7 +28,7 @@ environment:
     command_resample_time: 10.0  # 秒
 
   standing:
-    target_height: 0.35  # m
+    target_height: 0.80  # m
     height_tolerance: 0.05  # m
 
   walking:
