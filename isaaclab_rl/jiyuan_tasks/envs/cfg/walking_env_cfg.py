@@ -166,7 +166,7 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
 
         # 脚部滑动惩罚（借鉴H1/G1，防止拖地）
         feet_slide = RewTerm(
-            func=mdp.feet_slide,
+            func=walking_rewards.feet_slide,
             weight=-0.25,
             params={
                 "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*ankle"),

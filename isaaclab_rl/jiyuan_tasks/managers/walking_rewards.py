@@ -27,10 +27,50 @@ if TYPE_CHECKING:
 # 导入数学工具
 from ..utils.math_utils import quat_to_euler_xyz, normalize_quaternion
 
+# 导入 Isaac Lab 管理器工具
+from isaaclab.managers import SceneEntityCfg
+from isaaclab.sensors import ContactSensor
+
 
 ##
 # 步态相关奖励
 ##
+
+
+def feet_slide(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> Tensor:
+    """脚部滑动惩罚
+
+    惩罚脚部在接触地面时的滑动。这有助于确保机器人在支撑相保持稳定的接触，
+    而不是拖拽脚部。奖励计算为脚部线速度的范数乘以接触标志。
+
+    参考：Isaac Lab locomotion tasks
+
+    Args:
+        env: 环境实例
+        sensor_cfg: 接触传感器配置
+        asset_cfg: 机器人资产配置
+
+    Returns:
+        滑动惩罚值，形状 (num_envs,)
+    """
+    # 获取接触传感器
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    # 检测接触（使用历史力的最大值）
+    contacts = contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0] > 1.0
+
+    # 获取资产
+    asset = env.scene[asset_cfg.name]
+    # 获取脚部线速度（只考虑 XY 平面）
+    body_vel = asset.data.body_lin_vel_w[:, asset_cfg.body_ids, :2]
+
+    # 计算滑动：速度范数 * 接触标志
+    reward = torch.sum(body_vel.norm(dim=-1) * contacts, dim=1)
+
+    return reward
 
 
 def feet_contact_forces(
