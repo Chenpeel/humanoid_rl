@@ -128,7 +128,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     ground = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="plane",
-        collision_group=-1,
+        collision_group=0,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
             restitution_combine_mode="multiply",
@@ -156,7 +156,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 max_depenetration_velocity=1.0,
             ),
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                enabled_self_collisions=False,
+                enabled_self_collisions=True,
                 solver_position_iteration_count=4,
                 solver_velocity_iteration_count=0,
                 sleep_threshold=0.005,
