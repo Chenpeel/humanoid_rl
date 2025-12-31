@@ -171,11 +171,27 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
             params={"tolerance": 0.2},
         )
 
+        # 脚部空中时间（借鉴H1/G1，鼓励自然步态）
+        feet_air_time = RewTerm(
+            func=rewards.feet_air_time,
+            weight=0.3,  # 速度跟踪任务用稍低权重
+        )
+
         # 速度惩罚（Z方向不应有速度）
         lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
 
         # 角速度惩罚（XY方向不应旋转）
         ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+
+        # 不期望的接触惩罚（借鉴H1/G1）
+        undesired_contacts = RewTerm(
+            func=mdp.undesired_contacts,
+            weight=-1.0,
+            params={
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*thigh|.*torso|.*hip"),
+                "threshold": 1.0,
+            },
+        )
 
         # 动作平滑性
         action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)

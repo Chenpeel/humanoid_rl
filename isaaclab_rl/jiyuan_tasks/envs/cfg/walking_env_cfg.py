@@ -158,6 +158,18 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
             weight=0.3,
         )
 
+        # 脚部空中时间（借鉴H1/G1，鼓励抬脚迈步）
+        feet_air_time = RewTerm(
+            func=walking_rewards.feet_air_time_reward,
+            weight=0.5,  # 中等权重，鼓励自然步态
+        )
+
+        # 足部间隙（避免绊倒）
+        foot_clearance = RewTerm(
+            func=walking_rewards.foot_clearance_reward,
+            weight=0.2,
+        )
+
         # 躯干稳定性
         trunk_height = RewTerm(
             func=walking_rewards.trunk_height_reward,
@@ -176,6 +188,16 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
         ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
         trunk_lin_vel_z = RewTerm(func=walking_rewards.trunk_lin_vel_z_penalty, weight=-0.8)
         trunk_tilt = RewTerm(func=walking_rewards.trunk_orientation_penalty, weight=-0.3)
+
+        # 不期望的接触惩罚（借鉴H1/G1，防止大腿/躯干接地）
+        undesired_contacts = RewTerm(
+            func=mdp.undesired_contacts,
+            weight=-1.0,
+            params={
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*thigh|.*torso|.*hip"),
+                "threshold": 1.0,
+            },
+        )
 
         # 动作平滑性
         action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)

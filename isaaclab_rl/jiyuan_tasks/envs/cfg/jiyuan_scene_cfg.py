@@ -226,7 +226,14 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
 
     # 脚部接触传感器（用于奖励计算和步态检测）
     # 暂时禁用以排除路径错误，先验证物理训练是否能跑通
-    contact_forces = None
+    # 接触力传感器（用于feet_air_time等奖励）
+    # 借鉴H1/G1配置，追踪脚部和身体接触
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*",
+        track_air_time=True,  # 追踪脚部空中时间（关键！）
+        history_length=3,  # 保留3步历史
+        track_pose=False,
+    )
 
     # 高度扫描传感器（用于地形感知和课程学习兼容性）
     height_scanner = RayCasterCfg(
