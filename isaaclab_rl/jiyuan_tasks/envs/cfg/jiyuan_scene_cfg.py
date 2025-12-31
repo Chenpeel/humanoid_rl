@@ -139,28 +139,15 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         debug_vis=False,
     )
 
-        # 机器人资产与代理统一配置
-        robot: ArticulationCfg = ArticulationCfg(
-            prim_path="{ENV_REGEX_NS}/Robot",
-            spawn=UsdFileCfg(
-                usd_path=get_usd_path(),
-                activate_contact_sensors=True,
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                    rigid_body_enabled=True,
-                    max_linear_velocity=100.0,
-                    max_angular_velocity=100.0,
-                    max_depenetration_velocity=1.0, # 限制穿透后的弹射速度
-                    enable_gyroscopic_forces=True,
-                ),
-                articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                    enabled_self_collisions=False,
-                    solver_position_iteration_count=8,
-                    solver_velocity_iteration_count=4, # 增加速度迭代次数
-                ),
-            ),
-            init_state=ArticulationCfg.InitialStateCfg(
-                # 初始位置：恢复为 0.92m
-                pos=(0.0, 0.0, 0.92),
+    # 机器人代理（负责物理交互和控制）
+    # 指向 base_link/base_link，这是真正的 RigidBody
+    robot: ArticulationCfg = ArticulationCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base_link/base_link",
+        # 不再在此处 spawn，因为 robot_asset 已经生成了 USD
+        spawn=None,
+        init_state=ArticulationCfg.InitialStateCfg(
+            # 初始位置：恢复为 0.92m
+            pos=(0.0, 0.0, 0.92),
                 # 初始姿态：保持直立
                 rot=(1.0, 0.0, 0.0, 0.0),
                 # 关节初始位置
