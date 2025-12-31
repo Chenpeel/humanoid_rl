@@ -162,7 +162,7 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
         trunk_height = RewTerm(
             func=walking_rewards.trunk_height_reward,
             weight=0.5,
-            params={"target_height": 0.35, "tolerance": 0.08},
+            params={"target_height": 0.80, "tolerance": 0.08},
         )
 
         orientation = RewTerm(
@@ -227,7 +227,10 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
         )
 
         # 关节位置超限
-
+        joint_pos_limits = DoneTerm(
+            func=terminations.joint_pos_out_of_limits,
+            params={"asset_cfg": SceneEntityCfg("robot")},
+        )
 
     # 事件配置（领域随机化）
     @configclass
@@ -268,7 +271,7 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
             mode="startup",
             params={
                 "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-                "mass_distribution_params": (-0.2, 0.2),
+                "mass_distribution_params": (0.8, 1.2),
                 "operation": "scale",
             },
         )

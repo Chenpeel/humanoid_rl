@@ -148,55 +148,54 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         init_state=ArticulationCfg.InitialStateCfg(
             # 初始位置：恢复为 0.92m
             pos=(0.0, 0.0, 0.92),
-                # 初始姿态：保持直立
-                rot=(1.0, 0.0, 0.0, 0.0),
-                # 关节初始位置
-                joint_pos={
-                    ".*hip_cube_joint": 0.0,
-                    ".*thigh_joint": 0.0,
-                    ".*hip_roll.*": 0.0,
-                    # 膝关节：弯曲 (-0.4/0.4)，避免奇异点
-                    "right_knee.*": -0.4,
-                    "left_knee.*": 0.4,
-                    ".*ankle_cube.*": 0.0,
-                    ".*ankle_axle.*": 0.0,
-                    ".*foot_joint.*": 0.0,
-                    ".*toe.*": 0.0,
-                },
-                joint_vel={".*": 0.0},
-            ),
-            actuators={
-                "main_motors": ImplicitActuatorCfg(
-                    joint_names_expr=[
-                        ".*hip_cube_joint",
-                        ".*thigh_joint",
-                        ".*hip_roll_joint",
-                        ".*knee_joint",
-                    ],
-                    stiffness=40.0,
-                    damping=5.0,
-                    effort_limit_sim=150.0,
-                    velocity_limit_sim=10.0,
-                ),
-                "ankle_motors": ImplicitActuatorCfg(
-                    joint_names_expr=[
-                        ".*ankle_cube_joint",
-                        ".*ankle_axle_joint",
-                        ".*foot_joint",
-                    ],
-                    stiffness=20.0,
-                    damping=2.0,
-                    effort_limit_sim=100.0,
-                    velocity_limit_sim=10.0,
-                ),
-                "toe_motors": ImplicitActuatorCfg(
-                    joint_names_expr=[".*toe_joint"],
-                    stiffness=10.0,
-                    damping=1.0,
-                    effort_limit_sim=50.0,
-                    velocity_limit_sim=10.0,
-                ),
+            # 初始姿态：保持直立
+            rot=(1.0, 0.0, 0.0, 0.0),
+            # 关节初始位置
+            joint_pos={
+                ".*hip_cube_joint": 0.0,
+                ".*thigh_joint": 0.0,
+                ".*hip_roll.*": 0.0,
+                # 膝关节：弯曲 (-0.4/0.4)，避免奇异点
+                "right_knee.*": -0.4,
+                "left_knee.*": 0.4,
+                ".*ankle_cube.*": 0.0,
+                ".*ankle_axle.*": 0.0,
+                ".*foot_joint.*": 0.0,
+                ".*toe.*": 0.0,
             },
+            joint_vel={".*": 0.0},
+        ),
+        actuators={
+            "main_motors": ImplicitActuatorCfg(
+                joint_names_expr=[
+                    ".*hip_cube_joint",
+                    ".*thigh_joint",
+                    ".*hip_roll_joint",
+                    ".*knee_joint",
+                ],
+                stiffness=40.0,
+                damping=5.0,
+                effort_limit_sim=150.0,
+                velocity_limit_sim=10.0,
+            ),
+            "ankle_motors": ImplicitActuatorCfg(
+                joint_names_expr=[
+                    ".*ankle_cube_joint",
+                    ".*ankle_axle_joint",
+                    ".*foot_joint",
+                ],
+                stiffness=20.0,
+                damping=2.0,
+                effort_limit_sim=100.0,
+                velocity_limit_sim=10.0,
+            ),
+            "toe_motors": ImplicitActuatorCfg(
+                joint_names_expr=[".*toe_joint"],
+                stiffness=10.0,
+                damping=1.0,
+                effort_limit_sim=50.0,
+                velocity_limit_sim=10.0,
+            ),
         },
     )
 
