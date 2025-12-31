@@ -226,7 +226,7 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
         # 高度超限（跳得太高）
         height_too_high = DoneTerm(
             func=terminations.base_height_above_threshold,
-            params={"max_height": 1.5},
+            params={"max_height": 5.0},
         )
 
         # 速度异常
