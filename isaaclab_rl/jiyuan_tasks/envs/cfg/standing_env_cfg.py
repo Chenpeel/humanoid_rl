@@ -195,8 +195,11 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
             weight=-0.0002,
         )
 
-        # 存活奖励
-        alive = RewTerm(func=mdp.is_alive, weight=0.5)
+        # 存活奖励（借鉴Humanoid配置，从0.5增加到2.0）
+        alive = RewTerm(func=mdp.is_alive, weight=2.0)
+
+        # 终止惩罚（借鉴H1/G1配置，强烈避免摔倒）
+        termination_penalty = RewTerm(func=mdp.is_terminated, weight=-200.0)
 
         # 关节限制惩罚
         joint_pos_limits = RewTerm(
@@ -240,30 +243,38 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
     class EventsCfg:
         """随机化事件配置"""
 
-        # 重置时随机化机器人姿态（较小范围）
+        # 重置时从默认姿态开始（借鉴H1/G1/Cassie最佳实践）
+        # 初期训练不随机化关节位置，从稳定姿态学习
         reset_robot_joints = EventTerm(
             func=mdp.reset_joints_by_scale,
             mode="reset",
             params={
-                "position_range": (-0.1, 0.1),  # ±0.1 rad（比速度跟踪小）
+                "position_range": (1.0, 1.0),  # 从默认姿态开始，不随机化
                 "velocity_range": (0.0, 0.0),  # 从静止开始
             },
         )
 
-        # 重置时随机化 base 高度（小范围）
+        # 重置时从标准高度和零速度开始（借鉴H1/G1最佳实践）
         reset_base = EventTerm(
             func=mdp.reset_root_state_uniform,
             mode="reset",
             params={
                 "pose_range": {
-                    "x": (-0.1, 0.1),
-                    "y": (-0.1, 0.1),
+                    "x": (-0.2, 0.2),  # 小范围XY偏移
+                    "y": (-0.2, 0.2),
                     "z": (0.88, 0.92),  # 在目标高度附近
-                    "roll": (-0.05, 0.05),
-                    "pitch": (-0.05, 0.05),
-                    "yaw": (-3.14, 3.14),  # 任意朝向
+                    "roll": (0.0, 0.0),  # 零初始姿态
+                    "pitch": (0.0, 0.0),
+                    "yaw": (-3.14, 3.14),  # 任意朝向（yaw不影响平衡）
                 },
-                "velocity_range": {},  # 零速度
+                "velocity_range": {
+                    "x": (0.0, 0.0),
+                    "y": (0.0, 0.0),
+                    "z": (0.0, 0.0),
+                    "roll": (0.0, 0.0),
+                    "pitch": (0.0, 0.0),
+                    "yaw": (0.0, 0.0),
+                },  # 全零速度
             },
         )
 
