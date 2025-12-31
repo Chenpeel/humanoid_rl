@@ -245,7 +245,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
 
     # 高度扫描传感器（用于地形感知和课程学习兼容性）
     height_scanner = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*base_link",
+        prim_path="{ENV_REGEX_NS}/Robot/base_link",
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),

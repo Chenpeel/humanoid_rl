@@ -259,7 +259,7 @@ train-test: check-isaaclab
 # 目标：学会基本站立，摔倒率<20%
 train-stage1: check-isaaclab
 	@echo ">>> [阶段 1/4] 开始站立平衡训练 (2000 iterations)..."
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \sudosudo
 		--task standing \
 		--num_envs 4096 \
 		--max_iterations 2000 $(ARGS)
@@ -340,7 +340,7 @@ clean:
 
 clean-logs:
 	@echo "清理日志文件..."
-	rm -rf logs/
+	
 	@echo "✓ 日志清理完成！"
 
 # ==============================================================================
