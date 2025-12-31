@@ -165,9 +165,9 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     )
 
     # 机器人代理（负责物理交互和控制）
-    # 指向 base_link，因为 worldBody 可能只是容器
+    # 指向 worldBody，因为 MJCF 导入器将其设为 articulation root
     robot: ArticulationCfg = ArticulationCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*base_link",
+        prim_path="{ENV_REGEX_NS}/Robot/worldBody",
         # 不再在此处 spawn，因为 robot_asset 已经生成了 USD
         spawn=None,
         init_state=ArticulationCfg.InitialStateCfg(
@@ -245,7 +245,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
 
     # 高度扫描传感器（用于地形感知和课程学习兼容性）
     height_scanner = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/base_link",
+        prim_path="{ENV_REGEX_NS}/Robot/worldBody/base_link",
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
