@@ -149,7 +149,7 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
         height = RewTerm(
             func=rewards.height_reward,
             weight=2.0,  # 更高权重
-            params={"target_height": 0.35, "tolerance": 0.05},
+            params={"target_height": 0.80, "tolerance": 0.05},
         )
 
         # 姿态稳定（主要目标）
@@ -217,7 +217,7 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
         fallen = DoneTerm(
             func=terminations.is_fallen,
             params={
-                "min_height": 0.2,  # 站立任务不允许太低
+                "min_height": 0.4,  # 站立任务不允许太低
                 "max_roll": 0.785,  # 45度
                 "max_pitch": 0.785,
             },
@@ -226,7 +226,7 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
         # 高度超限（跳得太高）
         height_too_high = DoneTerm(
             func=terminations.base_height_above_threshold,
-            params={"max_height": 0.6},
+            params={"max_height": 1.5},
         )
 
         # 速度异常
@@ -258,7 +258,7 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
                 "pose_range": {
                     "x": (-0.1, 0.1),
                     "y": (-0.1, 0.1),
-                    "z": (0.3, 0.4),  # 在目标高度附近
+                    "z": (0.88, 0.92),  # 在目标高度附近
                     "roll": (-0.05, 0.05),
                     "pitch": (-0.05, 0.05),
                     "yaw": (-3.14, 3.14),  # 任意朝向
