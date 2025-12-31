@@ -28,10 +28,13 @@ ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 # 问题：AutoDL 环境下 NVIDIA Open Kernel Module 的 Vulkan 支持需要使用 EGL 库
 # 解决方案：指定 NVIDIA Vulkan ICD 文件，使用 libEGL_nvidia.so.0
 # 参考：AutoDL 官方文档 - https://www.autodl.com/docs/
-export VK_ICD_FILENAMES = /usr/share/vulkan/icd.d/nvidia_icd.json
+export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
 
 # 日志级别配置（屏蔽 Isaac Sim 的警告输出）
-export CARB_LOG_LEVEL = ERROR
+export CARB_LOG_LEVEL=ERROR
+
+# 终端配置（修复 terminals database is inaccessible 错误）
+export TERM=xterm
 
 
 .PHONY: help install install-dev install-vis install-all clean clean-logs verify
