@@ -229,10 +229,10 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
             params={"max_height": 5.0},
         )
 
-        # 速度异常
+        # 速度异常 (初期训练放宽限制,允许探索)
         velocity_out_of_bounds = DoneTerm(
             func=terminations.linear_velocity_out_of_bounds,
-            params={"max_velocity": 5.0},  # 站立任务不应快速移动
+            params={"max_velocity": 30.0},  # 从5.0放宽到30.0,避免过早终止
         )
 
     # 事件配置（适度随机化）
