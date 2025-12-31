@@ -139,10 +139,10 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         debug_vis=False,
     )
 
-    # 机器人代理（负责物理交互和控制）
-    # 指向 worldBody (MJCF 导入后的 Articulation Root)
-    robot: ArticulationCfg = ArticulationCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*worldBody",
+    # 机器人加载器（负责 Spawn USD 文件）
+    # 将文件加载到 /Robot 路径下，作为容器
+    robot_loader: AssetBaseCfg = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Robot",
         spawn=UsdFileCfg(
             usd_path=get_usd_path(),
             activate_contact_sensors=True,
@@ -163,6 +163,13 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 stabilization_threshold=0.001,
             ),
         ),
+    )
+
+    # 机器人代理（负责物理交互和控制）
+    # 指向 worldBody (MJCF 导入后的 Articulation Root)
+    robot: ArticulationCfg = ArticulationCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/worldBody",
+        spawn=None,
         init_state=ArticulationCfg.InitialStateCfg(
             # 初始位置：恢复为 0.92m
             pos=(0.0, 0.0, 0.92),
