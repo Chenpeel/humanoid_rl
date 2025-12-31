@@ -195,42 +195,41 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
             joint_vel={".*": 0.0},
         ),
         # 执行器配置
-        actuators={
-            # 主要关节电机（hip, knee）
-            # 修改：直接驱动串行链上的关节，而非 Engine 关节
-            "main_motors": ImplicitActuatorCfg(
-                joint_names_expr=[
-                    ".*hip_cube_joint",   # 替代 pitch_engine (Pitch)
-                    ".*thigh_joint",      # 替代 yaw_engine (Yaw)
-                    ".*hip_roll_joint",   # Roll (保持不变)
-                    ".*knee_joint",       # Knee (保持不变)
-                ],
-                stiffness=40.0,
-                damping=3.0,
-                effort_limit_sim=150.0,
-                velocity_limit_sim=10.0,
-            ),
-            # 踝关节电机（串联结构 - Fit 模型）
-            "ankle_motors": ImplicitActuatorCfg(
-                joint_names_expr=[
-                    ".*ankle_cube_joint",
-                    ".*ankle_axle_joint",
-                    ".*foot_joint",
-                ],
-                stiffness=30.0,
-                damping=2.0,
-                effort_limit_sim=100.0,
-                velocity_limit_sim=10.0,
-            ),
-            # 脚趾电机
-            "toe_motors": ImplicitActuatorCfg(
-                joint_names_expr=[".*toe_joint"],
-                stiffness=20.0,
-                damping=1.0,
-                effort_limit_sim=50.0,
-                velocity_limit_sim=10.0,
-            ),
-        },
+                actuators={
+                    # 主要关节电机（hip, knee）
+                    # 修改：直接驱动串行链上的关节，而非 Engine 关节 
+                    "main_motors": ImplicitActuatorCfg(
+                        joint_names_expr=[
+                            ".*hip_cube_joint",   # 替代 pitch_engine (Pitch)
+                            ".*thigh_joint",      # 替代 yaw_engine (Yaw)
+                            ".*hip_roll_joint",   # Roll (保持不变)
+                            ".*knee_joint",       # Knee (保持不变)
+                        ],
+                        stiffness=40.0,
+                        damping=10.0,
+                        effort_limit_sim=150.0,
+                        velocity_limit_sim=10.0,
+                    ),
+                    # 踝关节电机（串联结构 - Fit 模型）
+                    "ankle_motors": ImplicitActuatorCfg(
+                        joint_names_expr=[
+                            ".*ankle_cube_joint",
+                            ".*ankle_axle_joint",
+                            ".*foot_joint",
+                        ],
+                        stiffness=30.0,
+                        damping=8.0,
+                        effort_limit_sim=100.0,
+                        velocity_limit_sim=10.0,
+                    ),
+                    # 脚趾电机
+                    "toe_motors": ImplicitActuatorCfg(
+                        joint_names_expr=[".*toe_joint"],
+                        stiffness=20.0,
+                        damping=4.0,
+                        effort_limit_sim=50.0,
+                        velocity_limit_sim=10.0,
+                    ),        },
     )
 
     # 脚部接触传感器（用于奖励计算和步态检测）

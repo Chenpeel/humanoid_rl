@@ -87,9 +87,6 @@ def base_height_above_threshold(
         终止标志，形状 (num_envs,)
     """
     torso_z = env.scene["robot"].data.root_pos_w[:, 2]
-    # Debug: Print max height
-    if torch.max(torso_z) > max_height:
-        print(f"[DEBUG] Max torso height: {torch.max(torso_z).item():.4f} m (Threshold: {max_height})")
     return torso_z > max_height
 
 
