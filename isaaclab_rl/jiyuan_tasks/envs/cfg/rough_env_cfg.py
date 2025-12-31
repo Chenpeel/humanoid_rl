@@ -286,7 +286,7 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
 
         # 添加高度扫描传感器（地形感知）
         self.scene.height_scanner = RayCasterCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/base_link",
+            prim_path="{ENV_REGEX_NS}/Robot/base_link/base_link",
             offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
             ray_alignment="yaw",  # 使用新API替代attach_yaw_only
             pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
