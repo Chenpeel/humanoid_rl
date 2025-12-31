@@ -1,0 +1,72 @@
+# ==================== 阶段6：鲁棒性提升 ====================
+# 目标：全面提升性能和鲁棒性
+# 训练步数：5.2B-10.5B (5000-10000 iterations)
+# 最终目标：在各种条件下稳定运行
+
+# ==================== 场景配置 ====================
+scene: jiyuan_fit_rough  # 粗糙地形
+env_type: walking
+
+# ==================== 环境配置 ====================
+num_envs: 512
+num_steps: 32
+max_episode_steps: 2000
+
+# ==================== 任务参数（课程学习） ====================
+# 速度命令范围：完整速度范围
+cmd_x_range: [-0.5, 1.2]
+cmd_y_range: [-0.5, 0.5]
+cmd_yaw_range: [-1.0, 1.0]
+
+# ==================== 奖励权重（鲁棒性优化） ====================
+reward_weights:
+  forward_velocity: 1.5
+  gait_symmetry: 0.3
+  foot_clearance: 0.2
+  trunk_height: 0.5
+  orientation: -0.3
+  trunk_lin_vel_z: -0.5
+  drag: -1.0
+  alive: 0.3
+  action_rate: -0.01
+  torques: -0.0001
+
+# ==================== PPO超参数 ====================
+num_epochs: 4
+num_minibatches: 8
+gamma: 0.99
+gae_lambda: 0.95
+clip_epsilon: 0.2
+value_coef: 0.5
+entropy_coef: 0.003           # 降低熵，专注优化
+max_grad_norm: 0.5
+
+# ==================== 训练配置 ====================
+total_timesteps: 1310720000   # 1.25B步 (约1250 iterations，从5000到10000)
+log_interval: 10
+eval_interval: 50
+save_interval: 100
+
+# ==================== 优化器配置 ====================
+learning_rate: 2.0e-4         # 进一步降低学习率
+final_lr_fraction: 0.01
+
+# ==================== 网络配置 ====================
+hidden_dims: [256, 256, 128]
+shared_backbone: true
+
+# ==================== 视频录制配置 ====================
+enable_video: true
+video_interval: 100
+video_frames: 180
+video_camera: "track"
+
+# ==================== 阶段切换配置 ====================
+stage_config:
+  stage_id: 6
+  stage_name: "robustness"
+  min_iterations: 3167
+  transition_criteria:
+    min_velocity_tracking: 0.8  # 速度跟踪准确率 > 80%
+    max_fall_rate: 0.1          # 摔倒率 < 10%
+    min_episode_length: 800    # 平均episode长度 > 800步

@@ -1,0 +1,72 @@
+# ==================== 阶段0：站立平衡 ====================
+# 目标：学会保持站立，抵抗扰动
+# 训练步数：0-209M (0-200 iterations)
+# 切换条件：mean_reward > 0.6 持续50次，摔倒率 < 5%
+
+# ==================== 场景配置 ====================
+scene: jiyuan_fit_flat  # 平坦地形
+env_type: walking       # 行走任务
+
+# ==================== 环境配置 ====================
+num_envs: 512           # 并行环境数（减小用于本地测试）
+num_steps: 32           # 每次rollout的步数（减小用于本地测试）
+max_episode_steps: 500  # episode最大步数（站立不需要太长）
+
+# ==================== 任务参数（课程学习核心） ====================
+# 速度命令范围：纯站立，速度为0
+cmd_x_range: [0.0, 0.0]      # 前向速度0
+cmd_y_range: [0.0, 0.0]      # 侧向速度0
+cmd_yaw_range: [0.0, 0.0]    # 角速度0
+
+# ==================== 奖励权重（站立优化） ====================
+reward_weights:
+  forward_velocity: 0.0      # 关闭前向速度奖励
+  gait_symmetry: 0.0         # 关闭步态对称性
+  foot_clearance: 0.0        # 关闭脚部抬高
+  trunk_height: 2.0          # 加倍高度保持奖励（重点）
+  orientation: -1.0          # 加强姿态惩罚（重点）
+  trunk_lin_vel_z: -1.0      # 加强Z方向速度惩罚（重点）
+  drag: 0.0                  # 关闭拖地惩罚
+  alive: 1.0                 # 保持存活奖励
+  action_rate: -0.02         # 略微加强动作平滑
+  torques: -0.0002           # 略微加强扭矩惩罚
+
+# ==================== PPO超参数 ====================
+num_epochs: 4
+num_minibatches: 8
+gamma: 0.99
+gae_lambda: 0.95
+clip_epsilon: 0.2
+value_coef: 0.5
+entropy_coef: 0.01           # 保持较高熵以探索
+max_grad_norm: 0.5
+
+# ==================== 训练配置 ====================
+total_timesteps: 52428800    # 50M步 (约50 iterations，本地测试用)
+log_interval: 10
+eval_interval: 25
+save_interval: 25
+
+# ==================== 优化器配置 ====================
+learning_rate: 3.0e-4
+final_lr_fraction: 0.02
+
+# ==================== 网络配置 ====================
+hidden_dims: [256, 256, 128]
+shared_backbone: true
+
+# ==================== 视频录制配置 ====================
+enable_video: true
+video_interval: 25
+video_frames: 180
+video_camera: "track"
+
+# ==================== 阶段切换配置 ====================
+stage_config:
+  stage_id: 0
+  stage_name: "standing"
+  min_iterations: 30       # 减小最小迭代次数（本地测试用）
+  transition_criteria:
+    min_reward: 0.6          # 平均奖励 > 0.6
+    max_fall_rate: 0.05      # 摔倒率 < 5%
+    min_height_stability: 0.95  # 高度稳定性 > 95%

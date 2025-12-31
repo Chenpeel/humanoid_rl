@@ -1,0 +1,72 @@
+# ==================== 阶段3：正常行走 ====================
+# 目标：中等速度行走，稳定步态
+# 训练步数：1.05B-2.1B (1000-2000 iterations)
+# 切换条件：速度跟踪准确率 > 80%
+
+# ==================== 场景配置 ====================
+scene: jiyuan_fit_flat  # 平坦地形
+env_type: walking
+
+# ==================== 环境配置 ====================
+num_envs: 512
+num_steps: 32
+max_episode_steps: 2000
+
+# ==================== 任务参数（课程学习） ====================
+# 速度命令范围：正常行走
+cmd_x_range: [-0.2, 0.8]      # 包含后退和前进
+cmd_y_range: [-0.3, 0.3]      # 侧向移动
+cmd_yaw_range: [-0.5, 0.5]    # 转动
+
+# ==================== 奖励权重（正常行走优化） ====================
+reward_weights:
+  forward_velocity: 1.5
+  gait_symmetry: 0.4
+  foot_clearance: 0.2
+  trunk_height: 0.5
+  orientation: -0.3
+  trunk_lin_vel_z: -0.5
+  drag: -1.0
+  alive: 0.3
+  action_rate: -0.01
+  torques: -0.0001
+
+# ==================== PPO超参数 ====================
+num_epochs: 4
+num_minibatches: 8
+gamma: 0.99
+gae_lambda: 0.95
+clip_epsilon: 0.2
+value_coef: 0.5
+entropy_coef: 0.005
+max_grad_norm: 0.5
+
+# ==================== 训练配置 ====================
+total_timesteps: 262144000   # 250M步 (约250 iterations，从1000到2000)
+log_interval: 10
+eval_interval: 25
+save_interval: 50
+
+# ==================== 优化器配置 ====================
+learning_rate: 3.0e-4
+final_lr_fraction: 0.02
+
+# ==================== 网络配置 ====================
+hidden_dims: [256, 256, 128]
+shared_backbone: true
+
+# ==================== 视频录制配置 ====================
+enable_video: true
+video_interval: 50
+video_frames: 180
+video_camera: "track"
+
+# ==================== 阶段切换配置 ====================
+stage_config:
+  stage_id: 3
+  stage_name: "normal_walk"
+  min_iterations: 600
+  transition_criteria:
+    min_velocity_tracking: 0.8  # 速度跟踪准确率 > 80%
+    min_episode_length: 1000    # 平均episode长度 > 1000步
+    max_fall_rate: 0.08         # 摔倒率 < 8%

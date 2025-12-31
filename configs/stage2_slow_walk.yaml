@@ -1,0 +1,72 @@
+# ==================== 阶段2：小步行走 ====================
+# 目标：缓慢向前移动，建立速度跟踪意识
+# 训练步数：524M-1.05B (500-1000 iterations)
+# 切换条件：速度跟踪准确率 > 70%
+
+# ==================== 场景配置 ====================
+scene: jiyuan_fit_flat  # 平坦地形
+env_type: walking
+
+# ==================== 环境配置 ====================
+num_envs: 512
+num_steps: 32
+max_episode_steps: 1000  # 增加episode长度
+
+# ==================== 任务参数（课程学习） ====================
+# 速度命令范围：小速前进
+cmd_x_range: [0.0, 0.3]       # 小速前进
+cmd_y_range: [-0.1, 0.1]      # 侧向移动
+cmd_yaw_range: [-0.3, 0.3]    # 小幅转动
+
+# ==================== 奖励权重（小步行走优化） ====================
+reward_weights:
+  forward_velocity: 1.0       # 开启前向速度奖励（重点）
+  gait_symmetry: 0.5
+  foot_clearance: 0.3
+  trunk_height: 1.0
+  orientation: -0.4
+  trunk_lin_vel_z: -0.6
+  drag: -0.8
+  alive: 0.5
+  action_rate: -0.01
+  torques: -0.0001
+
+# ==================== PPO超参数 ====================
+num_epochs: 4
+num_minibatches: 8
+gamma: 0.99
+gae_lambda: 0.95
+clip_epsilon: 0.2
+value_coef: 0.5
+entropy_coef: 0.005           # 降低熵，开始利用
+max_grad_norm: 0.5
+
+# ==================== 训练配置 ====================
+total_timesteps: 131072000    # 125M步 (约125 iterations，从500到1000)
+log_interval: 10
+eval_interval: 25
+save_interval: 25
+
+# ==================== 优化器配置 ====================
+learning_rate: 3.0e-4
+final_lr_fraction: 0.02
+
+# ==================== 网络配置 ====================
+hidden_dims: [256, 256, 128]
+shared_backbone: true
+
+# ==================== 视频录制配置 ====================
+enable_video: true
+video_interval: 25
+video_frames: 180
+video_camera: "track"
+
+# ==================== 阶段切换配置 ====================
+stage_config:
+  stage_id: 2
+  stage_name: "slow_walk"
+  min_iterations: 267
+  transition_criteria:
+    min_velocity_tracking: 0.7  # 速度跟踪准确率 > 70%
+    min_mean_velocity: 0.15     # 平均前向速度 > 0.15 m/s
+    max_fall_rate: 0.1          # 摔倒率 < 10%

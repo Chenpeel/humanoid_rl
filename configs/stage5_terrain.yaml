@@ -1,0 +1,72 @@
+# ==================== 阶段5：地形适应 ====================
+# 目标：适应不平地形
+# 训练步数：3.1B-5.2B (3000-5000 iterations)
+# 切换条件：粗糙地形上摔倒率 < 15%
+
+# ==================== 场景配置 ====================
+scene: jiyuan_fit_rough  # 粗糙地形（关键变化）
+env_type: walking
+
+# ==================== 环境配置 ====================
+num_envs: 512
+num_steps: 32
+max_episode_steps: 2000
+
+# ==================== 任务参数（课程学习） ====================
+# 速度命令范围：略微降低以适应地形
+cmd_x_range: [-0.3, 0.8]
+cmd_y_range: [-0.4, 0.4]
+cmd_yaw_range: [-0.8, 0.8]
+
+# ==================== 奖励权重（地形适应优化） ====================
+reward_weights:
+  forward_velocity: 1.2       # 降低速度要求，优先稳定性
+  gait_symmetry: 0.3
+  foot_clearance: 0.4         # 加强脚部抬高（重点）
+  trunk_height: 0.8           # 加强高度保持（重点）
+  orientation: -0.5           # 加强姿态控制（重点）
+  trunk_lin_vel_z: -0.8
+  drag: -1.0
+  alive: 0.5                  # 提高存活奖励
+  action_rate: -0.01
+  torques: -0.0001
+
+# ==================== PPO超参数 ====================
+num_epochs: 4
+num_minibatches: 8
+gamma: 0.99
+gae_lambda: 0.95
+clip_epsilon: 0.2
+value_coef: 0.5
+entropy_coef: 0.008           # 提高熵以探索适应策略
+max_grad_norm: 0.5
+
+# ==================== 训练配置 ====================
+total_timesteps: 524288000   # 500M步 (约500 iterations，从3000到5000)
+log_interval: 10
+eval_interval: 25
+save_interval: 50
+
+# ==================== 优化器配置 ====================
+learning_rate: 2.5e-4         # 略微降低学习率以稳定适应
+final_lr_fraction: 0.02
+
+# ==================== 网络配置 ====================
+hidden_dims: [256, 256, 128]
+shared_backbone: true
+
+# ==================== 视频录制配置 ====================
+enable_video: true
+video_interval: 50
+video_frames: 180
+video_camera: "track"
+
+# ==================== 阶段切换配置 ====================
+stage_config:
+  stage_id: 5
+  stage_name: "terrain_adaptation"
+  min_iterations: 1600
+  transition_criteria:
+    min_velocity_ratio: 0.7    # 平均速度达到平坦地形的70%
+    max_fall_rate: 0.15        # 摔倒率 < 15%
+    min_episode_length: 500    # 平均episode长度 > 500步
