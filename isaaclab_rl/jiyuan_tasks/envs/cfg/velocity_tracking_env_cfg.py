@@ -193,8 +193,11 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
             params={"asset_cfg": SceneEntityCfg("robot")},
         )
 
-        # 存活奖励
-        alive = RewTerm(func=mdp.is_alive, weight=0.5)
+        # 存活奖励（借鉴Humanoid配置，增加权重）
+        alive = RewTerm(func=mdp.is_alive, weight=2.0)
+
+        # 终止惩罚（借鉴H1/G1配置，强烈避免摔倒）
+        termination_penalty = RewTerm(func=mdp.is_terminated, weight=-200.0)
 
         # 关节限制惩罚（软约束）
         joint_pos_limits = RewTerm(
@@ -230,10 +233,10 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
             },
         )
 
-        # 速度异常
+        # 速度异常（初期训练放宽限制）
         velocity_out_of_bounds = DoneTerm(
             func=terminations.linear_velocity_out_of_bounds,
-            params={"max_velocity": 8.0},
+            params={"max_velocity": 30.0},  # 从8.0放宽到30.0
         )
 
 
@@ -246,30 +249,33 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
         实现领域随机化，提高 Sim2Real 鲁棒性。
         """
 
-        # 重置时随机化机器人姿态
+        # 重置时从默认姿态开始（借鉴H1/G1，阶段2逐步引入小随机）
         reset_robot_joints = EventTerm(
             func=mdp.reset_joints_by_scale,
             mode="reset",
             params={
-                "position_range": (-0.2, 0.2),  # ±0.2 rad
-                "velocity_range": (-0.1, 0.1),  # ±0.1 rad/s
+                "position_range": (1.0, 1.0),  # 从默认姿态开始
+                "velocity_range": (0.0, 0.0),  # 零初始速度
             },
         )
 
-        # 重置时随机化 base 位置
+        # 重置时从零速度开始（借鉴H1/G1最佳实践）
         reset_base = EventTerm(
             func=mdp.reset_root_state_uniform,
             mode="reset",
             params={
                 "pose_range": {
-                    "x": (-0.5, 0.5),
+                    "x": (-0.5, 0.5),  # XY平面位置随机
                     "y": (-0.5, 0.5),
-                    "yaw": (-3.14, 3.14),
+                    "yaw": (-3.14, 3.14),  # 任意朝向
                 },
                 "velocity_range": {
-                    "x": (-0.5, 0.5),
-                    "y": (-0.5, 0.5),
-                    "yaw": (-0.5, 0.5),
+                    "x": (0.0, 0.0),  # 零初始速度
+                    "y": (0.0, 0.0),
+                    "z": (0.0, 0.0),
+                    "roll": (0.0, 0.0),
+                    "pitch": (0.0, 0.0),
+                    "yaw": (0.0, 0.0),
                 },
             },
         )

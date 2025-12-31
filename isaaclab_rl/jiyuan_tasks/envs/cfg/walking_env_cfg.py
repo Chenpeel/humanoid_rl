@@ -186,8 +186,11 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
             weight=-2.0e-5,
         )
 
-        # 存活奖励
-        alive = RewTerm(func=mdp.is_alive, weight=0.5)
+        # 存活奖励（借鉴Humanoid配置）
+        alive = RewTerm(func=mdp.is_alive, weight=2.0)
+
+        # 终止惩罚（借鉴H1/G1配置）
+        termination_penalty = RewTerm(func=mdp.is_terminated, weight=-200.0)
 
         # 关节限制
         joint_pos_limits = RewTerm(
@@ -220,10 +223,10 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
             },
         )
 
-        # 速度异常
+        # 速度异常（放宽限制）
         velocity_out_of_bounds = DoneTerm(
             func=terminations.linear_velocity_out_of_bounds,
-            params={"max_velocity": 8.0},
+            params={"max_velocity": 30.0},  # 从8.0放宽到30.0
         )
 
         # 关节位置超限
@@ -237,30 +240,33 @@ class WalkingEnvCfg(ManagerBasedRLEnvCfg):
     class EventsCfg:
         """随机化事件配置"""
 
-        # 重置时随机化机器人姿态
+        # 重置时从默认姿态开始（借鉴H1/G1）
         reset_robot_joints = EventTerm(
             func=mdp.reset_joints_by_scale,
             mode="reset",
             params={
-                "position_range": (-0.15, 0.15),
-                "velocity_range": (-0.1, 0.1),
+                "position_range": (1.0, 1.0),  # 从默认姿态开始
+                "velocity_range": (0.0, 0.0),  # 零初始速度
             },
         )
 
-        # 重置时随机化 base 位置
+        # 重置时从零速度开始（借鉴H1/G1）
         reset_base = EventTerm(
             func=mdp.reset_root_state_uniform,
             mode="reset",
             params={
                 "pose_range": {
-                    "x": (-0.3, 0.3),
-                    "y": (-0.3, 0.3),
-                    "yaw": (-0.5, 0.5),  # 较小的航向范围（主要是前向行走）
+                    "x": (-0.5, 0.5),
+                    "y": (-0.5, 0.5),
+                    "yaw": (-3.14, 3.14),  # 任意朝向
                 },
                 "velocity_range": {
-                    "x": (-0.3, 0.3),
-                    "y": (-0.3, 0.3),
-                    "yaw": (-0.3, 0.3),
+                    "x": (0.0, 0.0),  # 零初始速度
+                    "y": (0.0, 0.0),
+                    "z": (0.0, 0.0),
+                    "roll": (0.0, 0.0),
+                    "pitch": (0.0, 0.0),
+                    "yaw": (0.0, 0.0),
                 },
             },
         )

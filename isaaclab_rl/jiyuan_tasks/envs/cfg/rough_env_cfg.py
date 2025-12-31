@@ -166,8 +166,11 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
         joint_powers = RewTerm(func=rewards.joint_powers_l1, weight=-2.0e-5)
         joint_accel_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
 
-        # 存活奖励
-        alive = RewTerm(func=mdp.is_alive, weight=0.5)
+        # 存活奖励（借鉴Humanoid配置）
+        alive = RewTerm(func=mdp.is_alive, weight=2.0)
+
+        # 终止惩罚（借鉴H1/G1配置）
+        termination_penalty = RewTerm(func=mdp.is_terminated, weight=-200.0)
 
         # 关节限制
         joint_pos_limits = RewTerm(
@@ -193,7 +196,7 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
         )
         velocity_out_of_bounds = DoneTerm(
             func=terminations.linear_velocity_out_of_bounds,
-            params={"max_velocity": 8.0},
+            params={"max_velocity": 30.0},  # 从8.0放宽到30.0
         )
 
 
@@ -202,18 +205,27 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
     class EventsCfg:
         """随机化事件配置"""
 
+        # 重置时从默认姿态开始（借鉴H1/G1，粗糙地形也从稳定姿态学习）
         reset_robot_joints = EventTerm(
             func=mdp.reset_joints_by_scale,
             mode="reset",
-            params={"position_range": (-0.15, 0.15), "velocity_range": (-0.1, 0.1)},
+            params={"position_range": (1.0, 1.0), "velocity_range": (0.0, 0.0)},
         )
 
+        # 重置时从零速度开始（借鉴H1/G1）
         reset_base = EventTerm(
             func=mdp.reset_root_state_uniform,
             mode="reset",
             params={
-                "pose_range": {"x": (-0.3, 0.3), "y": (-0.3, 0.3), "yaw": (-0.5, 0.5)},
-                "velocity_range": {"x": (-0.3, 0.3), "y": (-0.3, 0.3), "yaw": (-0.3, 0.3)},
+                "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
+                "velocity_range": {
+                    "x": (0.0, 0.0),
+                    "y": (0.0, 0.0),
+                    "z": (0.0, 0.0),
+                    "roll": (0.0, 0.0),
+                    "pitch": (0.0, 0.0),
+                    "yaw": (0.0, 0.0),
+                },
             },
         )
 
