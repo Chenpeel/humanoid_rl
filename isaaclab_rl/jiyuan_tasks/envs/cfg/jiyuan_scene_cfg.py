@@ -208,7 +208,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 stiffness=80.0,
                 damping=6.0,
                 effort_limit_sim=150.0,
-                velocity_limit=10.0,
+                velocity_limit_sim=10.0,
             ),
             # 踝关节电机（串联结构 - Fit 模型）
             "ankle_motors": ImplicitActuatorCfg(
@@ -220,7 +220,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 stiffness=60.0,
                 damping=4.0,
                 effort_limit_sim=100.0,
-                velocity_limit=10.0,
+                velocity_limit_sim=10.0,
             ),
             # 脚趾电机
             "toe_motors": ImplicitActuatorCfg(
@@ -228,7 +228,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 stiffness=40.0,
                 damping=2.0,
                 effort_limit_sim=50.0,
-                velocity_limit=10.0,
+                velocity_limit_sim=10.0,
             ),
         },
     )
