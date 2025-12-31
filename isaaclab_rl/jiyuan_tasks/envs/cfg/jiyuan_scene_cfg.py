@@ -170,34 +170,34 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Robot/.*base_link",
         # 不再在此处 spawn，因为 robot_asset 已经生成了 USD
         spawn=None,
-        init_state=ArticulationCfg.InitialStateCfg(
-            # 初始位置：调整为 0.92m (直腿高度约0.89m)，减少落地冲击
-            pos=(0.0, 0.0, 0.92),
-            # 初始姿态：保持直立
-            rot=(1.0, 0.0, 0.0, 0.0),
-            # 关节初始位置
-            joint_pos={
-                # 修改：初始化串行链关节
-                ".*hip_cube_joint": 0.0,
-                ".*thigh_joint": 0.0,
-                ".*hip_roll.*": 0.0,
-                # 膝关节：接近直立 (-0.1/0.1)，确保脚掌放平
-                "right_knee.*": -0.1,
-                "left_knee.*": 0.1,
-                # 踝关节：串联结构 (Fit 模型)
-                ".*ankle_cube.*": 0.0,
-                ".*ankle_axle.*": 0.0,
-                ".*foot_joint.*": 0.0,
-                # 脚趾关节
-                ".*toe.*": 0.0,
-            },
-            # 初始速度：静止
-            joint_vel={".*": 0.0},
-        ),
-        # 执行器配置
+                init_state=ArticulationCfg.InitialStateCfg(
+                    # 初始位置：调整为 1.05m，避免地面穿透导致的弹飞
+                    pos=(0.0, 0.0, 1.05),
+                    # 初始姿态：保持直立
+                    rot=(1.0, 0.0, 0.0, 0.0),
+                    # 关节初始位置
+                    joint_pos={
+                        # 修改：初始化串行链关节
+                        ".*hip_cube_joint": 0.0,
+                        ".*thigh_joint": 0.0,
+                        ".*hip_roll.*": 0.0,
+                        # 膝关节：接近直立 (-0.1/0.1)，确保脚掌放平
+                        "right_knee.*": -0.1,
+                        "left_knee.*": 0.1,
+                        # 踝关节：串联结构 (Fit 模型)
+                        ".*ankle_cube.*": 0.0,
+                        ".*ankle_axle.*": 0.0,
+                        ".*foot_joint.*": 0.0,
+                        # 脚趾关节
+                        ".*toe.*": 0.0,
+                    },
+                    # 初始速度：静止
+                    joint_vel={".*": 0.0},
+                ),
+                # 执行器配置
                 actuators={
                     # 主要关节电机（hip, knee）
-                    # 修改：直接驱动串行链上的关节，而非 Engine 关节 
+                    # 修改：直接驱动串行链上的关节，而非 Engine 关节
                     "main_motors": ImplicitActuatorCfg(
                         joint_names_expr=[
                             ".*hip_cube_joint",   # 替代 pitch_engine (Pitch)
@@ -205,7 +205,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                             ".*hip_roll_joint",   # Roll (保持不变)
                             ".*knee_joint",       # Knee (保持不变)
                         ],
-                        stiffness=40.0,
+                        stiffness=20.0,
                         damping=10.0,
                         effort_limit_sim=150.0,
                         velocity_limit_sim=10.0,
@@ -217,7 +217,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                             ".*ankle_axle_joint",
                             ".*foot_joint",
                         ],
-                        stiffness=30.0,
+                        stiffness=15.0,
                         damping=8.0,
                         effort_limit_sim=100.0,
                         velocity_limit_sim=10.0,
@@ -225,11 +225,12 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                     # 脚趾电机
                     "toe_motors": ImplicitActuatorCfg(
                         joint_names_expr=[".*toe_joint"],
-                        stiffness=20.0,
+                        stiffness=10.0,
                         damping=4.0,
                         effort_limit_sim=50.0,
                         velocity_limit_sim=10.0,
-                    ),        },
+                    ),
+                },
     )
 
     # 脚部接触传感器（用于奖励计算和步态检测）
