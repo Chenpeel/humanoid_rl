@@ -13,11 +13,33 @@ import os
 import sys
 import time
 import yaml
-import jax
-import jax.numpy as jp
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
+
+# ==================== JAX配置 (必须在导入jax之前) ====================
+# 🔧 指定使用 GPU device:0（第一张显卡）
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+# 启用JAX编译缓存 (使用绝对路径，确保持久化)
+cache_path = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "..", ".jax_cache"))
+os.makedirs(cache_path, exist_ok=True)
+os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_path
+
+# 🔧 增强缓存配置
+os.environ["JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES"] = "0"  # 缓存所有编译结果
+os.environ["JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS"] = "0"  # 缓存所有编译
+
+# 最大化显存使用
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.85"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
+# 导入JAX
+import jax
+import jax.numpy as jp
 
 # 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -212,10 +234,9 @@ def train_stage(
     from rl.models.networks import ActorCriticNetwork
     from rl.models.optimizer import create_ppo_optimizer_cosine
     from rl.training.train_state import create_train_state
-    from rl.training.logger import Logger, MetricsLogger
+    from rl.training.logger import Logger, MetricsLogger, create_training_display
     from rl.utils.checkpoint import create_checkpoint_manager
     from rl.utils.performance_monitor import PerformanceMonitor
-    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn
 
     # 解析配置
     scene = yaml_config.get("scene", "jiyuan_fit_flat")
@@ -332,6 +353,14 @@ def train_stage(
     log_dir = f"logs/stage{stage_config['stage_id']}_{timestamp}"
     logger = Logger(log_dir=log_dir, use_tensorboard=True, use_rich=False)
 
+    # 创建训练显示（使用TrainingDisplay替代简单的Progress）
+    training_display = create_training_display(
+        console=console,
+        total=config.num_updates,
+        steps_per_epoch=1,
+        description=f"阶段 {stage_config['stage_id']} - {stage_config['name']}"
+    )
+
     # 创建检查点管理器
     checkpoint_manager = create_checkpoint_manager(
         log_dir=log_dir,
@@ -375,19 +404,7 @@ def train_stage(
     # 训练循环
     console.print(f"[bold green]开始训练阶段 {stage_config['stage_id']}[/bold green]")
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeRemainingColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task(
-            f"[cyan]阶段 {stage_config['stage_id']}",
-            total=config.num_updates,
-        )
-
+    with training_display:
         for update in range(config.num_updates):
             # 训练一步
             train_state, env_state, info = train_step_jit(train_state, env_state)
@@ -398,8 +415,8 @@ def train_stage(
             info.update(perf_metrics)
             metrics_logger.log_dict(info)
 
-            # 更新进度条
-            progress.update(task, advance=1, description=f"[cyan]阶段 {stage_config['stage_id']}[/cyan]")
+            # 更新训练显示（包含详细指标和进度条）
+            training_display.update(epoch=update, metrics=info)
 
             # 定期日志
             if (update + 1) % log_interval == 0:
