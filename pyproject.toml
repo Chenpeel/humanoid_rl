@@ -19,6 +19,7 @@ dependencies = [
 
     # CUDA 运行时库（通过 pip 安装，无需系统 CUDA）
     "nvidia-cuda-runtime-cu12>=12.1.0",
+    "nvidia-cuda-nvcc-cu12>=12.1.0",
     "nvidia-cublas-cu12>=12.1.0",
     "nvidia-cudnn-cu12>=8.9.0",
 

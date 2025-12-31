@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 # ==================== JAX配置 (必须在导入jax之前) ====================
-# 🔧 指定使用 GPU device:0（第一张显卡，AutoDL 单卡环境）
+# 🔧 指定使用 GPU device:0（第一张显卡）
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
@@ -26,19 +26,31 @@ os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_path
 os.environ["JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES"] = "0"  # 缓存所有编译结果
 os.environ["JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS"] = "0"  # 缓存所有编译
 
-# 最大化显存使用（V100 32GB 可以用 0.95-0.98）
+# 最大化显存使用
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"  # V100 32GB 用 95%
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 
-# 启用编译优化（V100 用最高级别）
+# 设置 CUDA 数据目录 - 指向 triton 附带的 CUDA (包含 libdevice)
+import site
+site_packages = site.getsitepackages()[0]
+triton_cuda_dir = os.path.join(site_packages, "triton", "backends", "nvidia", "lib")
+if os.path.exists(triton_cuda_dir):
+    os.environ["XLA_FLAGS"] = os.environ.get("XLA_FLAGS", "") + f" --xla_gpu_cuda_data_dir={triton_cuda_dir}"
+
+# 启用编译优化
 os.environ["XLA_FLAGS"] = (
     os.environ.get("XLA_FLAGS", "")
     + " --xla_gpu_enable_latency_hiding_scheduler=true"
     + " --xla_gpu_enable_highest_priority_async_stream=true"
-    + " --xla_gpu_autotune_level=1"  # V100 用最高级别1
-    + " --xla_gpu_deterministic_ops=false"  # 非确定性换取速度
+    + " --xla_gpu_autotune_level=1"
+    + " --xla_gpu_deterministic_ops=false"
+    # 当没有 ptxas 时，使用驱动编译作为后备
+    + " --xla_gpu_unsafe_fallback_to_driver_on_ptxas_not_found=true"
 )
+
+# 设置 jax 忽略一些不必要的警告
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 warnings.filterwarnings("ignore", category=Warning)
 

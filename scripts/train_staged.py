@@ -1,0 +1,527 @@
+"""
+自动化分阶段训练脚本
+
+功能：
+1. 自动加载阶段配置
+2. 监控训练指标
+3. 自动切换到下一阶段
+4. 保存每个阶段的最佳模型
+"""
+
+import argparse
+import os
+import sys
+import time
+import yaml
+import jax
+import jax.numpy as jp
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Optional
+
+# 添加项目路径
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+
+console = Console()
+
+
+# ==================== 阶段配置 ====================
+
+STAGE_CONFIGS = [
+    {
+        "stage_id": 0,
+        "name": "standing",
+        "config_file": "configs/stage0_standing.yaml",
+        "description": "站立平衡",
+        "min_iterations": 150,
+        "transition_criteria": {
+            "min_reward": 0.6,
+            "max_fall_rate": 0.05,
+        },
+    },
+    {
+        "stage_id": 1,
+        "name": "stepping",
+        "config_file": "configs/stage1_stepping.yaml",
+        "description": "原地踏步",
+        "min_iterations": 400,
+        "transition_criteria": {
+            "min_gait_symmetry": 0.5,
+            "min_foot_clearance": 0.3,
+        },
+    },
+    {
+        "stage_id": 2,
+        "name": "slow_walk",
+        "config_file": "configs/stage2_slow_walk.yaml",
+        "description": "小步行走",
+        "min_iterations": 800,
+        "transition_criteria": {
+            "min_velocity_tracking": 0.7,
+        },
+    },
+    {
+        "stage_id": 3,
+        "name": "normal_walk",
+        "config_file": "configs/stage3_normal_walk.yaml",
+        "description": "正常行走",
+        "min_iterations": 1800,
+        "transition_criteria": {
+            "min_velocity_tracking": 0.8,
+        },
+    },
+    {
+        "stage_id": 4,
+        "name": "fast_walk",
+        "config_file": "configs/stage4_fast_walk.yaml",
+        "description": "高速适应",
+        "min_iterations": 2800,
+        "transition_criteria": {
+            "min_velocity_tracking": 0.75,
+            "min_max_velocity": 0.9,
+        },
+    },
+    {
+        "stage_id": 5,
+        "name": "terrain_adaptation",
+        "config_file": "configs/stage5_terrain.yaml",
+        "description": "地形适应",
+        "min_iterations": 4800,
+        "transition_criteria": {
+            "min_velocity_ratio": 0.7,
+            "max_fall_rate": 0.15,
+        },
+    },
+    {
+        "stage_id": 6,
+        "name": "robustness",
+        "config_file": "configs/stage6_robustness.yaml",
+        "description": "鲁棒性提升",
+        "min_iterations": 9500,
+        "transition_criteria": {
+            "min_velocity_tracking": 0.8,
+            "max_fall_rate": 0.1,
+        },
+    },
+]
+
+
+# ==================== 工具函数 ====================
+
+def load_stage_config(config_path: str) -> Dict:
+    """加载阶段配置文件"""
+    if not os.path.exists(config_path):
+        console.print(f"[red]错误: 配置文件不存在: {config_path}[/red]")
+        sys.exit(1)
+
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+
+    return config
+
+
+def print_stage_info(stage_config: Dict):
+    """打印阶段信息"""
+    console.print(Panel.fit(
+        f"[bold green]阶段 {stage_config['stage_id']}: {stage_config['description']}[/bold green]\n"
+        f"[dim]配置文件: {stage_config['config_file']}[/dim]",
+        border_style="green",
+    ))
+
+
+def check_transition_criteria(
+    stage_config: Dict,
+    metrics: Dict[str, float],
+    current_iteration: int,
+) -> bool:
+    """检查是否满足切换到下一阶段的条件
+
+    Args:
+        stage_config: 当前阶段配置
+        metrics: 当前训练指标
+        current_iteration: 当前迭代次数
+
+    Returns:
+        是否应该切换到下一阶段
+    """
+    # 检查最小迭代次数
+    if current_iteration < stage_config["min_iterations"]:
+        return False
+
+    # 检查切换条件
+    criteria = stage_config.get("transition_criteria", {})
+
+    for key, threshold in criteria.items():
+        if key.startswith("min_"):
+            metric_name = key[4:]  # 去掉 "min_"
+            if metrics.get(metric_name, 0) < threshold:
+                return False
+        elif key.startswith("max_"):
+            metric_name = key[4:]  # 去掉 "max_"
+            if metrics.get(metric_name, float('inf')) > threshold:
+                return False
+
+    return True
+
+
+# ==================== 主训练函数 ====================
+
+def train_stage(
+    stage_config: Dict,
+    previous_checkpoint: Optional[str] = None,
+    start_from_stage: int = 0,
+) -> str:
+    """训练单个阶段
+
+    Args:
+        stage_config: 阶段配置
+        previous_checkpoint: 上一阶段的检查点路径
+        start_from_stage: 起始阶段ID
+
+    Returns:
+        最佳模型检查点路径
+    """
+    print_stage_info(stage_config)
+
+    # 加载YAML配置
+    yaml_config = load_stage_config(stage_config["config_file"])
+
+    # 构建命令行参数
+    cmd = [
+        sys.executable,
+        "scripts/train.py",
+        "--config", stage_config["config_file"],
+    ]
+
+    # 如果有上一阶段的检查点，添加恢复参数
+    if previous_checkpoint and start_from_stage > stage_config["stage_id"]:
+        cmd.extend(["--resume", previous_checkpoint])
+        console.print(f"[dim]从检查点恢复: {previous_checkpoint}[/dim]")
+
+    # 执行训练（导入train.py的主函数）
+    # 为了简化，这里直接调用train.py的main函数
+    # 实际使用时可以通过subprocess调用
+
+    # 导入训练模块
+    from rl.training.ppo_trainer import PPOConfig, PPOTrainer
+    from rl.envs import create_walking_env
+    from rl.models.networks import ActorCriticNetwork
+    from rl.models.optimizer import create_ppo_optimizer_cosine
+    from rl.training.train_state import create_train_state
+    from rl.training.logger import Logger, MetricsLogger
+    from rl.utils.checkpoint import create_checkpoint_manager
+    from rl.utils.performance_monitor import PerformanceMonitor
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn
+
+    # 解析配置
+    scene = yaml_config.get("scene", "jiyuan_fit_flat")
+    env_type = yaml_config.get("env_type", "walking")
+
+    # 环境配置
+    num_envs = yaml_config.get("num_envs", 16384)
+    num_steps = yaml_config.get("num_steps", 64)
+
+    # 命令范围
+    cmd_x_range = tuple(yaml_config.get("cmd_x_range", [0.0, 0.0]))
+    cmd_y_range = tuple(yaml_config.get("cmd_y_range", [0.0, 0.0]))
+    cmd_yaw_range = tuple(yaml_config.get("cmd_yaw_range", [0.0, 0.0]))
+
+    # 奖励权重
+    reward_weights = yaml_config.get("reward_weights", None)
+
+    # PPO配置
+    num_epochs = yaml_config.get("num_epochs", 4)
+    num_minibatches = yaml_config.get("num_minibatches", 8)
+    gamma = yaml_config.get("gamma", 0.99)
+    gae_lambda = yaml_config.get("gae_lambda", 0.95)
+    clip_epsilon = yaml_config.get("clip_epsilon", 0.2)
+    value_coef = yaml_config.get("value_coef", 0.5)
+    entropy_coef = yaml_config.get("entropy_coef", 0.01)
+    max_grad_norm = yaml_config.get("max_grad_norm", 0.5)
+
+    # 训练配置
+    total_timesteps = yaml_config.get("total_timesteps", 100_000_000)
+    log_interval = yaml_config.get("log_interval", 10)
+    save_interval = yaml_config.get("save_interval", 100)
+
+    # 优化器配置
+    learning_rate = yaml_config.get("learning_rate", 3.0e-4)
+    final_lr_fraction = yaml_config.get("final_lr_fraction", 0.02)
+
+    # 网络配置
+    hidden_dims = yaml_config.get("hidden_dims", [256, 256, 128])
+    shared_backbone = yaml_config.get("shared_backbone", True)
+
+    # 场景路径
+    scene_file_map = {
+        "flat_terrain": "flat_terrain",
+        "rough_terrain": "rough_terrain",
+        "jiyuan_fit_flat": "jiyuan_fit_flat_terrain",
+        "jiyuan_fit_rough": "jiyuan_fit_rough_terrain",
+    }
+    scene_file = scene_file_map.get(scene, scene)
+    scene_path = f"assets/xmls/scenes/{scene_file}.xml"
+
+    console.print(f"[cyan]场景: {scene}[/cyan]")
+    console.print(f"[cyan]命令范围: x={cmd_x_range}, y={cmd_y_range}, yaw={cmd_yaw_range}[/cyan]")
+
+    # 创建环境
+    env = create_walking_env(
+        xml_path=scene_path,
+        cmd_x_range=cmd_x_range,
+        cmd_y_range=cmd_y_range,
+        cmd_yaw_range=cmd_yaw_range,
+        reward_weights=reward_weights,
+    )
+
+    # 创建网络
+    network = ActorCriticNetwork(
+        action_dim=env.action_size,
+        shared_backbone=shared_backbone,
+        hidden_dims=tuple(hidden_dims),
+    )
+
+    # 创建配置
+    config = PPOConfig(
+        num_envs=num_envs,
+        num_steps=num_steps,
+        num_epochs=num_epochs,
+        num_minibatches=num_minibatches,
+        gamma=gamma,
+        gae_lambda=gae_lambda,
+        clip_epsilon=clip_epsilon,
+        value_coef=value_coef,
+        entropy_coef=entropy_coef,
+        max_grad_norm=max_grad_norm,
+        total_timesteps=total_timesteps,
+        log_interval=log_interval,
+    )
+
+    # 创建优化器
+    total_updates = config.num_updates
+    warmup_steps = max(10, total_updates // 20)
+
+    optimizer = create_ppo_optimizer_cosine(
+        learning_rate=learning_rate,
+        total_steps=total_updates,
+        warmup_steps=warmup_steps,
+        max_grad_norm=max_grad_norm,
+        final_lr_fraction=final_lr_fraction,
+    )
+
+    # 创建训练状态
+    rng = jax.random.PRNGKey(42)
+    train_state = create_train_state(
+        network=network,
+        optimizer=optimizer,
+        obs_shape=(env.observation_size,),
+        rng=rng,
+    )
+
+    # 如果有上一阶段检查点，加载它
+    if previous_checkpoint and start_from_stage > stage_config["stage_id"]:
+        console.print(f"[yellow]从检查点加载: {previous_checkpoint}[/yellow]")
+        # TODO: 实现检查点加载逻辑
+
+    # 创建日志系统
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_dir = f"logs/stage{stage_config['stage_id']}_{timestamp}"
+    logger = Logger(log_dir=log_dir, use_tensorboard=True, use_rich=False)
+
+    # 创建检查点管理器
+    checkpoint_manager = create_checkpoint_manager(
+        log_dir=log_dir,
+        max_to_keep=3,
+        keep_best=True,
+        metric_name="mean_reward",
+        metric_mode="max",
+    )
+
+    # 创建训练器
+    trainer = PPOTrainer(
+        config=config,
+        env=env,
+        network=network,
+        optimizer=optimizer,
+    )
+
+    # JIT编译训练函数
+    from rl.training.ppo_trainer import create_train_step_fn
+    train_step_fn = create_train_step_fn(
+        config=config,
+        env=env,
+        network=network,
+        optimizer=optimizer,
+    )
+    train_step_jit = jax.jit(train_step_fn)
+
+    # 触发编译
+    console.print("[yellow]正在编译...[/yellow]")
+    rng, reset_rng = jax.random.split(rng)
+    env_state = env.batch_reset(reset_rng, config.num_envs)
+    train_state, env_state, info = train_step_jit(train_state, env_state)
+    jax.block_until_ready(train_state)
+    console.print("[green]✓ 编译完成[/green]")
+
+    # 创建指标记录器
+    metrics_logger = MetricsLogger()
+    perf_monitor = PerformanceMonitor()
+    perf_monitor.start()
+
+    # 训练循环
+    console.print(f"[bold green]开始训练阶段 {stage_config['stage_id']}[/bold green]")
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeRemainingColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task(
+            f"[cyan]阶段 {stage_config['stage_id']}",
+            total=config.num_updates,
+        )
+
+        for update in range(config.num_updates):
+            # 训练一步
+            train_state, env_state, info = train_step_jit(train_state, env_state)
+            jax.block_until_ready(train_state)
+
+            # 记录指标
+            perf_metrics = perf_monitor.step(config.batch_size)
+            info.update(perf_metrics)
+            metrics_logger.log_dict(info)
+
+            # 更新进度条
+            progress.update(task, advance=1, description=f"[cyan]阶段 {stage_config['stage_id']}[/cyan]")
+
+            # 定期日志
+            if (update + 1) % log_interval == 0:
+                avg_metrics = metrics_logger.get_averages()
+                logger.log_scalars(metrics=avg_metrics, step=train_state.step, prefix="train")
+                metrics_logger.reset()
+
+            # 定期保存
+            if (update + 1) % save_interval == 0:
+                avg_metrics = metrics_logger.get_averages()
+                checkpoint_manager.save_checkpoint(
+                    train_state=train_state,
+                    step=train_state.step,
+                    metrics=avg_metrics,
+                )
+
+            # 检查是否应该切换到下一阶段
+            if check_transition_criteria(
+                stage_config,
+                info,
+                current_iteration=update + 1,
+            ):
+                console.print(f"[green]✓ 达到切换条件，准备进入下一阶段[/green]")
+                break
+
+    # 保存最终检查点
+    final_checkpoint = checkpoint_manager.save_checkpoint(
+        train_state=train_state,
+        step=train_state.step,
+        metrics=metrics_logger.get_averages(),
+        force=True,
+    )
+
+    logger.close()
+
+    return final_checkpoint
+
+
+def main():
+    """主函数"""
+    parser = argparse.ArgumentParser(
+        description="自动化分阶段训练脚本",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--start-stage",
+        type=int,
+        default=0,
+        choices=range(7),
+        help="起始阶段（0-6）",
+    )
+    parser.add_argument(
+        "--end-stage",
+        type=int,
+        default=6,
+        choices=range(7),
+        help="结束阶段（0-6）",
+    )
+    parser.add_argument(
+        "--resume-checkpoint",
+        type=str,
+        default=None,
+        help="恢复训练的检查点路径",
+    )
+
+    args = parser.parse_args()
+
+    console.print(Panel.fit(
+        f"[bold green]分阶段训练[/bold green]\n"
+        f"[dim]起始阶段: {args.start_stage}[/dim]\n"
+        f"[dim]结束阶段: {args.end_stage}[/dim]",
+        border_style="green",
+    ))
+
+    # 获取要训练的阶段
+    stages_to_train = [
+        s for s in STAGE_CONFIGS
+        if args.start_stage <= s["stage_id"] <= args.end_stage
+    ]
+
+    if not stages_to_train:
+        console.print("[red]错误: 没有要训练的阶段[/red]")
+        sys.exit(1)
+
+    console.print(f"[green]将训练 {len(stages_to_train)} 个阶段[/green]")
+
+    # 逐个训练阶段
+    previous_checkpoint = args.resume_checkpoint
+    start_from_stage = args.start_stage
+
+    for stage_config in stages_to_train:
+        try:
+            # 训练当前阶段
+            best_checkpoint = train_stage(
+                stage_config=stage_config,
+                previous_checkpoint=previous_checkpoint,
+                start_from_stage=start_from_stage,
+            )
+
+            # 更新检查点路径用于下一阶段
+            previous_checkpoint = best_checkpoint
+            start_from_stage = stage_config["stage_id"]
+
+            console.print(f"[green]✓ 阶段 {stage_config['stage_id']} 完成[/green]")
+            console.print(f"[dim]最佳模型: {best_checkpoint}[/dim]")
+
+        except KeyboardInterrupt:
+            console.print(f"[yellow]训练被用户中断（阶段 {stage_config['stage_id']}）[/yellow]")
+            console.print(f"[dim]可以使用 --resume-checkpoint {previous_checkpoint} 恢复训练[/dim]")
+            sys.exit(0)
+
+        except Exception as e:
+            console.print(f"[red]阶段 {stage_config['stage_id']} 训练出错: {e}[/red]")
+            import traceback
+            console.print(traceback.format_exc())
+            sys.exit(1)
+
+    console.print(Panel.fit(
+        "[bold green]所有阶段训练完成！[/bold green]",
+        border_style="green",
+    ))
+
+
+if __name__ == "__main__":
+    main()

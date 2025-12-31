@@ -25,7 +25,7 @@ from rich.table import Table
 from rich import box
 import time
 
-from rl.envs import create_velocity_tracking_env
+from rl.envs import create_velocity_tracking_env, create_walking_env
 from rl.models import ActorCriticNetwork
 from rl.utils import MujocoRenderer, InteractiveViewer, create_video_writer, save_frame_to_video
 
@@ -238,6 +238,9 @@ def main():
                         help='每个episode最大步数')
     parser.add_argument('--hidden-dims', type=int, nargs='+', default=[256, 256],
                         help='网络隐藏层维度')
+    parser.add_argument('--env-type', type=str, default='velocity',
+                        choices=['velocity', 'walking'],
+                        help='环境类型: velocity=速度跟踪, walking=行走任务')
     parser.add_argument('--seed', type=int, default=42, help='随机种子')
 
     args = parser.parse_args()
@@ -264,7 +267,12 @@ def main():
 
     # 创建环境
     console.print("\n[bold cyan]创建环境[/bold cyan]")
-    env = create_velocity_tracking_env(xml_path=xml_path, verbose=False)
+    if args.env_type == 'walking':
+        env = create_walking_env(xml_path=xml_path, verbose=False)
+        console.print(f"  ✓ 环境类型: 行走环境 (WalkingEnv)")
+    else:
+        env = create_velocity_tracking_env(xml_path=xml_path, verbose=False)
+        console.print(f"  ✓ 环境类型: 速度跟踪环境 (VelocityTrackingEnv)")
     console.print(f"  ✓ obs={env.observation_size}, act={env.action_size}")
 
     # 创建网络
@@ -274,13 +282,12 @@ def main():
         shared_backbone=True,
         hidden_dims=tuple(args.hidden_dims),
     )
-    rng, init_rng = jax.random.split(rng)
-    params = network.init(init_rng, jp.zeros((1, env.observation_size)))
-    console.print(f"  ✓ 网络参数初始化完成")
+    console.print(f"  ✓ 网络创建完成")
 
     # 加载检查点
     console.print("\n[bold cyan]加载检查点[/bold cyan]")
     params, step = load_checkpoint(args.checkpoint, network, rng)
+    console.print(f"  ✓ 检查点参数已加载，覆盖默认初始化")
 
     # 评估
     results = evaluate_policy(

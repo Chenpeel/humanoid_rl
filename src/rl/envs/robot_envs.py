@@ -999,6 +999,9 @@ class WalkingEnv(MJXBaseEnv):
               关节速度(nu) + 上一动作(nu) + 命令(3) + 接触传感器(num_contacts)
         """
         num_contacts = len(self.contact_sensor_indices)
+        # 如果没有找到传感器，默认使用4个零值（与 _get_obs 保持一致）
+        if num_contacts == 0:
+            num_contacts = 4
         self._observation_size = 4 + 3 + 3 + self.nu + self.nu + self.nu + 3 + num_contacts
 
     @property
