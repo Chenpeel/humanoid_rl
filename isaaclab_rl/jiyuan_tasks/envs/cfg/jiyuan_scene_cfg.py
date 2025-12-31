@@ -165,9 +165,9 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     )
 
     # 机器人代理（负责物理交互和控制）
-    # 指向 worldBody，因为 MJCF 导入器将其设为 articulation root
+    # 指向 base_link，因为 worldBody 可能只是容器
     robot: ArticulationCfg = ArticulationCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/worldBody",
+        prim_path="{ENV_REGEX_NS}/Robot/.*base_link",
         # 不再在此处 spawn，因为 robot_asset 已经生成了 USD
         spawn=None,
         init_state=ArticulationCfg.InitialStateCfg(
@@ -205,8 +205,8 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                     ".*hip_roll_joint",   # Roll (保持不变)
                     ".*knee_joint",       # Knee (保持不变)
                 ],
-                stiffness=80.0,
-                damping=6.0,
+                stiffness=40.0,
+                damping=3.0,
                 effort_limit_sim=150.0,
                 velocity_limit_sim=10.0,
             ),
@@ -217,16 +217,16 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                     ".*ankle_axle_joint",
                     ".*foot_joint",
                 ],
-                stiffness=60.0,
-                damping=4.0,
+                stiffness=30.0,
+                damping=2.0,
                 effort_limit_sim=100.0,
                 velocity_limit_sim=10.0,
             ),
             # 脚趾电机
             "toe_motors": ImplicitActuatorCfg(
                 joint_names_expr=[".*toe_joint"],
-                stiffness=40.0,
-                damping=2.0,
+                stiffness=20.0,
+                damping=1.0,
                 effort_limit_sim=50.0,
                 velocity_limit_sim=10.0,
             ),
