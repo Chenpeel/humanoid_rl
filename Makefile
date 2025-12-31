@@ -223,8 +223,8 @@ install-all: check-isaaclab
 train-standing: check-isaaclab
 	@echo ">>> [站立平衡] 开始训练 (2000 iterations)..."
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+		--config isaaclab_rl/configs/train_config.yaml \
 		--task standing \
-		--num_envs 4096 \
 		--max_iterations 2000 $(ARGS)
 
 # 平坦地形行走训练
@@ -236,8 +236,8 @@ train-flat: check-isaaclab
 	if [ -z "$$LATEST_STANDING" ]; then echo "Error: 未找到站立训练记录"; exit 1; fi; \
 	echo "加载站立模型: jiyuan_standing/$$LATEST_STANDING"; \
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+		--config isaaclab_rl/configs/train_config.yaml \
 		--task flat \
-		--num_envs 4096 \
 		--max_iterations 5000 \
 		--resume --load_run jiyuan_standing/$$LATEST_STANDING $(ARGS)
 
@@ -250,8 +250,8 @@ train-walking: check-isaaclab
 	if [ -z "$$LATEST_VEL" ]; then echo "Error: 未找到平坦地形训练记录"; exit 1; fi; \
 	echo "加载平坦地形模型: jiyuan_velocity_tracking/$$LATEST_VEL"; \
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+		--config isaaclab_rl/configs/train_config.yaml \
 		--task velocity \
-		--num_envs 4096 \
 		--max_iterations 10000 \
 		--resume --load_run jiyuan_velocity_tracking/$$LATEST_VEL $(ARGS)
 
@@ -263,8 +263,8 @@ train-rough: check-isaaclab
 	if [ -z "$$LATEST_VEL" ]; then echo "Error: 未找到行走训练记录"; exit 1; fi; \
 	echo "加载行走模型: jiyuan_velocity_tracking/$$LATEST_VEL"; \
 	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+		--config isaaclab_rl/configs/train_config.yaml \
 		--task rough \
-		--num_envs 4096 \
 		--max_iterations 30000 \
 		--resume --load_run jiyuan_velocity_tracking/$$LATEST_VEL $(ARGS)
 
