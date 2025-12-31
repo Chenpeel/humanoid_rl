@@ -139,13 +139,22 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         debug_vis=False,
     )
 
-    # 机器人加载器（负责 Spawn USD 文件）
-    # 将文件加载到 /Robot 路径下，作为容器
-    robot_loader: AssetBaseCfg = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Robot",
+    # 机器人代理（负责物理交互和控制）
+    # 指向 worldBody (MJCF 导入后的 Articulation Root)
+    robot: ArticulationCfg = ArticulationCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*worldBody",
         spawn=UsdFileCfg(
             usd_path=get_usd_path(),
             activate_contact_sensors=True,
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                disable_gravity=False,
+                retain_accelerations=False,
+                linear_damping=0.0,
+                angular_damping=0.0,
+                max_linear_velocity=1000.0,
+                max_angular_velocity=1000.0,
+                max_depenetration_velocity=1.0,
+            ),
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                 enabled_self_collisions=False,
                 solver_position_iteration_count=4,
@@ -154,13 +163,6 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 stabilization_threshold=0.001,
             ),
         ),
-    )
-
-    # 机器人代理（负责物理交互和控制）
-    # 指向 worldBody (MJCF 导入后的 Articulation Root)
-    robot: ArticulationCfg = ArticulationCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*worldBody",
-        spawn=None,
         init_state=ArticulationCfg.InitialStateCfg(
             # 初始位置：恢复为 0.92m
             pos=(0.0, 0.0, 0.92),
@@ -189,8 +191,8 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                     ".*hip_roll_joint",
                     ".*knee_joint",
                 ],
-                stiffness=40.0,
-                damping=5.0,
+                stiffness=80.0,
+                damping=2.0,
                 effort_limit_sim=150.0,
                 velocity_limit_sim=10.0,
             ),
@@ -200,15 +202,15 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                     ".*ankle_axle_joint",
                     ".*foot_joint",
                 ],
-                stiffness=20.0,
-                damping=2.0,
+                stiffness=60.0,
+                damping=1.0,
                 effort_limit_sim=100.0,
                 velocity_limit_sim=10.0,
             ),
             "toe_motors": ImplicitActuatorCfg(
                 joint_names_expr=[".*toe_joint"],
-                stiffness=10.0,
-                damping=1.0,
+                stiffness=40.0,
+                damping=0.5,
                 effort_limit_sim=50.0,
                 velocity_limit_sim=10.0,
             ),
@@ -250,25 +252,25 @@ def get_joint_names() -> list[str]:
     """
     # 右腿（8个）
     right_leg = [
+        "right_hip_roll_joint",
         "right_hip_cube_joint",      # Pitch
         "right_thigh_joint",         # Yaw
-        "right_hip_roll_joint",      # Roll
         "right_knee_joint",
-        "right_ankle_1_3_joint",
-        "right_ankle_2_3_joint",
-        "right_ankle_3_3_joint",
+        "right_ankle_cube_joint",    # Ankle Pitch
+        "right_ankle_axle_joint",    # Ankle Roll
+        "right_foot_joint",          # Ankle Yaw
         "right_toe_joint",
     ]
 
     # 左腿（8个）
     left_leg = [
+        "left_hip_roll_joint",
         "left_hip_cube_joint",       # Pitch
         "left_thigh_joint",          # Yaw
-        "left_hip_roll_joint",       # Roll
         "left_knee_joint",
-        "left_ankle_1_3_joint",
-        "left_ankle_2_3_joint",
-        "left_ankle_3_3_joint",
+        "left_ankle_cube_joint",     # Ankle Pitch
+        "left_ankle_axle_joint",     # Ankle Roll
+        "left_foot_joint",           # Ankle Yaw
         "left_toe_joint",
     ]
 
