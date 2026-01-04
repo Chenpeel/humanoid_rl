@@ -1,0 +1,60 @@
+# ==================== 10小时快速训练：阶段0 (站立平衡) ====================
+# 目标：快速学会站立
+# 预算：约0.5小时 (100 iters)
+
+scene: jiyuan_fit_flat
+env_type: walking
+
+num_envs: 1024
+num_steps: 64
+max_episode_steps: 500
+
+cmd_x_range: [0.0, 0.0]
+cmd_y_range: [0.0, 0.0]
+cmd_yaw_range: [0.0, 0.0]
+
+reward_weights:
+  forward_velocity: 0.0
+  gait_symmetry: 0.0
+  foot_clearance: 0.0
+  trunk_height: 1.2
+  orientation: -0.8
+  trunk_lin_vel_z: -0.5
+  drag: -0.2
+  alive: 0.8
+  action_rate: -0.005
+  torques: -0.00005
+  stability: 1.0
+
+num_epochs: 4
+num_minibatches: 8
+gamma: 0.99
+gae_lambda: 0.95
+clip_epsilon: 0.2
+value_coef: 0.5
+entropy_coef: 0.01
+max_grad_norm: 0.5
+
+total_timesteps: 6553600  # 100 iters * 1024 * 64
+log_interval: 10
+eval_interval: 50
+save_interval: 50
+
+learning_rate: 3.0e-4
+final_lr_fraction: 0.02
+
+hidden_dims: [512, 512, 256]
+shared_backbone: true
+
+enable_video: true
+video_interval: 100
+video_frames: 180
+video_camera: "track"
+
+stage_config:
+  stage_id: 0
+  stage_name: "standing_10h"
+  min_iterations: 100
+  transition_criteria:
+    min_reward: 0.5          # 稍微降低要求
+    max_fall_rate: 0.1       # 允许稍微高一点的摔倒率
