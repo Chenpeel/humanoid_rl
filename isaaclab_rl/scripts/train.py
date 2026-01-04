@@ -104,20 +104,16 @@ from agents.rsl_rl import (
 TASK_ENV_MAP = {
     "velocity": "Isaac-Jiyuan-Velocity-v0",
     "standing": "Isaac-Jiyuan-Standing-v0",
-    "walking": "Isaac-Jiyuan-Walking-v0",
     "rough": "Isaac-Jiyuan-Rough-v0",
     "flat": "Isaac-Jiyuan-Flat-v0",
-    "test": "Isaac-Jiyuan-Test-v0",
     "curriculum": "Isaac-Jiyuan-Curriculum-v0",
 }
 
 TASK_PPO_CFG_MAP = {
     "velocity": VELOCITY_TRACKING_PPO_CFG,
     "standing": STANDING_PPO_CFG,
-    "walking": VELOCITY_TRACKING_PPO_CFG,
     "rough": VELOCITY_TRACKING_PPO_CFG,
     "flat": VELOCITY_TRACKING_PPO_CFG,
-    "test": STANDING_PPO_CFG,
     "curriculum": VELOCITY_TRACKING_PPO_CFG,
 }
 
