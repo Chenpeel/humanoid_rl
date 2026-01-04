@@ -164,7 +164,6 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
             ),
         ),
     )
-
     # 机器人代理（负责物理交互和控制）
     robot: ArticulationCfg = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/Robot/.*base_link",
