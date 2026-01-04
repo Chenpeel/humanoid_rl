@@ -1,0 +1,71 @@
+# ==================== 快速测试配置 ====================
+# 目标：最小资源快速验证训练流程（<2分钟完成）
+# 用途：开发调试、代码验证、快速迭代
+# 资源需求：4-6GB RAM + 2-4GB GPU
+
+# ==================== 场景配置 ====================
+scene: jiyuan_fit_flat  # 平坦地形
+env_type: walking       # 行走任务
+
+# ==================== 环境配置（极简资源）====================
+num_envs: 256           # 最小化并行环境（vs 正式1024）
+num_steps: 8            # 极短rollout（vs 正式64）
+max_episode_steps: 100  # 短episode（vs 正式500）
+
+# ==================== 任务参数 ====================
+cmd_x_range: [0.0, 0.0]      # 站立任务
+cmd_y_range: [0.0, 0.0]
+cmd_yaw_range: [0.0, 0.0]
+
+# ==================== 奖励权重（与stage0保持一致）====================
+reward_weights:
+  forward_velocity: 0.0      # 站立任务
+  gait_symmetry: 0.0
+  foot_clearance: 0.0
+  trunk_height: 1.2          # 核心奖励
+  orientation: -0.8
+  trunk_lin_vel_z: -0.5
+  drag: -0.2
+  action_rate: -0.005
+  torques: -0.00005
+  alive: 0.8
+
+# ==================== PPO超参数 ====================
+num_epochs: 4
+num_minibatches: 4         # 减半（vs 正式8）
+gamma: 0.99
+gae_lambda: 0.95
+clip_epsilon: 0.2
+value_coef: 0.5
+entropy_coef: 0.01
+max_grad_norm: 0.5
+
+# ==================== 训练配置（极短训练）====================
+total_timesteps: 131072    # 仅128K步（256×8×64次更新）
+log_interval: 1            # 每次更新都记录
+eval_interval: 10
+save_interval: 10
+
+# ==================== 优化器配置 ====================
+learning_rate: 3.0e-4
+final_lr_fraction: 0.02
+
+# ==================== 网络配置（小型网络）====================
+hidden_dims: [128, 128, 64]  # 减小网络（vs 正式[512, 512, 256]）
+shared_backbone: true
+
+# ==================== 视频录制配置（禁用）====================
+enable_video: false        # 禁用视频以提升速度
+video_interval: 0
+video_frames: 0
+video_camera: "track"
+
+# ==================== 阶段切换配置 ====================
+stage_config:
+  stage_id: 0
+  stage_name: "test_quick"
+  min_iterations: 64       # 128K步/(256*8) = 64 iterations
+  transition_criteria:
+    min_reward: 0.0        # 测试模式不设置切换条件
+    max_fall_rate: 1.0
+    min_height_stability: 0.0

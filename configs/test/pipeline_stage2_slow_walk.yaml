@@ -1,0 +1,67 @@
+# ==================== 流水线快速测试 - 阶段2：慢速行走 ====================
+# 目标：快速验证阶段2训练逻辑
+
+# ==================== 场景配置 ====================
+scene: jiyuan_fit_flat
+env_type: walking
+
+# ==================== 环境配置 ====================
+num_envs: 128
+num_steps: 8
+max_episode_steps: 100
+
+# ==================== 任务参数（慢速行走）====================
+cmd_x_range: [0.1, 0.3]      # 慢速前向
+cmd_y_range: [0.0, 0.0]
+cmd_yaw_range: [0.0, 0.0]
+
+# ==================== 奖励权重 ====================
+reward_weights:
+  forward_velocity: 0.8
+  gait_symmetry: 0.4
+  foot_clearance: 0.25
+  trunk_height: 0.8
+  orientation: -0.3
+  trunk_lin_vel_z: -0.4
+  drag: -0.5
+  action_rate: -0.008
+  torques: -0.00008
+  alive: 0.4
+
+# ==================== PPO超参数 ====================
+num_epochs: 2
+num_minibatches: 4
+gamma: 0.99
+gae_lambda: 0.95
+clip_epsilon: 0.2
+value_coef: 0.5
+entropy_coef: 0.01
+max_grad_norm: 0.5
+
+# ==================== 训练配置 ====================
+total_timesteps: 32768
+log_interval: 1
+eval_interval: 5
+save_interval: 5
+
+# ==================== 优化器配置 ====================
+learning_rate: 3.0e-4
+final_lr_fraction: 0.02
+
+# ==================== 网络配置 ====================
+hidden_dims: [128, 128, 64]
+shared_backbone: true
+
+# ==================== 视频录制配置 ====================
+enable_video: false
+video_interval: 0
+video_frames: 0
+video_camera: "track"
+
+# ==================== 阶段切换配置 ====================
+stage_config:
+  stage_id: 2
+  stage_name: "test_slow_walk"
+  min_iterations: 10
+  transition_criteria:
+    min_velocity_tracking: 0.0  # 无条件切换
