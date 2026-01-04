@@ -38,7 +38,8 @@ build/
 *.html
 *.cpp
 *.so
-.TODOs
+# Agent
 CLAUDE.md
 .claude/
-.std_docs
+.std_docs/
+.migrate/
