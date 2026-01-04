@@ -397,22 +397,6 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
         # 计算最后一步的价值（bootstrap）
         _, _, last_value = network.apply(train_state.params, env_state.obs)
 
-        # 调试日志：检查 obs 和 value 是否包含 NaN/Inf
-        jax.debug.print(
-            "[DEBUG] obs: min={min}, max={max}, has_nan={nan}, has_inf={inf}",
-            min=env_state.obs.min(),
-            max=env_state.obs.max(),
-            nan=jp.isnan(env_state.obs).any(),
-            inf=jp.isinf(env_state.obs).any()
-        )
-        jax.debug.print(
-            "[DEBUG] last_value: min={min}, max={max}, has_nan={nan}, has_inf={inf}",
-            min=last_value.min(),
-            max=last_value.max(),
-            nan=jp.isnan(last_value).any(),
-            inf=jp.isinf(last_value).any()
-        )
-
         # 拼接价值序列
         values_with_last = jp.concatenate([values, last_value[None, :]], axis=0)
 

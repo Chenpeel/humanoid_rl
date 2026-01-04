@@ -5,7 +5,7 @@
 scene: jiyuan_fit_flat
 env_type: walking
 
-num_envs: 1024
+num_envs: 512
 num_steps: 64
 max_episode_steps: 500
 
@@ -27,7 +27,7 @@ reward_weights:
   stability: 1.0
 
 num_epochs: 4
-num_minibatches: 8
+num_minibatches: 4
 gamma: 0.99
 gae_lambda: 0.95
 clip_epsilon: 0.2
@@ -35,7 +35,7 @@ value_coef: 0.5
 entropy_coef: 0.01
 max_grad_norm: 0.5
 
-total_timesteps: 6553600  # 100 iters * 1024 * 64
+total_timesteps: 3276800  # 100 iters * 512 * 64
 log_interval: 10
 eval_interval: 50
 save_interval: 50

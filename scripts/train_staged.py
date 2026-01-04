@@ -547,11 +547,17 @@ def train_stage(
         # 触发编译（带进度提示）
         from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 
-        with Progress(
-            SpinnerColumn(),
+        # 在screen中禁用SpinnerColumn，避免显示异常
+        progress_columns = [
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TimeElapsedColumn(),
+        ]
+        if not os.environ.get("STY"):  # STY由screen设置
+            progress_columns.insert(0, SpinnerColumn())
+
+        with Progress(
+            *progress_columns,
             console=console,
         ) as progress:
             compile_task = progress.add_task(
