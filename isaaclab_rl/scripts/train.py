@@ -108,6 +108,7 @@ TASK_ENV_MAP = {
     "rough": "Isaac-Jiyuan-Rough-v0",
     "flat": "Isaac-Jiyuan-Flat-v0",
     "test": "Isaac-Jiyuan-Test-v0",
+    "curriculum": "Isaac-Jiyuan-Curriculum-v0",
 }
 
 TASK_PPO_CFG_MAP = {
@@ -117,6 +118,7 @@ TASK_PPO_CFG_MAP = {
     "rough": VELOCITY_TRACKING_PPO_CFG,
     "flat": VELOCITY_TRACKING_PPO_CFG,
     "test": STANDING_PPO_CFG,
+    "curriculum": VELOCITY_TRACKING_PPO_CFG,
 }
 
 
