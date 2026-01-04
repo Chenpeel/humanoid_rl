@@ -1,6 +1,6 @@
 # ==================== 阶段2：小步行走 ====================
 # 目标：缓慢向前移动，建立速度跟踪意识
-# 训练步数：524M-1.05B (500-1000 iterations)
+# 训练步数：45M-95M (45-95 iterations)
 # 切换条件：速度跟踪准确率 > 70%
 
 # ==================== 场景配置 ====================
@@ -8,8 +8,8 @@ scene: jiyuan_fit_flat  # 平坦地形
 env_type: walking
 
 # ==================== 环境配置 ====================
-num_envs: 2048
-num_steps: 32
+num_envs: 1024           # 1080Ti 11GB限制，从2048减半
+num_steps: 64           # 翻倍增加时序信息
 max_episode_steps: 1000  # 增加episode长度
 
 # ==================== 任务参数（课程学习） ====================
@@ -33,13 +33,13 @@ reward_weights:
   action_rate: -0.005         # 降低动作变化率惩罚
   torques: -0.00005           # 降低力矩惩罚
 
-  # Unitree增强奖励项（重点强化速度跟踪和步态周期性）
-  gait_periodicity: 1.5       # 步态周期性（重点，慢速行走需要稳定节奏）
-  swing_trajectory: 0.8       # 摆动轨迹（适中，建立基础摆动模式）
-  landing_impact: -0.5        # 着地冲击（适度惩罚，培养轻柔着地）
-  energy_efficiency: 0.6      # 能量效率（鼓励节能步态）
-  velocity_tracking: 2.0      # 增强速度跟踪（重点，建立速度跟踪意识）
-  stability: 1.0              # 综合稳定性（基础稳定性要求）
+  # 增强奖励项（需要环境额外支持）
+  # gait_periodicity: 1.5       # 步态周期性（需要phase）
+  # swing_trajectory: 0.8       # 摆动轨迹（需要phase）
+  # landing_impact: -0.5        # 着地冲击（需要landing_events）
+  # energy_efficiency: 0.6      # 能量效率（需要joint_velocities）
+  # velocity_tracking: 2.0      # 增强速度跟踪（需要command和actual_velocity）
+  stability: 1.0              # 综合稳定性
 
 # ==================== PPO超参数 ====================
 num_epochs: 4
@@ -52,10 +52,10 @@ entropy_coef: 0.005           # 降低熵，开始利用
 max_grad_norm: 0.5
 
 # ==================== 训练配置 ====================
-total_timesteps: 65536000    # 62.5M步 (减半，约62 iterations)
-log_interval: 10
-eval_interval: 25
-save_interval: 25
+total_timesteps: 655360000    # 655M步 (10000 iterations, 1024×64)
+log_interval: 20
+eval_interval: 100
+save_interval: 50
 
 # ==================== 优化器配置 ====================
 learning_rate: 3.0e-4
@@ -67,7 +67,7 @@ shared_backbone: true
 
 # ==================== 视频录制配置 ====================
 enable_video: true
-video_interval: 25
+video_interval: 100
 video_frames: 180
 video_camera: "track"
 
@@ -75,7 +75,7 @@ video_camera: "track"
 stage_config:
   stage_id: 2
   stage_name: "slow_walk"
-  min_iterations: 15       # 进一步减小最小迭代次数（快速测试）
+  min_iterations: 10000    # 655M步/(1024*64) = 10000 iterations (3天训练方案)
   transition_criteria:
     min_velocity_tracking: 0.7  # 速度跟踪准确率 > 70%
     min_mean_velocity: 0.15     # 平均前向速度 > 0.15 m/s

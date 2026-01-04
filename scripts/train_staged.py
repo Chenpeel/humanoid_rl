@@ -59,7 +59,7 @@ STAGE_CONFIGS = [
         "name": "standing",
         "config_file": "configs/stage0_standing.yaml",
         "description": "站立平衡",
-        "min_iterations": 150,
+        "min_iterations": 2500,     # 164M步 (3天训练优化)
         "transition_criteria": {
             "min_reward": 0.6,
             "max_fall_rate": 0.05,
@@ -70,7 +70,7 @@ STAGE_CONFIGS = [
         "name": "stepping",
         "config_file": "configs/stage1_stepping.yaml",
         "description": "原地踏步",
-        "min_iterations": 400,
+        "min_iterations": 5000,     # 328M步
         "transition_criteria": {
             "min_gait_symmetry": 0.5,
             "min_foot_clearance": 0.3,
@@ -81,7 +81,7 @@ STAGE_CONFIGS = [
         "name": "slow_walk",
         "config_file": "configs/stage2_slow_walk.yaml",
         "description": "小步行走",
-        "min_iterations": 800,
+        "min_iterations": 10000,    # 655M步
         "transition_criteria": {
             "min_velocity_tracking": 0.7,
         },
@@ -91,7 +91,7 @@ STAGE_CONFIGS = [
         "name": "normal_walk",
         "config_file": "configs/stage3_normal_walk.yaml",
         "description": "正常行走",
-        "min_iterations": 1800,
+        "min_iterations": 20000,    # 1.31B步 (重点阶段,40%时间)
         "transition_criteria": {
             "min_velocity_tracking": 0.8,
         },
@@ -101,34 +101,35 @@ STAGE_CONFIGS = [
         "name": "fast_walk",
         "config_file": "configs/stage4_fast_walk.yaml",
         "description": "高速适应",
-        "min_iterations": 2800,
+        "min_iterations": 12500,    # 819M步
         "transition_criteria": {
             "min_velocity_tracking": 0.75,
             "min_max_velocity": 0.9,
         },
     },
-    {
-        "stage_id": 5,
-        "name": "terrain_adaptation",
-        "config_file": "configs/stage5_terrain.yaml",
-        "description": "地形适应",
-        "min_iterations": 4800,
-        "transition_criteria": {
-            "min_velocity_ratio": 0.7,
-            "max_fall_rate": 0.15,
-        },
-    },
-    {
-        "stage_id": 6,
-        "name": "robustness",
-        "config_file": "configs/stage6_robustness.yaml",
-        "description": "鲁棒性提升",
-        "min_iterations": 9500,
-        "transition_criteria": {
-            "min_velocity_tracking": 0.8,
-            "max_fall_rate": 0.1,
-        },
-    },
+    # 暂时禁用stage5和stage6,聚焦核心步态训练
+    # {
+    #     "stage_id": 5,
+    #     "name": "terrain_adaptation",
+    #     "config_file": "configs/stage5_terrain.yaml",
+    #     "description": "地形适应",
+    #     "min_iterations": 4800,
+    #     "transition_criteria": {
+    #         "min_velocity_ratio": 0.7,
+    #         "max_fall_rate": 0.15,
+    #     },
+    # },
+    # {
+    #     "stage_id": 6,
+    #     "name": "robustness",
+    #     "config_file": "configs/stage6_robustness.yaml",
+    #     "description": "鲁棒性提升",
+    #     "min_iterations": 9500,
+    #     "transition_criteria": {
+    #         "min_velocity_tracking": 0.8,
+    #         "max_fall_rate": 0.1,
+    #     },
+    # },
 ]
 
 
@@ -288,16 +289,27 @@ def train_stage(
     scene_path = f"assets/xmls/scenes/{scene_file}.xml"
 
     console.print(f"[cyan]场景: {scene}[/cyan]")
+    console.print(f"[cyan]环境类型: {env_type}[/cyan]")
     console.print(f"[cyan]命令范围: x={cmd_x_range}, y={cmd_y_range}, yaw={cmd_yaw_range}[/cyan]")
 
-    # 创建环境
-    env = create_walking_env(
-        xml_path=scene_path,
-        cmd_x_range=cmd_x_range,
-        cmd_y_range=cmd_y_range,
-        cmd_yaw_range=cmd_yaw_range,
-        reward_weights=reward_weights,
-    )
+    # 根据环境类型创建对应的环境
+    if env_type == "standing":
+        from rl.envs import create_standing_env
+        env = create_standing_env(
+            xml_path=scene_path,
+            cmd_x_range=cmd_x_range,
+            cmd_y_range=cmd_y_range,
+            cmd_yaw_range=cmd_yaw_range,
+            reward_weights=reward_weights,
+        )
+    else:  # 默认创建行走环境
+        env = create_walking_env(
+            xml_path=scene_path,
+            cmd_x_range=cmd_x_range,
+            cmd_y_range=cmd_y_range,
+            cmd_yaw_range=cmd_yaw_range,
+            reward_weights=reward_weights,
+        )
 
     # 创建网络
     network = ActorCriticNetwork(

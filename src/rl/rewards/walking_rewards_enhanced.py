@@ -163,11 +163,59 @@ def compute_energy_efficiency_reward(
     return efficiency_reward
 
 
+def compute_stability_reward(
+    torso_z: jax.Array,
+    base_quat: jax.Array,
+    base_linvel: jax.Array,
+    base_angvel: jax.Array,
+    target_height: float = 0.35,
+    height_tolerance: float = 0.05,
+    angular_velocity_penalty: float = 1.0
+) -> jax.Array:
+    """计算综合稳定性奖励
+
+    结合高度稳定性、姿态稳定性和角速度稳定性的综合评估。
+
+    Args:
+        torso_z: 躯干高度
+        base_quat: 躯干四元数
+        base_linvel: 基座线速度
+        base_angvel: 基座角速度
+        target_height: 目标高度
+        height_tolerance: 高度容差
+        angular_velocity_penalty: 角速度惩罚权重
+
+    Returns:
+        综合稳定性奖励值
+    """
+    from .walking_rewards import normalize_quaternion, quat_to_euler
+
+    # 1. 高度稳定性
+    height_error = jp.abs(torso_z - target_height)
+    height_stability = jp.exp(-height_error / height_tolerance)
+
+    # 2. 姿态稳定性（roll和pitch应接近0）
+    quat = normalize_quaternion(base_quat)
+    euler = quat_to_euler(quat)
+    roll, pitch = euler[..., 0], euler[..., 1]
+    orientation_error = jp.square(roll) + jp.square(pitch)
+    orientation_stability = jp.exp(-orientation_error / 0.1)
+
+    # 3. 角速度稳定性（避免剧烈旋转）
+    angular_velocity_magnitude = jp.linalg.norm(base_angvel, axis=-1)
+    angular_stability = jp.exp(-angular_velocity_magnitude * angular_velocity_penalty)
+
+    # 综合稳定性（加权平均）
+    stability = 0.4 * height_stability + 0.3 * orientation_stability + 0.3 * angular_stability
+
+    return stability
+
+
 def compute_velocity_tracking_reward(
     actual_velocity: jax.Array,
     command: jax.Array,
     tracking_weights: Tuple[float, float, float] = (2.0, 0.5, 0.3)
-) -: jax.Array:
+) -> jax.Array:
     """计算速度跟踪奖励（增强版）
 
     更精细的速度跟踪控制，支持不同轴的权重配置。
@@ -282,23 +330,26 @@ def compute_enhanced_walking_reward(
     # 基础奖励计算（使用原有函数）
     from .walking_rewards import compute_walking_reward
 
+    # 提取接触状态（如果是传感器数据，需要转换）
+    from .walking_rewards import get_feet_contacts
+    contact_state = get_feet_contacts(contacts) if contacts.shape[-1] > 2 else contacts
+
     base_reward = compute_walking_reward(
-        command=command,
-        actual_velocity=actual_velocity,
-        feet_positions=feet_positions,
-        contacts=contacts,
-        joint_positions=joint_positions,
-        joint_velocities=joint_velocities,
-        torques=torques,
         torso_z=torso_z,
         base_quat=base_quat,
         base_linvel=base_linvel,
         base_angvel=base_angvel,
+        contact_sensors=contacts,
+        feet_positions=feet_positions,
         action=action,
         last_action=last_action,
+        torques=torques,
+        target_velocity=command[0],  # 前向速度命令
         target_height=target_height,
         reward_weights={k: v for k, v in reward_weights.items()
-                       if k in DEFAULT_WALKING_REWARD_WEIGHTS},
+                       if k not in ["gait_periodicity", "swing_trajectory",
+                                    "landing_impact", "energy_efficiency",
+                                    "velocity_tracking", "stability"]},
     )
 
     # 增强奖励项
@@ -338,16 +389,26 @@ def compute_enhanced_walking_reward(
         target_efficiency=0.8,
         penalty_weight=0.001
     )
-    enhanced_reward += reward_weights["energy_efficiency"] * efficiency_reward
+    enhanced_reward += reward_weights.get("energy_efficiency", 0.0) * efficiency_reward
 
-    # 5. 增强速度跟踪（多轴权重）
-    enhanced_tracking = compute_velocity_tracking_reward(
-        actual_velocity, command,
-        tracking_weights=tracking_weights
+    # 5. 综合稳定性
+    stability_reward = compute_stability_reward(
+        torso_z, base_quat, base_linvel, base_angvel,
+        target_height=target_height,
+        height_tolerance=0.05,
+        angular_velocity_penalty=1.0
     )
-    # 替换原有的速度跟踪部分
-    base_tracking_weight = reward_weights.get("forward_velocity", 1.5)
-    enhanced_reward += (reward_weights["velocity_tracking"] - base_tracking_weight) * enhanced_tracking
+    enhanced_reward += reward_weights.get("stability", 0.0) * stability_reward
+
+    # 6. 增强速度跟踪（多轴权重）
+    if "velocity_tracking" in reward_weights:
+        enhanced_tracking = compute_velocity_tracking_reward(
+            actual_velocity, command,
+            tracking_weights=tracking_weights
+        )
+        # 替换原有的速度跟踪部分
+        base_tracking_weight = reward_weights.get("forward_velocity", 1.5)
+        enhanced_reward += (reward_weights["velocity_tracking"] - base_tracking_weight) * enhanced_tracking
 
     return enhanced_reward
 

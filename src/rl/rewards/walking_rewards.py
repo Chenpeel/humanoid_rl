@@ -355,6 +355,13 @@ def compute_walking_reward(
     action: jax.Array = None,
     last_action: jax.Array = None,
     torques: jax.Array = None,
+    # 可选的增强参数
+    joint_velocities: jax.Array = None,
+    phase: jax.Array = None,
+    landing_events: jax.Array = None,
+    contact_forces: jax.Array = None,
+    command: jax.Array = None,
+    actual_velocity: jax.Array = None,
     # 目标参数
     target_velocity: float = 0.5,
     target_height: float = 0.35,
@@ -363,7 +370,7 @@ def compute_walking_reward(
 ) -> jax.Array:
     """计算完整的行走任务奖励
 
-    奖励分量：
+    奖励分量（基础版）：
     1. forward_velocity: 前向速度奖励
     2. gait_symmetry: 步态对称性奖励
     3. foot_clearance: 脚部抬高奖励（如果提供 feet_positions）
@@ -375,6 +382,14 @@ def compute_walking_reward(
     9. action_rate: 动作平滑惩罚
     10. torques: 能量效率惩罚
 
+    增强奖励分量（需要额外参数）：
+    11. gait_periodicity: 步态周期性奖励（需要 phase）
+    12. swing_trajectory: 摆动轨迹奖励（需要 phase）
+    13. landing_impact: 着地冲击控制（需要 landing_events, contact_forces）
+    14. energy_efficiency: 能量效率优化（需要 joint_velocities）
+    15. stability: 综合稳定性奖励
+    16. velocity_tracking: 增强速度跟踪（需要 command, actual_velocity）
+
     Args:
         torso_z: 躯干高度
         base_quat: 躯干四元数
@@ -385,6 +400,12 @@ def compute_walking_reward(
         action: 当前动作
         last_action: 上一步动作
         torques: 执行器扭矩
+        joint_velocities: 关节角速度（用于energy_efficiency）
+        phase: 步态相位（用于gait_periodicity和swing_trajectory）
+        landing_events: 着地事件掩码（用于landing_impact）
+        contact_forces: 接触力（用于landing_impact）
+        command: 速度命令 [vx, vy, vyaw]（用于velocity_tracking）
+        actual_velocity: 实际速度 [vx, vy, vyaw]（用于velocity_tracking）
         target_velocity: 目标前向速度
         target_height: 目标躯干高度
         reward_weights: 奖励权重字典
@@ -423,19 +444,98 @@ def compute_walking_reward(
     action_rate_penalty = compute_action_rate_penalty(action, last_action)
     torque_penalty = compute_torque_penalty(torques)
 
-    # 组合奖励
+    # 如果reward_weights为None，使用默认权重
+    if reward_weights is None:
+        reward_weights = DEFAULT_WALKING_REWARD_WEIGHTS
+
+    # 组合基础奖励
     reward = (
-        reward_weights["forward_velocity"] * reward_forward_vel
-        + reward_weights["gait_symmetry"] * reward_gait_symmetry
-        + reward_weights["foot_clearance"] * reward_foot_clearance
-        + reward_weights["trunk_height"] * reward_trunk_height
-        + reward_weights["orientation"] * penalty_orientation
-        + reward_weights["trunk_lin_vel_z"] * penalty_lin_vel_z
-        + reward_weights["drag"] * penalty_drag
-        + reward_weights["alive"] * 1.0
-        + reward_weights["action_rate"] * action_rate_penalty
-        + reward_weights["torques"] * torque_penalty
+        reward_weights.get("forward_velocity", 0.0) * reward_forward_vel
+        + reward_weights.get("gait_symmetry", 0.0) * reward_gait_symmetry
+        + reward_weights.get("foot_clearance", 0.0) * reward_foot_clearance
+        + reward_weights.get("trunk_height", 0.0) * reward_trunk_height
+        + reward_weights.get("orientation", 0.0) * penalty_orientation
+        + reward_weights.get("trunk_lin_vel_z", 0.0) * penalty_lin_vel_z
+        + reward_weights.get("drag", 0.0) * penalty_drag
+        + reward_weights.get("alive", 0.0) * 1.0
+        + reward_weights.get("action_rate", 0.0) * action_rate_penalty
+        + reward_weights.get("torques", 0.0) * torque_penalty
     )
+
+    # ==================== 增强奖励项 ====================
+    # 检查是否需要计算增强奖励
+    has_enhanced_rewards = any(
+        key in reward_weights
+        for key in ["gait_periodicity", "swing_trajectory", "landing_impact",
+                   "energy_efficiency", "stability", "velocity_tracking"]
+    )
+
+    if has_enhanced_rewards:
+        from .walking_rewards_enhanced import (
+            compute_gait_periodicity_reward,
+            compute_swing_trajectory_reward,
+            compute_landing_impact_reward,
+            compute_energy_efficiency_reward,
+            compute_stability_reward,
+            compute_velocity_tracking_reward,
+        )
+
+        # 1. 步态周期性奖励（需要相位信息）
+        if "gait_periodicity" in reward_weights and phase is not None:
+            periodicity_reward = compute_gait_periodicity_reward(
+                contacts, phase,
+                stance_duration=0.6,
+                swing_duration=0.4,
+                tolerance=0.1
+            )
+            reward += reward_weights["gait_periodicity"] * periodicity_reward
+
+        # 2. 摆动轨迹奖励
+        if "swing_trajectory" in reward_weights and phase is not None and feet_positions is not None:
+            trajectory_reward = compute_swing_trajectory_reward(
+                feet_positions, contacts, phase,
+                target_height=0.08,
+                swing_start_phase=0.6
+            )
+            reward += reward_weights["swing_trajectory"] * trajectory_reward
+
+        # 3. 着地冲击控制
+        if "landing_impact" in reward_weights and landing_events is not None and contact_forces is not None:
+            impact_reward = compute_landing_impact_reward(
+                contact_forces, landing_events,
+                max_impact_force=500.0,
+                tolerance=100.0
+            )
+            reward += reward_weights["landing_impact"] * impact_reward
+
+        # 4. 能量效率优化
+        if "energy_efficiency" in reward_weights and joint_velocities is not None and torques is not None:
+            efficiency_reward = compute_energy_efficiency_reward(
+                torques, joint_velocities,
+                target_efficiency=0.8,
+                penalty_weight=0.001
+            )
+            reward += reward_weights["energy_efficiency"] * efficiency_reward
+
+        # 5. 综合稳定性
+        if "stability" in reward_weights:
+            stability_reward = compute_stability_reward(
+                torso_z, base_quat, base_linvel, base_angvel,
+                target_height=target_height,
+                height_tolerance=0.05,
+                angular_velocity_penalty=1.0
+            )
+            reward += reward_weights["stability"] * stability_reward
+
+        # 6. 增强速度跟踪（多轴权重）
+        if "velocity_tracking" in reward_weights and command is not None and actual_velocity is not None:
+            enhanced_tracking = compute_velocity_tracking_reward(
+                actual_velocity, command,
+                tracking_weights=(2.0, 0.5, 0.3)
+            )
+            # 替换原有的forward_velocity奖励
+            base_tracking_weight = reward_weights.get("forward_velocity", 0.0)
+            reward += (reward_weights["velocity_tracking"] - base_tracking_weight) * enhanced_tracking
 
     return reward
 
