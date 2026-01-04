@@ -166,12 +166,11 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     )
 
     # 机器人代理（负责物理交互和控制）
-    # 尝试指向 base_link，绕过 worldBody
     robot: ArticulationCfg = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/Robot/.*base_link",
         spawn=None,
         init_state=ArticulationCfg.InitialStateCfg(
-            # 初始位置：恢复为 1.05m (避免穿地)
+            # 初始位置：恢复为 1.05m
             pos=(0.0, 0.0, 1.05),
             # 初始姿态：保持直立
             rot=(1.0, 0.0, 0.0, 0.0),
@@ -180,9 +179,8 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
                 ".*hip_cube_joint": 0.0,
                 ".*thigh_joint": 0.0,
                 ".*hip_roll.*": 0.0,
-                # 膝关节：弯曲 (-0.4/0.4)，避免奇异点
-                "right_knee.*": -0.4,
-                "left_knee.*": 0.4,
+                "right_knee.*": -0.0,
+                "left_knee.*": 0.0,
                 ".*ankle_cube.*": 0.0,
                 ".*ankle_axle.*": 0.0,
                 ".*foot_joint.*": 0.0,
