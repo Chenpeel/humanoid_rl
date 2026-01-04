@@ -45,9 +45,11 @@ help:
 	@echo "  - train: 所有阶段统一网络结构，首次编译后全程复用"
 	@echo ""
 	@echo "其他："
-	@echo "  make eval CKPT=...        评估模型"
-	@echo "  make tensorboard          启动TensorBoard"
-	@echo "  make clean-all            清理所有缓存和日志"
+	@echo "  make eval CKPT=...              评估模型（默认渲染+保存视频）"
+	@echo "  make eval CKPT=... RENDER=0     评估模型（不渲染）"
+	@echo "  make eval CKPT=... CPU=1        评估模型（使用CPU）"
+	@echo "  make tensorboard                启动TensorBoard"
+	@echo "  make clean-all                  清理所有缓存和日志"
 
 # ==================== 安装相关 ====================
 
@@ -139,11 +141,21 @@ eval:
 	@if [ -z "$(CKPT)" ]; then \
 		echo "错误: 请指定检查点路径 CKPT=..."; \
 		echo "示例: make eval CKPT=logs/ppo_*/checkpoints/best_model"; \
+		echo "示例: make eval CKPT=models/xxx ENV_TYPE=walking"; \
+		echo "示例: make eval CKPT=models/xxx CPU=1  # 使用CPU避免GPU冲突"; \
+		echo "示例: make eval CKPT=models/xxx NO_VIDEO=1  # 实时查看器（不保存视频）"; \
+		echo "示例: make eval CKPT=models/xxx RENDER=10  # 每10步渲染"; \
 		exit 1; \
 	fi
 	@echo "=== 评估模型 ==="
 	@echo "检查点: $(CKPT)"
-	$(PYTHON) $(EVAL_SCRIPT) --checkpoint $(CKPT)
+	@CMD="$(PYTHON) $(EVAL_SCRIPT) --checkpoint $(CKPT)"; \
+	if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; fi; \
+	if [ -n "$(CPU)" ]; then CMD="$$CMD --cpu"; fi; \
+	if [ -n "$(RENDER)" ]; then CMD="$$CMD --render $(RENDER)"; fi; \
+	if [ -n "$(NO_VIDEO)" ]; then CMD="$$CMD --no-save-video"; fi; \
+	if [ -n "$(VIDEO_PATH)" ]; then CMD="$$CMD --video-path $(VIDEO_PATH)"; fi; \
+	eval $$CMD
 
 tensorboard:
 	@echo "=== 启动TensorBoard ==="

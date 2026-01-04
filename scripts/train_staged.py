@@ -526,8 +526,14 @@ def train_stage(
     with training_display:
         for update in range(config.num_updates):
             # 训练一步
+            if update == 0:
+                console.print(f"[dim]开始第一次训练迭代（可能需要额外的初始化时间）...[/dim]")
+
             train_state, env_state, info = train_step_jit(train_state, env_state)
             jax.block_until_ready(train_state)
+
+            if update == 0:
+                console.print(f"[green]✓ 第一次迭代完成[/green]")
 
             # 记录指标
             perf_metrics = perf_monitor.step(config.batch_size)
