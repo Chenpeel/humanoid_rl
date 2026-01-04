@@ -128,7 +128,7 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     ground = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="plane",
-        collision_group=0,
+        collision_group=-1,  # -1 表示与所有组碰撞，防止穿模
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
             restitution_combine_mode="multiply",
@@ -171,8 +171,8 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
         init_state=ArticulationCfg.InitialStateCfg(
             # 初始位置：恢复为 1.05m
             pos=(0.0, 0.0, 1.05),
-            # 初始姿态：保持直立
-            rot=(1.0, 0.0, 0.0, 0.0),
+            # 初始姿态：绕X轴旋转90度 (w, x, y, z)
+            rot=(0.70710678, 0.70710678, 0.0, 0.0),
             # 关节初始位置
             joint_pos={
                 ".*hip_cube_joint": 0.0,

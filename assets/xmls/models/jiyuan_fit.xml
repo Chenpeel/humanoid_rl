@@ -21,19 +21,19 @@
         <geom contype="0" conaffinity="0" group="2" />
       </default>
       <default class="collision">
-        <geom condim="3" contype="8" conaffinity="1" priority="1" group="1" solref="0.005 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
+        <geom condim="3" contype="8" conaffinity="1" priority="1" group="1" solref="0.02 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
       </default>
       <default class="right_leg_collision">
-        <geom condim="3" contype="2" conaffinity="5" priority="1" group="1" solref="0.005 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
+        <geom condim="3" contype="2" conaffinity="5" priority="1" group="1" solref="0.02 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
       </default>
       <default class="left_leg_collision">
-        <geom condim="3" contype="4" conaffinity="3" priority="1" group="1" solref="0.005 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
+        <geom condim="3" contype="4" conaffinity="3" priority="1" group="1" solref="0.02 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
       </default>
       <default class="right_leg_minor_collision">
-        <geom condim="3" contype="16" conaffinity="1" priority="1" group="1" solref="0.005 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
+        <geom condim="3" contype="16" conaffinity="1" priority="1" group="1" solref="0.02 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
       </default>
       <default class="left_leg_minor_collision">
-        <geom condim="3" contype="32" conaffinity="1" priority="1" group="1" solref="0.005 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
+        <geom condim="3" contype="32" conaffinity="1" priority="1" group="1" solref="0.02 1" solimp="0.99 0.999 1e-05" friction="1 0.01 0.01" mass="0" />
       </default>
       <default class="thigh_equality">
         <equality solref="0.001 1" solimp="0.99 0.999 0.0001" />
