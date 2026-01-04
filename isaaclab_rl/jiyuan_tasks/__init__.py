@@ -105,6 +105,16 @@ gym.register(
     disable_env_checker=True,
 )
 
+# 分阶段课程学习环境
+gym.register(
+    id="Isaac-Jiyuan-Curriculum-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": "jiyuan_tasks.envs.cfg:CURRICULUM_ENV_CFG",
+    },
+    disable_env_checker=True,
+)
+
 __all__ = [
     "envs",
     "managers",
