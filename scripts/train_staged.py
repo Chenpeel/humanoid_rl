@@ -53,11 +53,15 @@ console = Console()
 
 # ==================== 阶段配置 ====================
 
+# 配置文件基础路径
+CONFIG_BASE_DIR = "configs/train"
+TEST_CONFIG_BASE_DIR = "configs/test"
+
 STAGE_CONFIGS = [
     {
         "stage_id": 0,
         "name": "standing",
-        "config_file": "configs/stage0_standing.yaml",
+        "config_file": f"{CONFIG_BASE_DIR}/stage0_standing.yaml",
         "description": "站立平衡",
         "min_iterations": 2500,     # 164M步 (3天训练优化)
         "transition_criteria": {
@@ -68,7 +72,7 @@ STAGE_CONFIGS = [
     {
         "stage_id": 1,
         "name": "stepping",
-        "config_file": "configs/stage1_stepping.yaml",
+        "config_file": f"{CONFIG_BASE_DIR}/stage1_stepping.yaml",
         "description": "原地踏步",
         "min_iterations": 5000,     # 328M步
         "transition_criteria": {
@@ -79,7 +83,7 @@ STAGE_CONFIGS = [
     {
         "stage_id": 2,
         "name": "slow_walk",
-        "config_file": "configs/stage2_slow_walk.yaml",
+        "config_file": f"{CONFIG_BASE_DIR}/stage2_slow_walk.yaml",
         "description": "小步行走",
         "min_iterations": 10000,    # 655M步
         "transition_criteria": {
@@ -89,7 +93,7 @@ STAGE_CONFIGS = [
     {
         "stage_id": 3,
         "name": "normal_walk",
-        "config_file": "configs/stage3_normal_walk.yaml",
+        "config_file": f"{CONFIG_BASE_DIR}/stage3_normal_walk.yaml",
         "description": "正常行走",
         "min_iterations": 20000,    # 1.31B步 (重点阶段,40%时间)
         "transition_criteria": {
@@ -99,7 +103,7 @@ STAGE_CONFIGS = [
     {
         "stage_id": 4,
         "name": "fast_walk",
-        "config_file": "configs/stage4_fast_walk.yaml",
+        "config_file": f"{CONFIG_BASE_DIR}/stage4_fast_walk.yaml",
         "description": "高速适应",
         "min_iterations": 12500,    # 819M步
         "transition_criteria": {
@@ -132,14 +136,55 @@ STAGE_CONFIGS = [
     # },
 ]
 
+# ==================== 测试阶段配置（流水线快速测试）====================
+
+TEST_STAGE_CONFIGS = [
+    {
+        "stage_id": 0,
+        "name": "test_standing",
+        "config_file": f"{TEST_CONFIG_BASE_DIR}/pipeline_stage0_standing.yaml",
+        "description": "快速站立测试",
+        "min_iterations": 10,
+        "transition_criteria": {
+            "min_reward": 0.0,  # 无条件切换
+        },
+    },
+    {
+        "stage_id": 1,
+        "name": "test_stepping",
+        "config_file": f"{TEST_CONFIG_BASE_DIR}/pipeline_stage1_stepping.yaml",
+        "description": "快速踏步测试",
+        "min_iterations": 10,
+        "transition_criteria": {
+            "min_gait_symmetry": 0.0,
+        },
+    },
+    {
+        "stage_id": 2,
+        "name": "test_slow_walk",
+        "config_file": f"{TEST_CONFIG_BASE_DIR}/pipeline_stage2_slow_walk.yaml",
+        "description": "快速慢走测试",
+        "min_iterations": 10,
+        "transition_criteria": {
+            "min_velocity_tracking": 0.0,
+        },
+    },
+]
+
 
 # ==================== 工具函数 ====================
 
 def load_stage_config(config_path: str) -> Dict:
-    """加载阶段配置文件"""
+    """加载阶段配置文件,支持向后兼容旧路径"""
     if not os.path.exists(config_path):
-        console.print(f"[red]错误: 配置文件不存在: {config_path}[/red]")
-        sys.exit(1)
+        # 尝试旧路径兼容性
+        legacy_path = config_path.replace("configs/train/", "configs/")
+        if os.path.exists(legacy_path):
+            console.print(f"[yellow]警告: 使用旧路径 {legacy_path}，建议更新配置[/yellow]")
+            config_path = legacy_path
+        else:
+            console.print(f"[red]错误: 配置文件不存在: {config_path}[/red]")
+            sys.exit(1)
 
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
@@ -488,6 +533,11 @@ def main():
         help="结束阶段（0-6）",
     )
     parser.add_argument(
+        "--test-mode",
+        action="store_true",
+        help="使用测试配置（快速流水线测试，3阶段<3分钟）",
+    )
+    parser.add_argument(
         "--resume-checkpoint",
         type=str,
         default=None,
@@ -496,17 +546,32 @@ def main():
 
     args = parser.parse_args()
 
-    console.print(Panel.fit(
-        f"[bold green]分阶段训练[/bold green]\n"
-        f"[dim]起始阶段: {args.start_stage}[/dim]\n"
-        f"[dim]结束阶段: {args.end_stage}[/dim]",
-        border_style="green",
-    ))
+    # 根据测试模式选择配置
+    if args.test_mode:
+        stage_configs = TEST_STAGE_CONFIGS
+        console.print(Panel.fit(
+            f"[bold yellow]流水线快速测试模式[/bold yellow]\n"
+            f"[dim]起始阶段: {args.start_stage}[/dim]\n"
+            f"[dim]结束阶段: min({args.end_stage}, 2)[/dim]\n"
+            f"[dim]预计时间: <3分钟[/dim]",
+            border_style="yellow",
+        ))
+        # 测试模式最多到阶段2
+        end_stage = min(args.end_stage, 2)
+    else:
+        stage_configs = STAGE_CONFIGS
+        console.print(Panel.fit(
+            f"[bold green]分阶段训练[/bold green]\n"
+            f"[dim]起始阶段: {args.start_stage}[/dim]\n"
+            f"[dim]结束阶段: {args.end_stage}[/dim]",
+            border_style="green",
+        ))
+        end_stage = args.end_stage
 
     # 获取要训练的阶段
     stages_to_train = [
-        s for s in STAGE_CONFIGS
-        if args.start_stage <= s["stage_id"] <= args.end_stage
+        s for s in stage_configs
+        if args.start_stage <= s["stage_id"] <= end_stage
     ]
 
     if not stages_to_train:
