@@ -46,15 +46,6 @@ from . import utils
 # 注册环境
 ##
 
-gym.register(
-    id="Isaac-Jiyuan-Test-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
-    kwargs={
-        "env_cfg_entry_point": "jiyuan_tasks.envs.cfg:JIYUAN_TEST_ENV_CFG",
-    },
-    disable_env_checker=True,
-)
-
 # 速度跟踪环境（主要训练任务）
 gym.register(
     id="Isaac-Jiyuan-Velocity-v0",
@@ -71,16 +62,6 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     kwargs={
         "env_cfg_entry_point": "jiyuan_tasks.envs.cfg:STANDING_ENV_CFG",
-    },
-    disable_env_checker=True,
-)
-
-# 行走环境（专用步态训练）
-gym.register(
-    id="Isaac-Jiyuan-Walking-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
-    kwargs={
-        "env_cfg_entry_point": "jiyuan_tasks.envs.cfg:WALKING_ENV_CFG",
     },
     disable_env_checker=True,
 )
