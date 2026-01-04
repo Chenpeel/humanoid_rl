@@ -1,11 +1,17 @@
 """
 RSL_RL PPO 超参数配置
 
-直接使用 Isaac Lab 官方的配置类,确保与 RSL_RL 完全兼容。
+统一网络架构配置,各任务仅调整任务特定参数。
+
+设计理念:
+- 基础配置 (JiyuanBasePPORunnerCfg): 定义统一的网络架构和核心超参数
+- 任务配置: 继承基础配置,仅覆盖任务特定参数 (学习率、探索噪声等)
+- 目的: 方便流水线式训练中模型迁移和管理
 
 参考:
 - RSL_RL: https://github.com/leggedrobotics/rsl_rl
 - Isaac Lab 官方配置: isaaclab_rl/rsl_rl/rl_cfg.py
+- JAX 分支配置: configs/train/stage0_standing.yaml
 """
 
 from __future__ import annotations
@@ -16,25 +22,33 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 
 
 ##
-# 预定义配置（用于不同任务）
+# 基础配置 (统一网络架构)
 ##
 
 
 @configclass
-class VelocityTrackingPPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    """速度跟踪任务的 PPO 配置
+class JiyuanBasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
+    """Jiyuan 机器人 PPO 基础配置
 
-    针对速度跟踪任务优化的超参数。
+    定义统一的网络架构和核心超参数,各任务继承后仅调整任务特定参数。
+
+    网络架构设计:
+    - Actor/Critic: [512, 512, 256] (对齐 JAX 分支)
+    - 激活函数: elu
+    - 共享架构: 方便课程学习和模型迁移
+
+    核心超参数:
+    - learning_rate: 3.0e-4 (P0修复: 降低学习率避免策略崩溃)
+    - num_steps_per_env: 32 (P1优化: 增加batch size提高梯度质量)
+    - 其他 PPO 参数保持标准配置
     """
 
-    # 实验配置
-    experiment_name = "jiyuan_velocity_tracking"
+    # 设备配置
     seed = 42
     device = "cuda:0"
 
-    # 训练配置
-    num_steps_per_env = 24
-    max_iterations = 30000  # 30K iterations × 24 steps × 4096 envs ≈ 2.95B steps
+    # 训练配置 (默认值,可被子类覆盖)
+    num_steps_per_env = 32  # P1优化: 增加batch size
     save_interval = 500
 
     # 日志配置
@@ -43,25 +57,25 @@ class VelocityTrackingPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     # 观测组映射
     obs_groups = {"policy": ["policy"], "critic": ["policy"]}
 
-    # Actor-Critic 网络配置
+    # 统一网络架构 (所有任务共享)
     policy = RslRlPpoActorCriticCfg(
         class_name="ActorCritic",
-        init_noise_std=1.0,
-        actor_hidden_dims=[512, 256, 128],
-        critic_hidden_dims=[512, 256, 128],
+        init_noise_std=1.0,  # 默认探索噪声,子类可覆盖
+        actor_hidden_dims=[512, 512, 256],  # P1优化: 对齐JAX分支,增加网络容量
+        critic_hidden_dims=[512, 512, 256],  # P1优化: 对齐JAX分支
         activation="elu",
     )
 
-    # PPO 算法配置
+    # 统一 PPO 算法配置
     algorithm = RslRlPpoAlgorithmCfg(
         class_name="PPO",
         # 学习参数
-        learning_rate=1.0e-3,
+        learning_rate=3.0e-4,  # P0修复: 降低学习率,避免策略崩溃
         num_learning_epochs=5,
-        num_mini_batches=4,
+        num_mini_batches=8,  # P2A优化: 从4增加到8,更细粒度学习,参考Isaac Lab最佳实践
         # PPO 特定参数
         clip_param=0.2,
-        entropy_coef=0.01,
+        entropy_coef=0.01,  # 默认熵系数,子类可覆盖
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         # GAE 参数
@@ -74,43 +88,41 @@ class VelocityTrackingPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     )
 
 
+##
+# 任务特定配置 (仅调整必要参数)
+##
+
+
 @configclass
-class StandingPPORunnerCfg(RslRlOnPolicyRunnerCfg):
+class StandingPPORunnerCfg(JiyuanBasePPORunnerCfg):
     """站立任务的 PPO 配置
 
-    站立任务较简单,可以使用更少的训练步数和更小的网络。
+    继承基础配置,仅调整站立任务特定参数:
+    - init_noise_std: 0.5 (站立任务探索较少)
+    - entropy_coef: 0.005 (站立任务熵系数更小)
+    - max_iterations: 10000 (站立任务训练步数较少)
     """
 
     # 实验配置
     experiment_name = "jiyuan_standing"
-    seed = 42
-    device = "cuda:0"
 
     # 训练配置
-    num_steps_per_env = 24
-    max_iterations = 10000  # 10K iterations × 24 steps × 4096 envs ≈ 983M steps
-    save_interval = 500
+    max_iterations = 10000  # 10K iterations × 32 steps × 4096 envs ≈ 1.31B steps
 
-    # 日志配置
-    logger = "tensorboard"
-
-    # 观测组映射
-    obs_groups = {"policy": ["policy"], "critic": ["policy"]}
-
-    # Actor-Critic 网络配置（与速度跟踪任务保持一致，以便课程学习切换）
+    # 网络配置: 覆盖探索噪声
     policy = RslRlPpoActorCriticCfg(
         class_name="ActorCritic",
         init_noise_std=0.5,  # 站立任务探索较少
-        actor_hidden_dims=[512, 256, 128],
-        critic_hidden_dims=[512, 256, 128],
+        actor_hidden_dims=[512, 512, 256],  # 继承基础配置
+        critic_hidden_dims=[512, 512, 256],  # 继承基础配置
         activation="elu",
     )
 
-    # PPO 算法配置
+    # PPO 配置: 覆盖熵系数
     algorithm = RslRlPpoAlgorithmCfg(
         class_name="PPO",
         # 学习参数
-        learning_rate=1.0e-3,
+        learning_rate=3.0e-4,  # 继承基础配置
         num_learning_epochs=5,
         num_mini_batches=4,
         # PPO 特定参数
@@ -128,12 +140,31 @@ class StandingPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     )
 
 
+@configclass
+class VelocityTrackingPPORunnerCfg(JiyuanBasePPORunnerCfg):
+    """速度跟踪任务的 PPO 配置
+
+    继承基础配置,仅调整速度跟踪任务特定参数:
+    - max_iterations: 30000 (速度跟踪任务训练步数较多)
+    - init_noise_std: 1.0 (保持默认探索)
+    - entropy_coef: 0.01 (保持默认熵系数)
+    """
+
+    # 实验配置
+    experiment_name = "jiyuan_velocity_tracking"
+
+    # 训练配置
+    max_iterations = 30000  # 30K iterations × 32 steps × 4096 envs ≈ 3.93B steps
+
+    # 网络配置和 PPO 配置完全继承基础配置,无需覆盖
+
+
 ##
 # 导出配置实例
 ##
 
-# 速度跟踪任务配置
-VELOCITY_TRACKING_PPO_CFG = VelocityTrackingPPORunnerCfg()
-
 # 站立任务配置
 STANDING_PPO_CFG = StandingPPORunnerCfg()
+
+# 速度跟踪任务配置
+VELOCITY_TRACKING_PPO_CFG = VelocityTrackingPPORunnerCfg()

@@ -64,7 +64,7 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
     scene: JiyuanSceneCfg = JiyuanSceneCfg(num_envs=2048, env_spacing=2.5)
 
     # 基础设置
-    decimation = 4  # 控制频率：50Hz / 4 = 12.5Hz
+    decimation = 2  # 控制频率：50Hz / 2 = 25Hz (P0修复: 从4提升到2,提高响应频率,对齐JAX分支50Hz)
     episode_length_s = 30.0  # 每个episode 30秒（更长，鼓励稳定性）
 
     # 命令配置（固定为 0，为了与行走任务保持维度兼容）
@@ -111,7 +111,7 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
 
             # 关节状态（32维）
             joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))  # 16
-            joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5))  # 16
+            joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-0.5, n_max=0.5))  # 16 P2A优化: 从±1.5降低到±0.5,提升状态估计质量
 
             # 上一步动作（16维）
             actions = ObsTerm(func=mdp.last_action)  # 16
@@ -133,7 +133,7 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
         joint_pos = mdp.JointPositionActionCfg(
             asset_name="robot",
             joint_names=[".*"],  # 所有16个关节
-            scale=0.25,  # 动作缩放因子
+            scale=1.0,  # 动作缩放因子 (P0修复: 从0.25提升到1.0,对齐JAX分支)
             use_default_offset=True,  # 使用默认关节位置作为偏移
         )
 
@@ -162,19 +162,19 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
         # 线速度惩罚（应该尽量不动）
         lin_vel = RewTerm(
             func=rewards.lin_vel_penalty_l2,
-            weight=-1.0,
+            weight=-0.5,  # P2A优化: 从-1.0减半,避免过度惩罚小幅移动
         )
 
         # 角速度惩罚（应该尽量不转）
         ang_vel = RewTerm(
             func=rewards.ang_vel_penalty_l2,
-            weight=-0.5,
+            weight=-0.25,  # P2A优化: 从-0.5减半,平衡奖励信号
         )
 
         # XY平面速度惩罚（允许少量Z方向振动）
         xy_vel = RewTerm(
             func=rewards.xy_vel_penalty_l2,
-            weight=-0.5,
+            weight=-0.25,  # P2A优化: 从-0.5减半,与ang_vel保持一致
         )
 
         # 动作平滑性
@@ -198,8 +198,10 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
         # 存活奖励（借鉴Humanoid配置，从0.5增加到2.0）
         alive = RewTerm(func=mdp.is_alive, weight=2.0)
 
-        # 终止惩罚（借鉴H1/G1配置，强烈避免摔倒）
-        termination_penalty = RewTerm(func=mdp.is_terminated, weight=-200.0)
+        # 终止惩罚（P2A优化: 从-200降低到-50,避免淹没其他奖励信号）
+        # 理由: -200过大会主导梯度,导致策略只关注"避免终止"而非"学会站立"
+        # 参考: Isaac Lab最佳实践建议平衡奖励缩放
+        termination_penalty = RewTerm(func=mdp.is_terminated, weight=-50.0)
 
         # 关节限制惩罚
         joint_pos_limits = RewTerm(
@@ -260,12 +262,12 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
             mode="reset",
             params={
                 "pose_range": {
-                    "x": (-0.2, 0.2),  # 小范围XY偏移
-                    "y": (-0.2, 0.2),
+                    "x": (-0.05, 0.05),  # P1优化: 缩小XY偏移范围从±0.2到±0.05,降低初始难度
+                    "y": (-0.05, 0.05),
                     "z": (0.88, 0.92),  # 在目标高度附近
                     "roll": (0.0, 0.0),  # 零初始姿态
                     "pitch": (0.0, 0.0),
-                    "yaw": (-3.14, 3.14),  # 任意朝向（yaw不影响平衡）
+                    "yaw": (-0.2, 0.2),  # P1优化: 缩小yaw范围从±π到±0.2,对齐JAX分支
                 },
                 "velocity_range": {
                     "x": (0.0, 0.0),
