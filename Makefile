@@ -34,12 +34,15 @@ help:
 	@echo "  make train-all            流水线训练所有阶段"
 	@echo "  make train-range FROM=N TO=M  训练阶段N到M"
 	@echo ""
-	@echo "测试命令（新增）："
-	@echo "  make test-quick           快速测试（<2分钟，最小资源，单阶段）"
-	@echo "  make test-stage0          阶段0测试（~10分钟，中等资源，单阶段）"
-	@echo "  make test-pipeline        流水线测试（<3分钟，3阶段完整流程）"
-	@echo "  make test-staged          流水线测试（验证阶段切换，2阶段）"
+	@echo "测试命令："
+	@echo "  make quick-test           极速测试（32 envs，Eager模式，无需编译）"
+	@echo "  make test-pipeline        标准测试（128 envs，JIT模式，<4分钟）"
 	@echo "  make validate-config      验证配置文件语法"
+	@echo ""
+	@echo "说明："
+	@echo "  - quick-test: 使用Eager模式（禁用JIT），无需编译但较慢"
+	@echo "  - test-pipeline: 使用JIT模式，首次编译后缓存"
+	@echo "  - train: 所有阶段统一网络结构，首次编译后全程复用"
 	@echo ""
 	@echo "其他："
 	@echo "  make eval CKPT=...        评估模型"
@@ -111,29 +114,22 @@ train-range:
 
 # ==================== 测试相关 ====================
 
-test-quick:
-	@echo "运行快速测试（最小资源，<2分钟）..."
-	$(PYTHON) $(TRAIN_SCRIPT) --config $(TEST_CONFIG_DIR)/test_quick.yaml
-
-test-stage0:
-	@echo "运行阶段0测试（中等资源，~10分钟）..."
-	$(PYTHON) $(TRAIN_SCRIPT) --config $(TEST_CONFIG_DIR)/test_stage0.yaml
+quick-test:
+	@echo "=== 极速测试（32 envs，3阶段，Eager模式）==="
+	@echo "策略：禁用JIT编译，直接执行（无需等待编译）"
+	$(PYTHON) scripts/train_staged.py --quick-test --no-jit --start-stage 0 --end-stage 2
 
 test-pipeline:
-	@echo "运行流水线测试（3阶段，<3分钟）..."
+	@echo "=== 标准流水线测试（128 envs，3阶段）==="
 	$(PYTHON) scripts/train_staged.py --test-mode --start-stage 0 --end-stage 2
 
-test-staged:
-	@echo "运行流水线测试（验证阶段切换）..."
-	$(PYTHON) scripts/train_staged.py --test-mode --start-stage 0 --end-stage 1
-
 validate-config:
-	@echo "验证配置文件..."
+	@echo "=== 验证配置文件 ==="
 	@$(PYTHON) -c "import yaml, sys; \
 		configs = ['$(TRAIN_CONFIG_DIR)/stage0_standing.yaml', \
 		           '$(TRAIN_CONFIG_DIR)/stage1_stepping.yaml', \
-		           '$(TEST_CONFIG_DIR)/test_quick.yaml', \
-		           '$(TEST_CONFIG_DIR)/test_stage0.yaml']; \
+		           'configs/quick_test/stage0_standing.yaml', \
+		           '$(TEST_CONFIG_DIR)/pipeline_stage0_standing.yaml']; \
 		[yaml.safe_load(open(c)) for c in configs]; \
 		print('✓ 所有配置文件有效')"
 

@@ -217,9 +217,6 @@ class TrainingDisplay:
 
     def _format_details(self):
         """格式化详情信息（参考 rsl_rl 格式）"""
-        if not self.current_metrics:
-            return "等待训练数据..."
-
         lines = []
 
         # ==================== 性能指标 ====================
@@ -237,6 +234,15 @@ class TrainingDisplay:
             lines.append(f"{'Time elapsed:':<30}{self._format_hms(elapsed)}")
             if remaining is not None:
                 lines.append(f"{'ETA:':<30}{self._format_hms(remaining)}")
+
+        # 如果没有指标数据，显示基本状态
+        if not self.current_metrics:
+            if self.current_epoch == 0:
+                lines.append(f"\n{'Status:':<30}正在初始化训练...")
+            else:
+                lines.append(f"\n{'Status:':<30}正在训练中...")
+            lines.append(f"{'Current iteration:':<30}{self.current_epoch}/{self.total}")
+            return "\n".join(lines)
 
         # 总步数
         env_steps = self._get_value("env_steps", "perf/total_env_steps")

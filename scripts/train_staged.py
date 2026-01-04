@@ -56,6 +56,7 @@ console = Console()
 # 配置文件基础路径
 CONFIG_BASE_DIR = "configs/train"
 TEST_CONFIG_BASE_DIR = "configs/test"
+QUICK_TEST_CONFIG_BASE_DIR = "configs/quick_test"
 
 STAGE_CONFIGS = [
     {
@@ -171,6 +172,41 @@ TEST_STAGE_CONFIGS = [
     },
 ]
 
+# ==================== 极速测试阶段配置（无需重复编译）====================
+
+QUICK_TEST_STAGE_CONFIGS = [
+    {
+        "stage_id": 0,
+        "name": "quick_standing",
+        "config_file": f"{QUICK_TEST_CONFIG_BASE_DIR}/stage0_standing.yaml",
+        "description": "极速站立测试",
+        "min_iterations": 16,
+        "transition_criteria": {
+            "min_reward": 0.0,  # 无条件切换
+        },
+    },
+    {
+        "stage_id": 1,
+        "name": "quick_stepping",
+        "config_file": f"{QUICK_TEST_CONFIG_BASE_DIR}/stage1_stepping.yaml",
+        "description": "极速踏步测试",
+        "min_iterations": 16,
+        "transition_criteria": {
+            "min_gait_symmetry": 0.0,
+        },
+    },
+    {
+        "stage_id": 2,
+        "name": "quick_slow_walk",
+        "config_file": f"{QUICK_TEST_CONFIG_BASE_DIR}/stage2_slow_walk.yaml",
+        "description": "极速慢走测试",
+        "min_iterations": 16,
+        "transition_criteria": {
+            "min_velocity_tracking": 0.0,
+        },
+    },
+]
+
 
 # ==================== 工具函数 ====================
 
@@ -242,6 +278,7 @@ def train_stage(
     stage_config: Dict,
     previous_checkpoint: Optional[str] = None,
     start_from_stage: int = 0,
+    use_jit: bool = True,
 ) -> str:
     """训练单个阶段
 
@@ -381,7 +418,11 @@ def train_stage(
 
     # 创建优化器
     total_updates = config.num_updates
-    warmup_steps = max(10, total_updates // 20)
+    # 对于极小的 total_updates，使用更小的 warmup
+    if total_updates < 20:
+        warmup_steps = max(1, total_updates // 4)  # 25% warmup
+    else:
+        warmup_steps = max(10, total_updates // 20)  # 5% warmup
 
     optimizer = create_ppo_optimizer_cosine(
         learning_rate=learning_rate,
@@ -443,15 +484,36 @@ def train_stage(
         network=network,
         optimizer=optimizer,
     )
-    train_step_jit = jax.jit(train_step_fn)
 
-    # 触发编译
-    console.print("[yellow]正在编译...[/yellow]")
-    rng, reset_rng = jax.random.split(rng)
-    env_state = env.batch_reset(reset_rng, config.num_envs)
-    train_state, env_state, info = train_step_jit(train_state, env_state)
-    jax.block_until_ready(train_state)
-    console.print("[green]✓ 编译完成[/green]")
+    if use_jit:
+        train_step_jit = jax.jit(train_step_fn)
+
+        # 触发编译（带进度提示）
+        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            compile_task = progress.add_task(
+                f"[yellow]编译 JIT 函数（阶段 {stage_config['stage_id']}）...",
+                total=None
+            )
+            rng, reset_rng = jax.random.split(rng)
+            env_state = env.batch_reset(reset_rng, config.num_envs)
+            train_state, env_state, info = train_step_jit(train_state, env_state)
+            jax.block_until_ready(train_state)
+            progress.update(compile_task, completed=True)
+
+        console.print("[green]✓ 编译完成[/green]")
+    else:
+        train_step_jit = train_step_fn  # 不使用JIT，直接用原函数
+        console.print("[yellow]⚠ Eager模式（禁用JIT）：不需要编译，但训练较慢[/yellow]")
+        rng, reset_rng = jax.random.split(rng)
+        env_state = env.batch_reset(reset_rng, config.num_envs)
 
     # 创建指标记录器
     metrics_logger = MetricsLogger()
@@ -538,6 +600,16 @@ def main():
         help="使用测试配置（快速流水线测试，3阶段<3分钟）",
     )
     parser.add_argument(
+        "--quick-test",
+        action="store_true",
+        help="使用极速测试配置（无需重复编译，3阶段<30秒）",
+    )
+    parser.add_argument(
+        "--no-jit",
+        action="store_true",
+        help="禁用JIT编译（eager模式，慢但不需要编译）",
+    )
+    parser.add_argument(
         "--resume-checkpoint",
         type=str,
         default=None,
@@ -547,7 +619,19 @@ def main():
     args = parser.parse_args()
 
     # 根据测试模式选择配置
-    if args.test_mode:
+    if args.quick_test:
+        stage_configs = QUICK_TEST_STAGE_CONFIGS
+        console.print(Panel.fit(
+            f"[bold green]极速测试模式（无需重复编译）[/bold green]\n"
+            f"[dim]起始阶段: {args.start_stage}[/dim]\n"
+            f"[dim]结束阶段: min({args.end_stage}, 2)[/dim]\n"
+            f"[dim]预计时间: 首次~30秒（含编译），后续<10秒[/dim]\n"
+            f"[dim]策略: 固定网络结构和环境参数，复用JAX编译缓存[/dim]",
+            border_style="green",
+        ))
+        # 极速测试模式最多到阶段2
+        end_stage = min(args.end_stage, 2)
+    elif args.test_mode:
         stage_configs = TEST_STAGE_CONFIGS
         console.print(Panel.fit(
             f"[bold yellow]流水线快速测试模式[/bold yellow]\n"
@@ -591,6 +675,7 @@ def main():
                 stage_config=stage_config,
                 previous_checkpoint=previous_checkpoint,
                 start_from_stage=start_from_stage,
+                use_jit=not args.no_jit,  # 根据参数决定是否使用JIT
             )
 
             # 更新检查点路径用于下一阶段
