@@ -1,7 +1,7 @@
 # Makefile for JRL - JAX Reinforcement Learning Training
 # 用于管理四足机器人分阶段训练
 
-.PHONY: help install train train-stage train-all eval clean clean-cache clean-all
+.PHONY: help install train train-stage train-all train-10h eval clean clean-cache clean-all
 .DEFAULT_GOAL := help
 
 # ==================== 配置变量 ====================
@@ -31,7 +31,8 @@ help:
 	@echo "训练命令："
 	@echo "  make train                训练阶段0（站立）"
 	@echo "  make train-stage STAGE=N  训练指定阶段(0-4)"
-	@echo "  make train-all            流水线训练所有阶段"
+	@echo "  make train-all            流水线训练所有阶段（约3天）"
+	@echo "  make train-10h            快速训练（10小时，明天见效果）"
 	@echo "  make train-range FROM=N TO=M  训练阶段N到M"
 	@echo ""
 	@echo "测试命令："
@@ -113,6 +114,15 @@ train-range:
 	@echo "=== 训练阶段$(FROM)到$(TO) ==="
 	$(PYTHON) scripts/train_staged.py --start-stage $(FROM) --end-stage $(TO)
 	@echo "=== 训练完成 ==="
+
+train-10h:
+	@echo "=== 10小时快速训练流水线 ==="
+	@echo "配置: configs/train-10h/stage[0-4]*.yaml"
+	@echo "预计时间: ~12-14小时 (2000 iterations)"
+	@echo "开始时间: $$(date)"
+	$(PYTHON) scripts/train_staged.py --profile 10h --start-stage 0 --end-stage 4
+	@echo "=== 训练完成 ==="
+	@echo "结束时间: $$(date)"
 
 # ==================== 测试相关 ====================
 

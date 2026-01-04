@@ -57,6 +57,7 @@ console = Console()
 CONFIG_BASE_DIR = "configs/train"
 TEST_CONFIG_BASE_DIR = "configs/test"
 QUICK_TEST_CONFIG_BASE_DIR = "configs/quick_test"
+TEN_HOUR_CONFIG_BASE_DIR = "configs/train-10h"
 
 STAGE_CONFIGS = [
     {
@@ -135,6 +136,61 @@ STAGE_CONFIGS = [
     #         "max_fall_rate": 0.1,
     #     },
     # },
+]
+
+TEN_HOUR_STAGE_CONFIGS = [
+    {
+        "stage_id": 0,
+        "name": "standing_10h",
+        "config_file": f"{TEN_HOUR_CONFIG_BASE_DIR}/stage0_standing.yaml",
+        "description": "站立平衡 (10h版)",
+        "min_iterations": 100,
+        "transition_criteria": {
+            "min_reward": 0.5,
+            "max_fall_rate": 0.1,
+        },
+    },
+    {
+        "stage_id": 1,
+        "name": "stepping_10h",
+        "config_file": f"{TEN_HOUR_CONFIG_BASE_DIR}/stage1_stepping.yaml",
+        "description": "原地踏步 (10h版)",
+        "min_iterations": 300,
+        "transition_criteria": {
+            "min_gait_symmetry": 0.4,
+            "min_foot_clearance": 0.2,
+        },
+    },
+    {
+        "stage_id": 2,
+        "name": "slow_walk_10h",
+        "config_file": f"{TEN_HOUR_CONFIG_BASE_DIR}/stage2_slow_walk.yaml",
+        "description": "小步行走 (10h版)",
+        "min_iterations": 600,
+        "transition_criteria": {
+            "min_velocity_tracking": 0.6,
+        },
+    },
+    {
+        "stage_id": 3,
+        "name": "normal_walk_10h",
+        "config_file": f"{TEN_HOUR_CONFIG_BASE_DIR}/stage3_normal_walk.yaml",
+        "description": "正常行走 (10h版)",
+        "min_iterations": 800,
+        "transition_criteria": {
+            "min_velocity_tracking": 0.7,
+        },
+    },
+    {
+        "stage_id": 4,
+        "name": "fast_walk_10h",
+        "config_file": f"{TEN_HOUR_CONFIG_BASE_DIR}/stage4_fast_walk.yaml",
+        "description": "高速适应 (10h版)",
+        "min_iterations": 200,
+        "transition_criteria": {
+            "min_velocity_tracking": 0.65,
+        },
+    },
 ]
 
 # ==================== 测试阶段配置（流水线快速测试）====================
@@ -621,6 +677,13 @@ def main():
         default=None,
         help="恢复训练的检查点路径",
     )
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default="standard",
+        choices=["standard", "10h"],
+        help="训练配置方案：standard=标准3天方案，10h=10小时快速方案",
+    )
 
     args = parser.parse_args()
 
@@ -648,10 +711,21 @@ def main():
         ))
         # 测试模式最多到阶段2
         end_stage = min(args.end_stage, 2)
+    elif args.profile == "10h":
+        stage_configs = TEN_HOUR_STAGE_CONFIGS
+        console.print(Panel.fit(
+            f"[bold cyan]10小时快速训练方案[/bold cyan]\n"
+            f"[dim]起始阶段: {args.start_stage}[/dim]\n"
+            f"[dim]结束阶段: {args.end_stage}[/dim]\n"
+            f"[dim]预计时间: ~12-14小时[/dim]\n"
+            f"[dim]配置路径: configs/train-10h/[/dim]",
+            border_style="cyan",
+        ))
+        end_stage = args.end_stage
     else:
         stage_configs = STAGE_CONFIGS
         console.print(Panel.fit(
-            f"[bold green]分阶段训练[/bold green]\n"
+            f"[bold green]标准分阶段训练[/bold green]\n"
             f"[dim]起始阶段: {args.start_stage}[/dim]\n"
             f"[dim]结束阶段: {args.end_stage}[/dim]",
             border_style="green",
