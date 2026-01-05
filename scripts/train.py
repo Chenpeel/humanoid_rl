@@ -2,14 +2,15 @@
 PPO训练主脚本
 """
 
+import argparse
 import os
 import sys
 import time
 import warnings
-import argparse
-import yaml
 from datetime import datetime
 from pathlib import Path
+
+import yaml
 
 # ==================== JAX配置 (必须在导入jax之前) ====================
 # 🔧 指定使用 GPU device:0（第一张显卡）
@@ -17,8 +18,9 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 # 启用JAX编译缓存 (使用绝对路径，确保持久化)
-cache_path = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", ".jax_cache"))
+cache_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", ".jax_cache")
+)
 os.makedirs(cache_path, exist_ok=True)
 os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_path
 
@@ -33,10 +35,13 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 
 # 设置 CUDA 数据目录 - 指向 triton 附带的 CUDA (包含 libdevice)
 import site
+
 site_packages = site.getsitepackages()[0]
 triton_cuda_dir = os.path.join(site_packages, "triton", "backends", "nvidia", "lib")
 if os.path.exists(triton_cuda_dir):
-    os.environ["XLA_FLAGS"] = os.environ.get("XLA_FLAGS", "") + f" --xla_gpu_cuda_data_dir={triton_cuda_dir}"
+    os.environ["XLA_FLAGS"] = (
+        os.environ.get("XLA_FLAGS", "") + f" --xla_gpu_cuda_data_dir={triton_cuda_dir}"
+    )
 
 # 启用编译优化
 os.environ["XLA_FLAGS"] = (
@@ -67,20 +72,19 @@ if True:
     from rich import box
     from rich.console import Console
     from rich.panel import Panel
-    from rl.envs import (
-        VelocityTrackingEnv, create_velocity_tracking_env,
-        WalkingEnv, create_walking_env
-    )
+
+    from rl.curriculum import WalkingCurriculum
+    from rl.envs import (VelocityTrackingEnv, WalkingEnv,
+                         create_velocity_tracking_env, create_walking_env)
     from rl.models.networks import ActorCriticNetwork, count_parameters
     from rl.models.optimizer import create_ppo_optimizer_cosine
-    from rl.training.logger import (
-        Logger, MetricsLogger, create_training_display, print_summary
-    )
-    from rl.training.ppo_trainer import PPOConfig, PPOTrainer, create_train_step_fn
+    from rl.training.logger import (Logger, MetricsLogger,
+                                    create_training_display, print_summary)
+    from rl.training.ppo_trainer import (PPOConfig, PPOTrainer,
+                                         create_train_step_fn)
     from rl.training.train_state import create_train_state
-    from rl.utils.performance_monitor import PerformanceMonitor
     from rl.utils.checkpoint import create_checkpoint_manager
-    from rl.curriculum import WalkingCurriculum
+    from rl.utils.performance_monitor import PerformanceMonitor
 
 
 console = Console()
@@ -131,7 +135,7 @@ def load_config_from_yaml(config_path: str) -> dict:
         console.print(f"[yellow]警告: 配置文件不存在: {config_path}[/yellow]")
         return {}
 
-    with open(config_path, 'r', encoding='utf-8') as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     if config is None:
@@ -146,10 +150,7 @@ def main():
     # 第一阶段：解析 --config 参数
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument(
-        "--config",
-        type=str,
-        default="configs/train.yaml",
-        help="YAML配置文件路径"
+        "--config", type=str, default="configs/train.yaml", help="YAML配置文件路径"
     )
     pre_args, remaining_argv = pre_parser.parse_known_args()
 
@@ -160,7 +161,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="PPO训练脚本",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[pre_parser]
+        parents=[pre_parser],
     )
 
     # 场景配置
@@ -172,13 +173,13 @@ def main():
             "flat_terrain",
             "rough_terrain",
         ],
-        help="选择训练场景: flat_terrain=平坦地面, rough_terrain=粗糙地面"
+        help="选择训练场景: flat_terrain=平坦地面, rough_terrain=粗糙地面",
     )
     parser.add_argument(
         "--xml-path",
         type=str,
         default=None,
-        help="直接指定XML场景文件路径（覆盖--scene参数）"
+        help="直接指定XML场景文件路径（覆盖--scene参数）",
     )
 
     # 环境类型配置
@@ -187,102 +188,155 @@ def main():
         type=str,
         default=yaml_config.get("env_type", "velocity"),
         choices=["velocity", "walking"],
-        help="环境类型: velocity=速度跟踪, walking=行走任务"
+        help="环境类型: velocity=速度跟踪, walking=行走任务",
     )
 
     # 环境配置
-    parser.add_argument("--num-envs", type=int,
-                        default=yaml_config.get("num_envs", 7680),
-                        help="并行环境数")
-    parser.add_argument("--num-steps", type=int,
-                        default=yaml_config.get("num_steps", 64),
-                        help="每次rollout的步数")
+    parser.add_argument(
+        "--num-envs",
+        type=int,
+        default=yaml_config.get("num_envs", 7680),
+        help="并行环境数",
+    )
+    parser.add_argument(
+        "--num-steps",
+        type=int,
+        default=yaml_config.get("num_steps", 64),
+        help="每次rollout的步数",
+    )
 
     # PPO超参数
-    parser.add_argument("--num-epochs", type=int,
-                        default=yaml_config.get("num_epochs", 4),
-                        help="每次update的epoch数")
-    parser.add_argument("--num-minibatches", type=int,
-                        default=yaml_config.get("num_minibatches", 4),
-                        help="mini-batch数量")
-    parser.add_argument("--gamma", type=float,
-                        default=yaml_config.get("gamma", 0.99),
-                        help="折扣因子")
-    parser.add_argument("--gae-lambda", type=float,
-                        default=yaml_config.get("gae_lambda", 0.95),
-                        help="GAE lambda")
-    parser.add_argument("--clip-epsilon", type=float,
-                        default=yaml_config.get("clip_epsilon", 0.2),
-                        help="PPO裁剪系数")
-    parser.add_argument("--value-coef", type=float,
-                        default=yaml_config.get("value_coef", 0.5),
-                        help="价值损失系数")
-    parser.add_argument("--entropy-coef", type=float,
-                        default=yaml_config.get("entropy_coef", 0.01),
-                        help="熵正则化系数")
-    parser.add_argument("--max-grad-norm", type=float,
-                        default=yaml_config.get("max_grad_norm", 0.5),
-                        help="梯度裁剪阈值")
+    parser.add_argument(
+        "--num-epochs",
+        type=int,
+        default=yaml_config.get("num_epochs", 4),
+        help="每次update的epoch数",
+    )
+    parser.add_argument(
+        "--num-minibatches",
+        type=int,
+        default=yaml_config.get("num_minibatches", 4),
+        help="mini-batch数量",
+    )
+    parser.add_argument(
+        "--gamma", type=float, default=yaml_config.get("gamma", 0.99), help="折扣因子"
+    )
+    parser.add_argument(
+        "--gae-lambda",
+        type=float,
+        default=yaml_config.get("gae_lambda", 0.95),
+        help="GAE lambda",
+    )
+    parser.add_argument(
+        "--clip-epsilon",
+        type=float,
+        default=yaml_config.get("clip_epsilon", 0.2),
+        help="PPO裁剪系数",
+    )
+    parser.add_argument(
+        "--value-coef",
+        type=float,
+        default=yaml_config.get("value_coef", 0.5),
+        help="价值损失系数",
+    )
+    parser.add_argument(
+        "--entropy-coef",
+        type=float,
+        default=yaml_config.get("entropy_coef", 0.01),
+        help="熵正则化系数",
+    )
+    parser.add_argument(
+        "--max-grad-norm",
+        type=float,
+        default=yaml_config.get("max_grad_norm", 0.5),
+        help="梯度裁剪阈值",
+    )
 
     # 训练配置
-    parser.add_argument("--total-timesteps", type=int,
-                        default=yaml_config.get(
-                            "total_timesteps", 200_000_000),
-                        help="总训练步数")
-    parser.add_argument("--log-interval", type=int,
-                        default=yaml_config.get("log_interval", 100),
-                        help="日志记录间隔")
-    parser.add_argument("--eval-interval", type=int,
-                        default=yaml_config.get("eval_interval", 500),
-                        help="评估间隔")
-    parser.add_argument("--save-interval", type=int,
-                        default=yaml_config.get("save_interval", 100),
-                        help="模型保存间隔")
+    parser.add_argument(
+        "--total-timesteps",
+        type=int,
+        default=yaml_config.get("total_timesteps", 200_000_000),
+        help="总训练步数",
+    )
+    parser.add_argument(
+        "--log-interval",
+        type=int,
+        default=yaml_config.get("log_interval", 100),
+        help="日志记录间隔",
+    )
+    parser.add_argument(
+        "--eval-interval",
+        type=int,
+        default=yaml_config.get("eval_interval", 500),
+        help="评估间隔",
+    )
+    parser.add_argument(
+        "--save-interval",
+        type=int,
+        default=yaml_config.get("save_interval", 100),
+        help="模型保存间隔",
+    )
 
     # 优化器配置
-    parser.add_argument("--learning-rate", type=float,
-                        default=yaml_config.get("learning_rate", 1e-3),
-                        help="峰值学习率")
-    parser.add_argument("--final-lr-fraction", type=float,
-                        default=yaml_config.get("final_lr_fraction", 0.02),
-                        help="最终学习率相对峰值的比例")
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=yaml_config.get("learning_rate", 1e-3),
+        help="峰值学习率",
+    )
+    parser.add_argument(
+        "--final-lr-fraction",
+        type=float,
+        default=yaml_config.get("final_lr_fraction", 0.02),
+        help="最终学习率相对峰值的比例",
+    )
 
     # 网络配置
-    parser.add_argument("--hidden-dims", type=int, nargs="+",
-                        default=yaml_config.get(
-                            "hidden_dims", [512, 512, 256]),
-                        help="隐藏层维度列表")
-    parser.add_argument("--shared-backbone", action="store_true",
-                        default=yaml_config.get("shared_backbone", True),
-                        help="是否使用共享backbone")
-    parser.add_argument("--no-shared-backbone", dest="shared_backbone",
-                        action="store_false",
-                        help="不使用共享backbone")
+    parser.add_argument(
+        "--hidden-dims",
+        type=int,
+        nargs="+",
+        default=yaml_config.get("hidden_dims", [512, 512, 256]),
+        help="隐藏层维度列表",
+    )
+    parser.add_argument(
+        "--shared-backbone",
+        action="store_true",
+        default=yaml_config.get("shared_backbone", True),
+        help="是否使用共享backbone",
+    )
+    parser.add_argument(
+        "--no-shared-backbone",
+        dest="shared_backbone",
+        action="store_false",
+        help="不使用共享backbone",
+    )
 
     # 视频录制配置
     parser.add_argument(
         "--enable-video",
         action="store_true",
         default=yaml_config.get("enable_video", False),
-        help="启用训练过程视频录制"
+        help="启用训练过程视频录制",
     )
     parser.add_argument(
         "--video-interval",
         type=int,
         default=yaml_config.get("video_interval", 200),
-        help="视频录制间隔（单位：updates）"
+        help="视频录制间隔（单位：updates）",
     )
     parser.add_argument(
         "--video-frames",
         type=int,
         default=yaml_config.get("video_frames", 180),
-        help="每个视频的帧数（默认 180帧 = 3秒@60fps）"
+        help="每个视频的帧数（默认 180帧 = 3秒@60fps）",
     )
     parser.add_argument(
         "--video-camera",
         type=str,
         default=yaml_config.get("video_camera", "track"),
-        help="录制视频使用的相机名称"
+        help="录制视频使用的相机名称",
     )
 
     args = parser.parse_args()
@@ -363,7 +417,9 @@ def main():
         console.print(f"✓ 课程学习模块创建完成")
         console.print(f"  阶段数: {len(curriculum.stages)}")
         for i, stage in enumerate(curriculum.stages):
-            console.print(f"  阶段{i+1}: {stage.name} ({stage.step_range[0]:,}-{stage.step_range[1]:,} steps)")
+            console.print(
+                f"  阶段{i+1}: {stage.name} ({stage.step_range[0]:,}-{stage.step_range[1]:,} steps)"
+            )
         # 应用初始阶段（阶段0）配置
         curriculum.apply_to_env(env, current_step=0)
         console.print(f"[dim]已应用初始阶段: {curriculum.stages[0].name}[/dim]")
@@ -391,17 +447,20 @@ def main():
 
     # 测试前向传播
     mean, log_std, value = network.apply(params, dummy_obs)
-    forward_has_nan = jp.isnan(mean).any() or jp.isnan(
-        log_std).any() or jp.isnan(value).any()
+    forward_has_nan = (
+        jp.isnan(mean).any() or jp.isnan(log_std).any() or jp.isnan(value).any()
+    )
 
     console.print(f"✓ 网络创建完成")
     console.print(f"  参数数量: {num_params:,}")
     console.print(f"  共享backbone: {args.shared_backbone}")
     console.print(f"  隐藏层: {args.hidden_dims}")
     console.print(
-        f"[yellow]  参数诊断: has_nan={params_has_nan}, has_inf={params_has_inf}[/yellow]")
+        f"[yellow]  参数诊断: has_nan={params_has_nan}, has_inf={params_has_inf}[/yellow]"
+    )
     console.print(
-        f"[yellow]  前向传播诊断: has_nan={forward_has_nan}, mean_range=[{mean.min():.4f}, {mean.max():.4f}], log_std_range=[{log_std.min():.4f}, {log_std.max():.4f}][/yellow]")
+        f"[yellow]  前向传播诊断: has_nan={forward_has_nan}, mean_range=[{mean.min():.4f}, {mean.max():.4f}], log_std_range=[{log_std.min():.4f}, {log_std.max():.4f}][/yellow]"
+    )
 
     if params_has_nan or params_has_inf:
         console.print(f"[red]⚠️  警告：网络参数包含 NaN 或 Inf！[/red]")
@@ -451,8 +510,7 @@ def main():
         f"  预热步数: {warmup_steps:,} ({warmup_steps / total_updates * 100:.1f}%)"
     )
     console.print(f"  总更新次数: {total_updates:,}")
-    console.print(
-        f"  最终学习率: {args.learning_rate * args.final_lr_fraction:.2e}")
+    console.print(f"  最终学习率: {args.learning_rate * args.final_lr_fraction:.2e}")
     console.print(f"  梯度裁剪: {config.max_grad_norm}")
 
     # ==================== 创建训练状态 ====================
@@ -485,7 +543,8 @@ def main():
     console.print(f"  环境数量: {config.num_envs}")
     console.print(f"  观测形状: {env_state.obs.shape}")
     console.print(
-        f"[yellow]  观测诊断: has_nan={obs_has_nan}, has_inf={obs_has_inf}, min={obs_min:.4f}, max={obs_max:.4f}[/yellow]")
+        f"[yellow]  观测诊断: has_nan={obs_has_nan}, has_inf={obs_has_inf}, min={obs_min:.4f}, max={obs_max:.4f}[/yellow]"
+    )
 
     if obs_has_nan or obs_has_inf:
         console.print(f"[red]⚠️  警告：环境重置后观测包含 NaN 或 Inf！[/red]")
@@ -549,7 +608,8 @@ def main():
             console.print(f"  输出目录: {log_dir}/videos")
             console.print(f"  录制间隔: 每 {args.video_interval} updates")
             console.print(
-                f"  视频时长: {args.video_frames / 60:.1f}秒 ({args.video_frames}帧@60fps)")
+                f"  视频时长: {args.video_frames / 60:.1f}秒 ({args.video_frames}帧@60fps)"
+            )
 
         except Exception as e:
             console.print(f"[yellow]警告: 视频录制器创建失败: {e}[/yellow]")
@@ -567,7 +627,7 @@ def main():
     else:
         console.print("[dim]首次编译，将创建缓存以加速后续训练[/dim]")
 
-    console.print("正在编译 JAX 计算图，第一次运行可能需要几分钟...")
+    from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn
 
     # ✅ 使用纯函数版本（支持持久化缓存）
     train_step_fn = create_train_step_fn(
@@ -578,11 +638,20 @@ def main():
     )
     train_step_jit = jax.jit(train_step_fn)
 
-    # 触发一次编译
-    t0 = time.time()
-    train_state, env_state, info = train_step_jit(train_state, env_state)
-    jax.block_until_ready(train_state)  # 确保编译完成
-    compile_time = time.time() - t0
+    # 触发一次编译，带进度显示
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold cyan]正在编译 JAX 计算图..."),
+        TimeElapsedColumn(),
+        console=console,
+        transient=False,
+    ) as progress:
+        task = progress.add_task("编译中", total=None)
+        t0 = time.time()
+        train_state, env_state, info = train_step_jit(train_state, env_state)
+        jax.block_until_ready(train_state)  # 确保编译完成
+        compile_time = time.time() - t0
+
     console.print(f"✓ 编译完成 (耗时: {compile_time:.2f}s)")
 
     # ==================== 性能基准测试（已跳过） ====================
@@ -622,8 +691,7 @@ def main():
         from rich.console import Console
 
         console = Console()
-        console.print(
-            f"\n[yellow]📹 录制视频中（Update {update}）...[/yellow]", end="")
+        console.print(f"\n[yellow]📹 录制视频中（Update {update}）...[/yellow]", end="")
 
         try:
             video_recorder.start_recording()
@@ -640,8 +708,7 @@ def main():
             for frame_idx in range(num_frames):
                 # 提取单个环境的 MJX 数据
                 single_mjx_data = jax.tree_map(
-                    lambda x: x[env_idx],
-                    current_full_state.pipeline_state
+                    lambda x: x[env_idx], current_full_state.pipeline_state
                 )
 
                 # 准备指标信息
@@ -659,37 +726,38 @@ def main():
                         cmd = info_dict["command"]
                         # 检查是否可索引且有shape属性
                         if hasattr(cmd, "__getitem__") and hasattr(cmd, "shape"):
-                            cmd_single = cmd[env_idx] if len(
-                                cmd.shape) > 1 else cmd
-                            metrics.update({
-                                "cmd_vx": float(cmd_single[0]),
-                                "cmd_vy": float(cmd_single[1]),
-                                "cmd_vyaw": float(cmd_single[2]),
-                            })
+                            cmd_single = cmd[env_idx] if len(cmd.shape) > 1 else cmd
+                            metrics.update(
+                                {
+                                    "cmd_vx": float(cmd_single[0]),
+                                    "cmd_vy": float(cmd_single[1]),
+                                    "cmd_vyaw": float(cmd_single[2]),
+                                }
+                            )
 
                     if "actual_velocity" in info_dict:
                         vel = info_dict["actual_velocity"]
                         # 检查是否可索引且有shape属性
                         if hasattr(vel, "__getitem__") and hasattr(vel, "shape"):
-                            vel_single = vel[env_idx] if len(
-                                vel.shape) > 1 else vel
-                            metrics.update({
-                                "actual_vx": float(vel_single[0]),
-                                "actual_vy": float(vel_single[1]),
-                                "actual_vyaw": float(vel_single[2]),
-                            })
+                            vel_single = vel[env_idx] if len(vel.shape) > 1 else vel
+                            metrics.update(
+                                {
+                                    "actual_vx": float(vel_single[0]),
+                                    "actual_vy": float(vel_single[1]),
+                                    "actual_vyaw": float(vel_single[2]),
+                                }
+                            )
 
                 # 添加帧到视频
                 video_recorder.add_frame_from_mjx(single_mjx_data, metrics)
 
                 # 执行一步仿真（使用确定性策略）
-                obs = current_full_state.obs[env_idx:env_idx+1]  # (1, obs_dim)
+                obs = current_full_state.obs[env_idx : env_idx + 1]  # (1, obs_dim)
                 mean, log_std, value = network.apply(train_state.params, obs)
                 action = mean[0]  # 使用均值作为确定性动作
 
                 # 提取单个环境状态
-                single_state = jax.tree_map(
-                    lambda x: x[env_idx], current_full_state)
+                single_state = jax.tree_map(lambda x: x[env_idx], current_full_state)
 
                 # 执行步进
                 new_single_state = env.step(single_state, action)
@@ -703,10 +771,11 @@ def main():
                 current_full_state = jax.tree_map(
                     lambda full_arr, single_val: (
                         full_arr.at[env_idx].set(single_val)
-                        if hasattr(full_arr, "at") else full_arr
+                        if hasattr(full_arr, "at")
+                        else full_arr
                     ),
                     current_full_state,
-                    new_single_state
+                    new_single_state,
                 )
 
             # 保存视频
@@ -718,14 +787,17 @@ def main():
             console.print(f" [red]✗ 失败[/red]")
             console.print(f"   错误: {e}")
             import traceback
+
             traceback.print_exc()
 
     # ==================== 纯函数训练循环（隔离UI代码） ====================
     def pure_train_loop(
-        train_state, env_state, info,
+        train_state,
+        env_state,
+        info,
         update_callback=None,  # 回调函数用于UI更新
-        video_recorder=None,    # 可选的视频录制器
-        video_config=None,      # 视频配置字典
+        video_recorder=None,  # 可选的视频录制器
+        video_config=None,  # 视频配置字典
     ):
         """纯函数训练循环，不依赖UI对象（避免触发JIT重新编译）
 
@@ -754,8 +826,7 @@ def main():
                 curriculum.apply_to_env(env, current_global_step)
 
             # ✅ 纯函数调用，无UI依赖
-            train_state, env_state, info = train_step_jit(
-                train_state, env_state)
+            train_state, env_state, info = train_step_jit(train_state, env_state)
 
             # 确保计算完成（用于准确的性能测量）
             jax.block_until_ready(train_state)
@@ -768,14 +839,14 @@ def main():
             current_step = update
             if current_step < warmup_steps:
                 # 防止warmup_steps为0导致除零
-                current_lr = args.learning_rate * \
-                    (current_step / max(1, warmup_steps))
+                current_lr = args.learning_rate * (current_step / max(1, warmup_steps))
             else:
                 # 防止total_updates == warmup_steps导致除零
                 denominator = max(1, total_updates - warmup_steps)
                 progress_ratio = (current_step - warmup_steps) / denominator
-                current_lr = 0.5 * args.learning_rate * \
-                    (1 + jp.cos(jp.pi * progress_ratio))
+                current_lr = (
+                    0.5 * args.learning_rate * (1 + jp.cos(jp.pi * progress_ratio))
+                )
 
             info["learning_rate"] = float(current_lr)
 
@@ -840,7 +911,7 @@ def main():
         console=console,
         total=config.num_updates,
         steps_per_epoch=1,  # 每个update作为一个epoch
-        description="PPO训练"
+        description="PPO训练",
     )
 
     try:
@@ -859,10 +930,12 @@ def main():
 
             # 执行纯函数训练循环
             train_state, env_state, info = pure_train_loop(
-                train_state, env_state, info,
+                train_state,
+                env_state,
+                info,
                 update_callback=on_update,
                 video_recorder=video_recorder,  # 传入录制器
-                video_config=video_config,       # 传入配置
+                video_config=video_config,  # 传入配置
             )
 
         # ==================== 训练完成 ====================
