@@ -1521,20 +1521,28 @@ class WalkingEnv(MJXBaseEnv):
         # 检查终止条件
         done = self._is_done(state, pipeline_state)
 
-        # [NEW] 应用终止惩罚（参考 Isaac Lab 和 Gait-Conditioned RL 2025）
-        # 当机器人摔倒时，施加 -200.0 的强力惩罚，迫使策略学习避免摔倒
+        # [CRITICAL FIX] 应用终止惩罚（分开裁剪，避免信号丢失）
+        #
+        # 问题诊断：
+        # - 之前的实现：reward + termination_penalty 后统一裁剪到 [-10, 10]
+        # - 结果：-210 被裁剪成 -10，机器人无法区分摔倒和站立
+        # - 训练停滞：reward 一直是 -10.0，策略无法学习站立
+        #
+        # 修复方案：
+        # - 正常奖励：裁剪到 [-10, 10]（保持数值稳定）
+        # - 终止时：直接使用 termination_penalty（-200.0），不裁剪
+        # - 这样摔倒信号足够强烈，迫使策略学习避免摔倒
         termination_penalty = self.reward_weights.get("termination", 0.0)
+
+        # 分支处理：终止时使用原始惩罚，正常时使用裁剪奖励
         reward = jp.where(
             done,
-            reward + termination_penalty,  # 终止时施加惩罚（termination通常为 -200.0）
-            reward,
+            termination_penalty,  # 摔倒时：直接使用 -200.0（不裁剪）
+            jp.clip(reward, -10.0, 10.0),  # 正常时：裁剪到 [-10, 10]
         )
 
-        # [CRITICAL] 终止惩罚后再次裁剪，防止极端奖励破坏训练
-        # 虽然 termination_penalty 可能是 -200，但最终奖励仍需在合理范围内
-        # 这样可以保持"摔倒很糟糕"的信号，同时避免 value 爆炸
-        reward = jp.clip(reward, -10.0, 10.0)
-        reward = jp.nan_to_num(reward, nan=0.0, posinf=10.0, neginf=-10.0)
+        # NaN 保护（保留终止惩罚的范围）
+        reward = jp.nan_to_num(reward, nan=0.0, posinf=10.0, neginf=termination_penalty)
 
         # 更新步数
         step = state.step + 1
