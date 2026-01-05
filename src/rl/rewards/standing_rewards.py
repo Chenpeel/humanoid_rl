@@ -28,11 +28,7 @@ def quat_to_euler(quat: jax.Array) -> jax.Array:
 
     # Pitch (y-axis rotation)
     sinp = 2 * (w * y - z * x)
-    pitch = jp.where(
-        jp.abs(sinp) >= 1,
-        jp.sign(sinp) * jp.pi / 2,
-        jp.arcsin(sinp)
-    )
+    pitch = jp.where(jp.abs(sinp) >= 1, jp.sign(sinp) * jp.pi / 2, jp.arcsin(sinp))
 
     # Yaw (z-axis rotation)
     siny_cosp = 2 * (w * z + x * y)
@@ -43,9 +39,7 @@ def quat_to_euler(quat: jax.Array) -> jax.Array:
 
 
 def compute_height_reward(
-    torso_z: jax.Array,
-    target_height: float,
-    tolerance: float = 0.08
+    torso_z: jax.Array, target_height: float, tolerance: float = 0.08
 ) -> jax.Array:
     """计算高度保持奖励
 
@@ -63,10 +57,7 @@ def compute_height_reward(
     return jp.exp(-height_error / tolerance)
 
 
-def compute_orientation_reward(
-    quat: jax.Array,
-    tolerance: float = 0.1
-) -> jax.Array:
+def compute_orientation_reward(quat: jax.Array, tolerance: float = 0.1) -> jax.Array:
     """计算姿态稳定奖励
 
     pitch和roll角度应该接近0（保持直立）。
@@ -85,8 +76,7 @@ def compute_orientation_reward(
 
 
 def compute_velocity_penalty(
-    base_linvel: jax.Array,
-    base_angvel: jax.Array
+    base_linvel: jax.Array, base_angvel: jax.Array
 ) -> Dict[str, jax.Array]:
     """计算速度惩罚
 
@@ -107,10 +97,7 @@ def compute_velocity_penalty(
     }
 
 
-def compute_action_rate_penalty(
-    action: jax.Array,
-    last_action: jax.Array
-) -> jax.Array:
+def compute_action_rate_penalty(action: jax.Array, last_action: jax.Array) -> jax.Array:
     """计算动作变化率惩罚
 
     鼓励平滑的动作变化。
@@ -227,18 +214,20 @@ def check_standing_termination(
 
     # 检查终止条件
     height_fail = torso_z < height_threshold
-    orientation_fail = (jp.abs(roll) > angle_threshold) | (jp.abs(pitch) > angle_threshold)
+    orientation_fail = (jp.abs(roll) > angle_threshold) | (
+        jp.abs(pitch) > angle_threshold
+    )
 
     return height_fail | orientation_fail
 
 
 # 默认奖励权重（参考standing_config.yaml）
 DEFAULT_STANDING_REWARD_WEIGHTS = {
-    "height": 1.0,           # 高度保持奖励
-    "orientation": 1.0,      # 姿态稳定奖励
-    "lin_vel": -0.5,         # 线速度惩罚
-    "ang_vel": -0.3,         # 角速度惩罚
-    "alive": 0.2,            # 存活奖励
-    "action_rate": -0.01,    # 动作平滑惩罚
-    "torques": -0.0001,      # 能量效率惩罚
+    "height": 1.0,  # 高度保持奖励
+    "orientation": 1.0,  # 姿态稳定奖励
+    "lin_vel": -0.5,  # 线速度惩罚
+    "ang_vel": -0.3,  # 角速度惩罚
+    "alive": 0.2,  # 存活奖励
+    "action_rate": -0.01,  # 动作平滑惩罚
+    "torques": -0.0001,  # 能量效率惩罚
 }

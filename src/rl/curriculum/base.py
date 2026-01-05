@@ -8,9 +8,9 @@
 - Gait-Conditioned RL: https://arxiv.org/abs/2505.20619
 """
 
-from dataclasses import dataclass
-from typing import Dict, Any, Optional
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -33,6 +33,7 @@ class CurriculumStage:
         ...     description="学习保持直立不摔倒"
         ... )
     """
+
     name: str
     step_range: tuple  # (start_step, end_step)
     reward_weights: Dict[str, float]
@@ -107,10 +108,9 @@ class BaseCurriculum(ABC):
                 )
 
         # 检查最后阶段是否为无限步数
-        if self.stages[-1].step_range[1] != float('inf'):
+        if self.stages[-1].step_range[1] != float("inf"):
             raise ValueError(
-                f"最后阶段的结束步数必须为 float('inf'), "
-                f"当前为 {self.stages[-1].step_range[1]}"
+                f"最后阶段的结束步数必须为 float('inf'), " f"当前为 {self.stages[-1].step_range[1]}"
             )
 
     def get_stage(self, current_step: int) -> CurriculumStage:
@@ -204,15 +204,15 @@ class BaseCurriculum(ABC):
         start, end = stage.step_range
 
         # 计算阶段内进度（0-1）
-        if end == float('inf'):
+        if end == float("inf"):
             progress = None  # 无限阶段无法计算进度
         else:
             progress = (current_step - start) / (end - start)
 
         return {
-            'stage_name': stage.name,
-            'stage_index': self.current_stage,
-            'step_range': stage.step_range,
-            'progress': progress,
-            'description': stage.description,
+            "stage_name": stage.name,
+            "stage_index": self.current_stage,
+            "step_range": stage.step_range,
+            "progress": progress,
+            "description": stage.description,
         }

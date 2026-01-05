@@ -5,13 +5,14 @@
 """
 
 import argparse
+import os
+import re
+import time
+from pathlib import Path
+
 import mujoco
 import mujoco.viewer
 import numpy as np
-from pathlib import Path
-import time
-import os
-import re
 
 
 def apply_stabilization(model: mujoco.MjModel, data: mujoco.MjData) -> None:
@@ -34,7 +35,7 @@ def get_include_files(xml_path: Path) -> list[Path]:
     """递归获取所有被 <include> 标签引用的文件路径"""
     includes = [xml_path]
     try:
-        with open(xml_path, 'r', encoding='utf-8') as f:
+        with open(xml_path, "r", encoding="utf-8") as f:
             content = f.read()
             # 简单的正则匹配 <include file="..."/>
             matches = re.findall(r'<include\s+file="([^"]+)"', content)
@@ -50,6 +51,7 @@ def get_include_files(xml_path: Path) -> list[Path]:
 def get_last_modified_time(files: list[Path]) -> float:
     """获取一组文件中最新的修改时间"""
     return max(os.path.getmtime(f) for f in files if f.exists())
+
 
 def visualize_mjcf(xml_path: str, interactive: bool = True):
     """可视化MJCF模型并支持热刷新"""
@@ -71,11 +73,11 @@ def visualize_mjcf(xml_path: str, interactive: bool = True):
         return
 
     print(f"📂 正在监视模型: {xml_path_obj}")
-    
+
     # 获取初始监控文件列表
     watched_files = get_include_files(xml_path_obj)
     last_mtime = get_last_modified_time(watched_files)
-    
+
     original_dir = os.getcwd()
 
     while True:
@@ -83,18 +85,20 @@ def visualize_mjcf(xml_path: str, interactive: bool = True):
         try:
             # 切换到 XML 目录以解析相对路径
             os.chdir(xml_path_obj.parent)
-            
+
             model = mujoco.MjModel.from_xml_path(xml_path_obj.name)
             data = mujoco.MjData(model)
 
             # 初始化和稳定化
             mujoco.mj_resetData(model, data)
             apply_stabilization(model, data)
-            
+
             # 设置初始姿态
             try:
                 for side in ["right", "left"]:
-                    knee_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"{side}_knee_joint")
+                    knee_id = mujoco.mj_name2id(
+                        model, mujoco.mjtObj.mjOBJ_JOINT, f"{side}_knee_joint"
+                    )
                     if knee_id >= 0:
                         data.qpos[model.jnt_qposadr[knee_id]] = 0.3
             except:
@@ -107,7 +111,7 @@ def visualize_mjcf(xml_path: str, interactive: bool = True):
                 break
 
             print(f"✓ 模型加载成功。正在运行... (修改 XML 可自动刷新)")
-            
+
             # 启动被动查看器
             with mujoco.viewer.launch_passive(model, data) as viewer:
                 viewer.cam.distance = 3.0
@@ -117,14 +121,14 @@ def visualize_mjcf(xml_path: str, interactive: bool = True):
                 should_reload = False
                 while viewer.is_running():
                     step_start = time.time()
-                    
+
                     # 仿真步进
                     mujoco.mj_step(model, data)
                     viewer.sync()
 
                     # 检查热刷新
                     # 每隔一段时间检查一次，避免过度占用IO
-                    if int(time.time() * 2) % 2 == 0: 
+                    if int(time.time() * 2) % 2 == 0:
                         watched_files = get_include_files(xml_path_obj)
                         current_mtime = get_last_modified_time(watched_files)
                         if current_mtime > last_mtime:
@@ -134,10 +138,12 @@ def visualize_mjcf(xml_path: str, interactive: bool = True):
                             break
 
                     # 控制帧率
-                    time_until_next_step = model.opt.timestep - (time.time() - step_start)
+                    time_until_next_step = model.opt.timestep - (
+                        time.time() - step_start
+                    )
                     if time_until_next_step > 0:
                         time.sleep(time_until_next_step)
-                
+
                 if not should_reload:
                     # 如果不是因为要刷新而跳出，说明是用户关掉了窗口
                     return
@@ -159,7 +165,12 @@ def visualize_mjcf(xml_path: str, interactive: bool = True):
 
 def main():
     parser = argparse.ArgumentParser(description="可视化机器人MJCF模型（支持热刷新）")
-    parser.add_argument("--xml", type=str, default="assets/xmls/models/jiyuan_fit.xml", help="MJCF文件路径")
+    parser.add_argument(
+        "--xml",
+        type=str,
+        default="assets/xmls/models/jiyuan_fit.xml",
+        help="MJCF文件路径",
+    )
     parser.add_argument("--no-interactive", action="store_true", help="禁用交互式查看器")
     args = parser.parse_args()
 

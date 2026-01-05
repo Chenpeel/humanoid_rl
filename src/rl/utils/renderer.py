@@ -2,27 +2,25 @@
 MuJoCo渲染器 - 支持3D可视化
 """
 
-import mujoco
-import numpy as np
-from typing import Optional, List, Dict, Any
 import time
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # JAX 和 MJX 支持
 import jax
 import jax.numpy as jp
-from mujoco import mjx
-
-# 图像处理
-from PIL import Image, ImageDraw, ImageFont
-
 # 视频编码
 import mediapy
+import mujoco
+import numpy as np
+from mujoco import mjx
+# 图像处理
+from PIL import Image, ImageDraw, ImageFont
 
 
 class MujocoRenderer:
     """MuJoCo可视化渲染器"""
-    
+
     def __init__(
         self,
         model: mujoco.MjModel,
@@ -43,10 +41,10 @@ class MujocoRenderer:
         self.data = mujoco.MjData(model)
         self.width = width
         self.height = height
-        
+
         # 创建渲染器
         self.renderer = mujoco.Renderer(model, height=height, width=width)
-        
+
         # 设置相机
         if camera_id is not None:
             self.renderer.camera_id = camera_id
@@ -54,31 +52,31 @@ class MujocoRenderer:
             self.renderer.camera_id = mujoco.mj_name2id(
                 model, mujoco.mjtObj.mjOBJ_CAMERA, camera_name
             )
-        
+
         # 用于FPS计算
         self.last_render_time = time.time()
         self.frame_count = 0
         self.fps = 0.0
-    
+
     def render(self, data: Optional[mujoco.MjData] = None) -> np.ndarray:
         """
         渲染当前状态
-        
+
         Args:
             data: MuJoCo数据（如果为None则使用内部data）
-            
+
         Returns:
             RGB图像数组 (height, width, 3)
         """
         if data is not None:
             self.data = data
-        
+
         # 更新渲染器
         self.renderer.update_scene(self.data)
-        
+
         # 渲染
         pixels = self.renderer.render()
-        
+
         # 更新FPS
         self.frame_count += 1
         current_time = time.time()
@@ -87,9 +85,9 @@ class MujocoRenderer:
             self.fps = self.frame_count / elapsed
             self.frame_count = 0
             self.last_render_time = current_time
-        
+
         return pixels
-    
+
     def close(self):
         """关闭渲染器"""
         self.renderer.close()
@@ -97,7 +95,7 @@ class MujocoRenderer:
 
 class InteractiveViewer:
     """交互式MuJoCo查看器"""
-    
+
     def __init__(self, model: mujoco.MjModel, data: mujoco.MjData):
         """
         Args:
@@ -106,20 +104,18 @@ class InteractiveViewer:
         """
         try:
             import mujoco.viewer
+
             self.viewer = mujoco.viewer.launch_passive(model, data)
             self.model = model
             self.data = data
             self.is_running = True
         except ImportError:
-            raise ImportError(
-                "交互式查看器需要mujoco.viewer模块。"
-                "请确保安装了完整的mujoco包。"
-            )
-    
+            raise ImportError("交互式查看器需要mujoco.viewer模块。" "请确保安装了完整的mujoco包。")
+
     def update(self, data: Optional[mujoco.MjData] = None):
         """
         更新显示
-        
+
         Args:
             data: 新的MuJoCo数据
         """
@@ -128,13 +124,13 @@ class InteractiveViewer:
             self.data.qvel[:] = data.qvel
             self.data.ctrl[:] = data.ctrl
             mujoco.mj_forward(self.model, self.data)
-        
+
         self.viewer.sync()
-    
+
     def is_alive(self) -> bool:
         """检查查看器是否还在运行"""
         return self.viewer.is_running()
-    
+
     def close(self):
         """关闭查看器"""
         self.viewer.close()
@@ -149,13 +145,13 @@ def create_video_writer(
 ):
     """
     创建视频写入器
-    
+
     Args:
         output_path: 输出视频路径
         fps: 帧率
         width: 视频宽度
         height: 视频高度
-        
+
     Returns:
         VideoWriter对象
     """
@@ -163,8 +159,8 @@ def create_video_writer(
         import cv2
     except ImportError:
         raise ImportError("保存视频需要opencv-python: pip install opencv-python")
-    
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
     return writer
 
@@ -172,7 +168,7 @@ def create_video_writer(
 def save_frame_to_video(writer, frame: np.ndarray):
     """
     保存帧到视频
-    
+
     Args:
         writer: VideoWriter对象
         frame: RGB图像 (height, width, 3)
@@ -181,7 +177,7 @@ def save_frame_to_video(writer, frame: np.ndarray):
         import cv2
     except ImportError:
         raise ImportError("保存视频需要opencv-python: pip install opencv-python")
-    
+
     # MuJoCo渲染是RGB，OpenCV需要BGR
     frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     writer.write(frame_bgr)
@@ -197,7 +193,7 @@ class OverlayRenderer:
         self,
         font_size: int = 24,
         text_color: tuple = (255, 255, 255),  # 白色
-        bg_color: tuple = (0, 0, 0, 180),     # 半透明黑色（RGBA）
+        bg_color: tuple = (0, 0, 0, 180),  # 半透明黑色（RGBA）
         margin: int = 10,
     ):
         """初始化叠加渲染器
@@ -216,15 +212,13 @@ class OverlayRenderer:
         # 尝试加载等宽字体（降级到默认）
         try:
             self.font = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-                font_size
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", font_size
             )
         except:
             try:
                 # macOS 备用字体
                 self.font = ImageFont.truetype(
-                    "/System/Library/Fonts/Menlo.ttc",
-                    font_size
+                    "/System/Library/Fonts/Menlo.ttc", font_size
                 )
             except:
                 # 降级到默认字体
@@ -247,7 +241,7 @@ class OverlayRenderer:
         img = Image.fromarray(frame)
 
         # 创建可绘制对象（RGBA 模式用于半透明）
-        overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
         # 计算文本块尺寸
@@ -289,11 +283,11 @@ class OverlayRenderer:
             y_offset += line_height
 
         # 合并图层
-        img = img.convert('RGBA')
+        img = img.convert("RGBA")
         img = Image.alpha_composite(img, overlay)
 
         # 转换回 RGB
-        return np.array(img.convert('RGB'))
+        return np.array(img.convert("RGB"))
 
 
 class VideoRecorder:
@@ -416,7 +410,7 @@ class VideoRecorder:
                 str(output_path),
                 self.frames,
                 fps=self.fps,
-                codec='h264',
+                codec="h264",
                 qp=20,  # 质量参数（0-51，越小质量越高，推荐 18-23）
             )
         except Exception as e:

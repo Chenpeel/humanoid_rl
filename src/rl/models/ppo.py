@@ -3,9 +3,10 @@ PPO算法核心组件
 实现GAE、PPO损失函数等
 """
 
+from typing import Dict, Tuple
+
 import jax
 import jax.numpy as jp
-from typing import Tuple, Dict
 from flax import struct
 
 
@@ -15,12 +16,13 @@ class PPOBatch:
 
     JAX数组，可JIT编译
     """
-    obs: jax.Array          # 观测 (batch, obs_dim)
-    actions: jax.Array      # 动作 (batch, action_dim)
+
+    obs: jax.Array  # 观测 (batch, obs_dim)
+    actions: jax.Array  # 动作 (batch, action_dim)
     old_log_probs: jax.Array  # 旧策略的对数概率 (batch,)
-    advantages: jax.Array   # 优势函数 (batch,)
-    returns: jax.Array      # 回报 (batch,)
-    values: jax.Array       # 价值估计 (batch,)
+    advantages: jax.Array  # 优势函数 (batch,)
+    returns: jax.Array  # 回报 (batch,)
+    values: jax.Array  # 价值估计 (batch,)
 
 
 def compute_gae(
@@ -86,6 +88,7 @@ def compute_gae_scan(
         advantages: 优势函数 (T,)
         returns: 回报 (T,)
     """
+
     def scan_fn(carry, inp):
         """scan函数：从后往前计算GAE"""
         last_gae = carry
@@ -167,8 +170,7 @@ def ppo_loss(
 
     # 计算新策略的对数概率（数值稳定版本）
     log_probs = -0.5 * jp.sum(
-        ((batch.actions - mean) / std) ** 2 + 2 * log_std + jp.log(2 * jp.pi),
-        axis=-1
+        ((batch.actions - mean) / std) ** 2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
     )
     # 裁剪对数概率防止极端值
     log_probs = jp.clip(log_probs, -100.0, 100.0)
@@ -185,8 +187,7 @@ def ppo_loss(
     advantages_std = batch.advantages.std()
     # 使用更大的 epsilon 防止除零，并考虑均值的绝对值
     advantages_std = jp.maximum(
-        advantages_std,
-        jp.maximum(jp.abs(advantages_mean) * 0.01, 1e-3)
+        advantages_std, jp.maximum(jp.abs(advantages_mean) * 0.01, 1e-3)
     )
     advantages_normalized = (batch.advantages - advantages_mean) / advantages_std
     # 裁剪标准化后的优势值
@@ -194,8 +195,9 @@ def ppo_loss(
 
     # PPO裁剪目标
     surr1 = ratio * advantages_normalized
-    surr2 = jp.clip(ratio, 1.0 - clip_epsilon, 1.0 +
-                    clip_epsilon) * advantages_normalized
+    surr2 = (
+        jp.clip(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon) * advantages_normalized
+    )
     policy_loss = -jp.mean(jp.minimum(surr1, surr2))
 
     # 2. 价值函数损失（MSE）
@@ -203,8 +205,7 @@ def ppo_loss(
 
     # 3. 策略熵（鼓励探索）
     # H[π] = E[-log π] = E[0.5 * (log(2πσ^2) + 1)]
-    entropy = 0.5 * jp.mean(jp.sum(log_std + 0.5 *
-                            jp.log(2 * jp.pi * jp.e), axis=-1))
+    entropy = 0.5 * jp.mean(jp.sum(log_std + 0.5 * jp.log(2 * jp.pi * jp.e), axis=-1))
 
     # 总损失
     total_loss = policy_loss + value_coef * value_loss - entropy_coef * entropy
@@ -213,22 +214,22 @@ def ppo_loss(
     total_loss = jp.where(
         jp.isnan(total_loss) | jp.isinf(total_loss),
         jp.array(1e6),  # 如果是 NaN/Inf，返回大惩罚
-        total_loss
+        total_loss,
     )
 
     # 返回详细信息
     info = {
-        'total_loss': total_loss,
-        'policy_loss': policy_loss,
-        'value_loss': value_loss,
-        'entropy': entropy,
+        "total_loss": total_loss,
+        "policy_loss": policy_loss,
+        "value_loss": value_loss,
+        "entropy": entropy,
         # 近似KL散度
-        'approx_kl': jp.mean((log_probs - batch.old_log_probs) ** 2) / 2,
-        'clip_fraction': jp.mean(jp.abs(ratio - 1.0) > clip_epsilon),  # 被裁剪的比例
-        'ratio_mean': jp.mean(ratio),
-        'ratio_std': jp.std(ratio),
-        'advantages_mean': jp.mean(batch.advantages),
-        'advantages_std': jp.std(batch.advantages),
+        "approx_kl": jp.mean((log_probs - batch.old_log_probs) ** 2) / 2,
+        "clip_fraction": jp.mean(jp.abs(ratio - 1.0) > clip_epsilon),  # 被裁剪的比例
+        "ratio_mean": jp.mean(ratio),
+        "ratio_std": jp.std(ratio),
+        "advantages_mean": jp.mean(batch.advantages),
+        "advantages_std": jp.std(batch.advantages),
     }
 
     return total_loss, info
@@ -272,6 +273,7 @@ ppo_loss_jit = jax.jit(ppo_loss, static_argnums=(1, 3, 4, 5))
 
 
 # ==================== 便捷函数 ====================
+
 
 def prepare_ppo_batch(
     obs: jax.Array,

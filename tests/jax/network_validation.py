@@ -4,26 +4,28 @@
 使用rich进度条提供清晰反馈
 """
 
-from src.rl.models.optimizer import create_ppo_optimizer
-from src.rl.models.ppo import (
-    compute_gae_scan, ppo_loss, PPOBatch, prepare_ppo_batch
-)
-from src.rl.models.networks import (
-    ActorNetwork, CriticNetwork, ActorCriticNetwork,
-    create_actor_critic, count_parameters
-)
-from pathlib import Path
+import os
 import sys
 import time
-from rich import box
-from rich.table import Table
-from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
-from rich.console import Console
-import jax.numpy as jp
+from pathlib import Path
+
 import jax
-import os
-os.environ['JAX_PLATFORMS'] = 'cpu'  # 先用CPU测试
+import jax.numpy as jp
+from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import (BarColumn, Progress, SpinnerColumn,
+                           TaskProgressColumn, TextColumn, TimeElapsedColumn)
+from rich.table import Table
+
+from src.rl.models.networks import (ActorCriticNetwork, ActorNetwork,
+                                    CriticNetwork, count_parameters,
+                                    create_actor_critic)
+from src.rl.models.optimizer import create_ppo_optimizer
+from src.rl.models.ppo import (PPOBatch, compute_gae_scan, ppo_loss,
+                               prepare_ppo_batch)
+
+os.environ["JAX_PLATFORMS"] = "cpu"  # 先用CPU测试
 
 
 # 添加项目路径
@@ -65,21 +67,15 @@ def test_network_creation():
 
         # 创建共享backbone的Actor-Critic
         ac_shared = ActorCriticNetwork(
-            action_dim=action_dim,
-            shared_backbone=True,
-            hidden_dims=(256, 256)
+            action_dim=action_dim, shared_backbone=True, hidden_dims=(256, 256)
         )
-        progress.update(task, advance=1,
-                        description="[cyan]✓ Actor-Critic(共享)创建")
+        progress.update(task, advance=1, description="[cyan]✓ Actor-Critic(共享)创建")
 
         # 创建分离backbone的Actor-Critic
         ac_separate = ActorCriticNetwork(
-            action_dim=action_dim,
-            shared_backbone=False,
-            hidden_dims=(256, 256)
+            action_dim=action_dim, shared_backbone=False, hidden_dims=(256, 256)
         )
-        progress.update(task, advance=1,
-                        description="[cyan]✓ Actor-Critic(分离)创建")
+        progress.update(task, advance=1, description="[cyan]✓ Actor-Critic(分离)创建")
 
     # 显示网络信息
     info_table = Table(title="网络架构", box=box.ROUNDED)
@@ -129,8 +125,7 @@ def test_forward_pass(actor, critic, ac_shared, obs_dim, action_dim):
         # 初始化Actor-Critic参数
         rng, key = jax.random.split(rng)
         ac_params = ac_shared.init(key, obs)
-        progress.update(task, advance=1,
-                        description="[cyan]✓ Actor-Critic参数初始化")
+        progress.update(task, advance=1, description="[cyan]✓ Actor-Critic参数初始化")
 
         # 前向传播 - Actor
         mean, log_std = actor.apply(actor_params, obs)
@@ -210,8 +205,7 @@ def test_gradient_computation(ac_shared, ac_params, obs_dim, action_dim):
 
         # 计算损失
         loss_value = loss_fn(ac_params)
-        progress.update(task, advance=1,
-                        description=f"[cyan]✓ 损失值: {loss_value:.4f}")
+        progress.update(task, advance=1, description=f"[cyan]✓ 损失值: {loss_value:.4f}")
 
         # 计算梯度
         grads = jax.grad(loss_fn)(ac_params)
@@ -267,8 +261,7 @@ def test_jit_compilation(ac_shared, ac_params, obs_dim, action_dim):
             _ = forward_no_jit(ac_params, obs)
             progress.update(task1, advance=1)
         no_jit_time = time.time() - start_time
-        progress.update(
-            task1, description=f"[cyan]✓ 非JIT: {no_jit_time*1000:.1f}ms")
+        progress.update(task1, description=f"[cyan]✓ 非JIT: {no_jit_time*1000:.1f}ms")
 
         # JIT测试（含编译）
         task2 = progress.add_task("[cyan]JIT测试 (1000次, 含编译)...", total=1000)
@@ -279,7 +272,9 @@ def test_jit_compilation(ac_shared, ac_params, obs_dim, action_dim):
             progress.update(task2, advance=1)
         jit_time_with_compile = time.time() - start_time
         progress.update(
-            task2, description=f"[cyan]✓ JIT(含编译): {jit_time_with_compile*1000:.1f}ms")
+            task2,
+            description=f"[cyan]✓ JIT(含编译): {jit_time_with_compile*1000:.1f}ms",
+        )
 
         # JIT测试（纯执行，预热后）
         task3 = progress.add_task("[cyan]JIT测试 (1000次, 纯执行)...", total=1000)
@@ -294,8 +289,7 @@ def test_jit_compilation(ac_shared, ac_params, obs_dim, action_dim):
             jax.block_until_ready(_[0])
             progress.update(task3, advance=1)
         jit_time = time.time() - start_time
-        progress.update(
-            task3, description=f"[cyan]✓ JIT(纯执行): {jit_time*1000:.1f}ms")
+        progress.update(task3, description=f"[cyan]✓ JIT(纯执行): {jit_time*1000:.1f}ms")
 
     # 计算加速比
     speedup = no_jit_time / jit_time if jit_time > 0 else 0
@@ -306,8 +300,11 @@ def test_jit_compilation(ac_shared, ac_params, obs_dim, action_dim):
     perf_table.add_column("加速比", style="yellow", justify="right")
 
     perf_table.add_row("非JIT", f"{no_jit_time*1000:.1f}", "1.0x")
-    perf_table.add_row("JIT(含编译)", f"{jit_time_with_compile*1000:.1f}",
-                       f"{no_jit_time/jit_time_with_compile:.1f}x")
+    perf_table.add_row(
+        "JIT(含编译)",
+        f"{jit_time_with_compile*1000:.1f}",
+        f"{no_jit_time/jit_time_with_compile:.1f}x",
+    )
     perf_table.add_row("JIT(纯执行)", f"{jit_time*1000:.1f}", f"{speedup:.1f}x")
 
     console.print(perf_table)
@@ -364,15 +361,24 @@ def test_gae_computation():
 
 def main():
     """主测试流程"""
-    console.print(Panel.fit(
-        "[bold green]Flax网络与PPO算法验证[/bold green]\n"
-        "[dim]测试网络创建、前向传播、梯度计算、JIT编译、GAE计算[/dim]",
-        border_style="green"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold green]Flax网络与PPO算法验证[/bold green]\n"
+            "[dim]测试网络创建、前向传播、梯度计算、JIT编译、GAE计算[/dim]",
+            border_style="green",
+        )
+    )
 
     try:
         # 测试1: 网络创建
-        actor, critic, ac_shared, ac_separate, obs_dim, action_dim = test_network_creation()
+        (
+            actor,
+            critic,
+            ac_shared,
+            ac_separate,
+            obs_dim,
+            action_dim,
+        ) = test_network_creation()
 
         # 测试2: 前向传播
         actor_params, critic_params, ac_params, rng = test_forward_pass(
@@ -380,8 +386,7 @@ def main():
         )
 
         # 测试3: 梯度计算
-        grads = test_gradient_computation(
-            ac_shared, ac_params, obs_dim, action_dim)
+        grads = test_gradient_computation(ac_shared, ac_params, obs_dim, action_dim)
 
         # 测试4: JIT编译
         test_jit_compilation(ac_shared, ac_params, obs_dim, action_dim)
@@ -391,20 +396,23 @@ def main():
 
         # 成功总结
         console.print()
-        console.print(Panel.fit(
-            "[bold green]✓ 所有测试通过！[/bold green]\n"
-            "[dim]网络已准备好用于PPO训练[/dim]",
-            border_style="green"
-        ))
+        console.print(
+            Panel.fit(
+                "[bold green]✓ 所有测试通过！[/bold green]\n" "[dim]网络已准备好用于PPO训练[/dim]",
+                border_style="green",
+            )
+        )
 
     except Exception as e:
         console.print()
-        console.print(Panel.fit(
-            f"[bold red]✗ 测试失败[/bold red]\n"
-            f"[red]{e}[/red]",
-            border_style="red"
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold red]✗ 测试失败[/bold red]\n" f"[red]{e}[/red]",
+                border_style="red",
+            )
+        )
         import traceback
+
         console.print(traceback.format_exc())
         return 1
 

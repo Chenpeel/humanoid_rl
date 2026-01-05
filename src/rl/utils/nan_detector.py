@@ -3,12 +3,13 @@ NaN检测工具
 用于调试PPO训练中的数值稳定性问题
 """
 
-import jax
-import jax.numpy as jp
-from typing import Dict, Any, Optional
-from rich.console import Console
 import pickle
 from pathlib import Path
+from typing import Any, Dict, Optional
+
+import jax
+import jax.numpy as jp
+from rich.console import Console
 
 console = Console()
 
@@ -55,13 +56,17 @@ def check_for_nans(
                 console.print(
                     f"[red]❌ NaN detected in array at update {update_idx}, key={key}[/red]"
                 )
-                console.print(f"   Shape: {value.shape}, NaN count: {jp.isnan(value).sum()}")
+                console.print(
+                    f"   Shape: {value.shape}, NaN count: {jp.isnan(value).sum()}"
+                )
                 nan_detected = True
             elif jp.isinf(value).any():
                 console.print(
                     f"[yellow]⚠️  Inf detected in array at update {update_idx}, key={key}[/yellow]"
                 )
-                console.print(f"   Shape: {value.shape}, Inf count: {jp.isinf(value).sum()}")
+                console.print(
+                    f"   Shape: {value.shape}, Inf count: {jp.isinf(value).sum()}"
+                )
                 inf_detected = True
 
     if nan_detected or inf_detected:
@@ -278,6 +283,8 @@ def monitor_training_health(
                     )
 
     if warnings:
-        console.print(f"\n[yellow]⚠️  Training Health Warning (Update {update_idx}):[/yellow]")
+        console.print(
+            f"\n[yellow]⚠️  Training Health Warning (Update {update_idx}):[/yellow]"
+        )
         for warning in warnings:
             console.print(f"  - {warning}")

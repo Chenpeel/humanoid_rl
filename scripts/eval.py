@@ -4,9 +4,10 @@
 """
 
 import argparse
+import io
 import os
 import sys
-import io
+
 import numpy as np
 
 # 屏蔽 MuJoCo warp 警告
@@ -18,17 +19,19 @@ import jax.numpy as jp
 
 # 恢复 stderr
 sys.stderr = _original_stderr
-from pathlib import Path
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-from rich.panel import Panel
-from rich.table import Table
-from rich import box
 import time
+from pathlib import Path
+
+from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
+from rich.table import Table
 
 from rl.envs import create_velocity_tracking_env, create_walking_env
 from rl.models import ActorCriticNetwork
-from rl.utils import MujocoRenderer, InteractiveViewer, create_video_writer, save_frame_to_video
+from rl.utils import (InteractiveViewer, MujocoRenderer, create_video_writer,
+                      save_frame_to_video)
 
 console = Console()
 
@@ -37,15 +40,19 @@ def infer_network_config_from_checkpoint(checkpoint_path: str):
     """从检查点推断网络配置"""
     from flax import serialization
 
-    with open(checkpoint_path, 'rb') as f:
+    with open(checkpoint_path, "rb") as f:
         data = serialization.msgpack_restore(f.read())
 
     # 检查点可能有不同的结构
-    if 'params' in data and isinstance(data['params'], dict) and 'params' in data['params']:
+    if (
+        "params" in data
+        and isinstance(data["params"], dict)
+        and "params" in data["params"]
+    ):
         # 嵌套结构: data['params']['params']
-        params = data['params']['params']
-    elif 'params' in data:
-        params = data['params']
+        params = data["params"]["params"]
+    elif "params" in data:
+        params = data["params"]
     else:
         params = data
 
@@ -56,52 +63,60 @@ def infer_network_config_from_checkpoint(checkpoint_path: str):
     console.print(f"  [dim]调试: 网络参数键 = {list(params.keys())}[/dim]")
 
     # 方法1: 检查是否有共享backbone
-    if 'backbone' in params:
+    if "backbone" in params:
         shared_backbone = True
-        backbone = params['backbone']
+        backbone = params["backbone"]
         console.print(f"  [dim]调试: 共享backbone层 = {list(backbone.keys())}[/dim]")
-        layer_names = sorted([k for k in backbone.keys() if k.startswith('Dense_')])
+        layer_names = sorted([k for k in backbone.keys() if k.startswith("Dense_")])
 
         for layer_name in layer_names:
-            if 'kernel' in backbone[layer_name]:
-                kernel_shape = backbone[layer_name]['kernel'].shape
+            if "kernel" in backbone[layer_name]:
+                kernel_shape = backbone[layer_name]["kernel"].shape
                 hidden_dims.append(kernel_shape[1])  # 输出维度
 
     # 方法2: 非共享backbone，检查actor_backbone和critic_backbone
-    elif 'actor_backbone' in params and 'critic_backbone' in params:
+    elif "actor_backbone" in params and "critic_backbone" in params:
         shared_backbone = False
         # 使用actor_backbone推断hidden_dims
-        actor_backbone = params['actor_backbone']
-        console.print(f"  [dim]调试: actor_backbone层 = {list(actor_backbone.keys())}[/dim]")
-        layer_names = sorted([k for k in actor_backbone.keys() if k.startswith('Dense_')])
+        actor_backbone = params["actor_backbone"]
+        console.print(
+            f"  [dim]调试: actor_backbone层 = {list(actor_backbone.keys())}[/dim]"
+        )
+        layer_names = sorted(
+            [k for k in actor_backbone.keys() if k.startswith("Dense_")]
+        )
 
         for layer_name in layer_names:
-            if 'kernel' in actor_backbone[layer_name]:
-                kernel_shape = actor_backbone[layer_name]['kernel'].shape
+            if "kernel" in actor_backbone[layer_name]:
+                kernel_shape = actor_backbone[layer_name]["kernel"].shape
                 hidden_dims.append(kernel_shape[1])  # 输出维度
 
     # 推断观测空间维度(从第一层输入)
     obs_dim = None
-    if shared_backbone and 'backbone' in params and 'Dense_0' in params['backbone']:
-        if 'kernel' in params['backbone']['Dense_0']:
-            obs_dim = params['backbone']['Dense_0']['kernel'].shape[0]
-    elif not shared_backbone and 'actor_backbone' in params and 'Dense_0' in params['actor_backbone']:
-        if 'kernel' in params['actor_backbone']['Dense_0']:
-            obs_dim = params['actor_backbone']['Dense_0']['kernel'].shape[0]
+    if shared_backbone and "backbone" in params and "Dense_0" in params["backbone"]:
+        if "kernel" in params["backbone"]["Dense_0"]:
+            obs_dim = params["backbone"]["Dense_0"]["kernel"].shape[0]
+    elif (
+        not shared_backbone
+        and "actor_backbone" in params
+        and "Dense_0" in params["actor_backbone"]
+    ):
+        if "kernel" in params["actor_backbone"]["Dense_0"]:
+            obs_dim = params["actor_backbone"]["Dense_0"]["kernel"].shape[0]
 
     # 推断动作空间维度(从actor_mean/actor_head层)
     action_dim = None
-    if 'actor_mean' in params and 'kernel' in params['actor_mean']:
-        action_dim = params['actor_mean']['kernel'].shape[1]
-    elif 'actor_head' in params and 'kernel' in params['actor_head']:
-        action_dim = params['actor_head']['kernel'].shape[1]
+    if "actor_mean" in params and "kernel" in params["actor_mean"]:
+        action_dim = params["actor_mean"]["kernel"].shape[1]
+    elif "actor_head" in params and "kernel" in params["actor_head"]:
+        action_dim = params["actor_head"]["kernel"].shape[1]
 
     return {
-        'hidden_dims': hidden_dims,
-        'obs_dim': obs_dim,
-        'action_dim': action_dim,
-        'shared_backbone': shared_backbone,
-        'step': data.get('step', data.get('params', {}).get('step', 0))
+        "hidden_dims": hidden_dims,
+        "obs_dim": obs_dim,
+        "action_dim": action_dim,
+        "shared_backbone": shared_backbone,
+        "step": data.get("step", data.get("params", {}).get("step", 0)),
     }
 
 
@@ -110,11 +125,11 @@ def load_checkpoint(checkpoint_path: str, network, rng):
     from flax import serialization
 
     # 读取Flax序列化的检查点文件
-    with open(checkpoint_path, 'rb') as f:
+    with open(checkpoint_path, "rb") as f:
         checkpoint_data = serialization.msgpack_restore(f.read())
 
-    params = checkpoint_data['params']
-    step = checkpoint_data['step']
+    params = checkpoint_data["params"]
+    step = checkpoint_data["step"]
 
     console.print(f"[green]✓ 加载检查点: step={step}[/green]")
     return params, step
@@ -145,13 +160,15 @@ def evaluate_policy(
         video_path: 视频保存路径
         max_steps: 每个episode最大步数
     """
-    console.print(Panel.fit(
-        f"[bold cyan]评估策略[/bold cyan]\n"
-        f"Episodes: {num_episodes}\n"
-        f"渲染: {'是' if render else '否'}\n"
-        f"保存视频: {'是' if save_video else '否'}",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold cyan]评估策略[/bold cyan]\n"
+            f"Episodes: {num_episodes}\n"
+            f"渲染: {'是' if render else '否'}\n"
+            f"保存视频: {'是' if save_video else '否'}",
+            border_style="cyan",
+        )
+    )
 
     # 创建渲染器
     renderer = None
@@ -165,8 +182,11 @@ def evaluate_policy(
         if save_video:
             console.print("[cyan]使用离线渲染器（保存视频）...[/cyan]")
             import mujoco
+
             mj_model = env.mj_model
-            renderer = MujocoRenderer(mj_model, width=1280, height=720, camera_name="track")
+            renderer = MujocoRenderer(
+                mj_model, width=1280, height=720, camera_name="track"
+            )
             console.print("[green]✓ 离线渲染器已创建（使用 track 相机）[/green]")
 
             if video_path:
@@ -177,6 +197,7 @@ def evaluate_policy(
             try:
                 console.print("[cyan]启动交互式查看器...[/cyan]")
                 import mujoco
+
                 mj_model = env.mj_model
                 mj_data_for_viewer = mujoco.MjData(mj_model)
                 viewer = InteractiveViewer(mj_model, mj_data_for_viewer)
@@ -185,7 +206,9 @@ def evaluate_policy(
                 console.print(f"[yellow]⚠ 无法启动交互式查看器: {e}[/yellow]")
                 console.print("[cyan]使用离线渲染器...[/cyan]")
                 mj_model = env.mj_model
-                renderer = MujocoRenderer(mj_model, width=1280, height=720, camera_name="track")
+                renderer = MujocoRenderer(
+                    mj_model, width=1280, height=720, camera_name="track"
+                )
                 console.print("[green]✓ 离线渲染器已创建[/green]")
 
     # 统计数据
@@ -212,7 +235,9 @@ def evaluate_policy(
                 # 获取并显示命令
                 if "command" in env_state.info:
                     cmd = env_state.info["command"]
-                    console.print(f"[yellow]Episode {episode+1} 命令: vx={cmd[0]:.3f}, vy={cmd[1]:.3f}, vyaw={cmd[2]:.3f}[/yellow]")
+                    console.print(
+                        f"[yellow]Episode {episode+1} 命令: vx={cmd[0]:.3f}, vy={cmd[1]:.3f}, vyaw={cmd[2]:.3f}[/yellow]"
+                    )
 
                 episode_return = 0.0
                 episode_length = 0
@@ -221,17 +246,22 @@ def evaluate_policy(
 
                 while not done and step_count < max_steps:
                     # 获取动作（确定性策略，不采样）
-                    mean, log_std, _ = network.apply(
-                        params, env_state.obs[None, :])
+                    mean, log_std, _ = network.apply(params, env_state.obs[None, :])
                     action = mean[0]  # 使用均值，不加噪声
 
                     # 调试：显示前几步的动作和奖励
                     if step_count < 10:  # 增加到10步，观察着陆过程
                         qpos_np = np.array(env_state.pipeline_state.qpos)
                         qvel_np = np.array(env_state.pipeline_state.qvel)
-                        console.print(f"  Step {step_count}: action range=[{action.min():.3f}, {action.max():.3f}], reward={env_state.reward:.3f}")
-                        console.print(f"    pos=[{qpos_np[0]:.3f}, {qpos_np[1]:.3f}, {qpos_np[2]:.3f}], quat=[{qpos_np[3]:.3f}, {qpos_np[4]:.3f}, {qpos_np[5]:.3f}, {qpos_np[6]:.3f}]")
-                        console.print(f"    vel=[{qvel_np[0]:.3f}, {qvel_np[1]:.3f}, {qvel_np[2]:.3f}]")
+                        console.print(
+                            f"  Step {step_count}: action range=[{action.min():.3f}, {action.max():.3f}], reward={env_state.reward:.3f}"
+                        )
+                        console.print(
+                            f"    pos=[{qpos_np[0]:.3f}, {qpos_np[1]:.3f}, {qpos_np[2]:.3f}], quat=[{qpos_np[3]:.3f}, {qpos_np[4]:.3f}, {qpos_np[5]:.3f}, {qpos_np[6]:.3f}]"
+                        )
+                        console.print(
+                            f"    vel=[{qvel_np[0]:.3f}, {qvel_np[1]:.3f}, {qvel_np[2]:.3f}]"
+                        )
 
                     # 环境步进
                     env_state = env.step(env_state, action)
@@ -246,6 +276,7 @@ def evaluate_policy(
                         if viewer and viewer.is_alive():
                             # 更新交互式查看器
                             import mujoco
+
                             qpos_np = np.array(env_state.pipeline_state.qpos)
                             qvel_np = np.array(env_state.pipeline_state.qvel)
 
@@ -258,6 +289,7 @@ def evaluate_policy(
                         elif renderer:
                             # 离线渲染
                             import mujoco
+
                             qpos_np = np.array(env_state.pipeline_state.qpos)
                             qvel_np = np.array(env_state.pipeline_state.qvel)
 
@@ -275,7 +307,7 @@ def evaluate_policy(
                 progress.update(
                     task,
                     advance=1,
-                    description=f"[cyan]Episode {episode+1}/{num_episodes} | Return: {episode_return:.2f} | Length: {episode_length}"
+                    description=f"[cyan]Episode {episode+1}/{num_episodes} | Return: {episode_return:.2f} | Length: {episode_length}",
                 )
 
     finally:
@@ -302,55 +334,81 @@ def evaluate_policy(
     console.print(results_table)
 
     return {
-        'mean_return': float(jp.mean(jp.array(episode_returns))),
-        'std_return': float(jp.std(jp.array(episode_returns))),
-        'mean_length': float(jp.mean(jp.array(episode_lengths))),
-        'episode_returns': episode_returns,
-        'episode_lengths': episode_lengths,
+        "mean_return": float(jp.mean(jp.array(episode_returns))),
+        "std_return": float(jp.std(jp.array(episode_returns))),
+        "mean_length": float(jp.mean(jp.array(episode_lengths))),
+        "episode_returns": episode_returns,
+        "episode_lengths": episode_lengths,
     }
 
 
 def main():
-    parser = argparse.ArgumentParser(description='评估强化学习策略')
-    parser.add_argument('--checkpoint', type=str, required=True, help='检查点路径')
-    parser.add_argument('--xml-path', type=str, default=None,
-                        help='MuJoCo XML路径（默认使用Open_Duck_Playground）')
-    parser.add_argument('--use-local-mjcf', action='store_true',
-                        help='使用本地assets/mjcf中的MJCF模型')
-    parser.add_argument('--num-episodes', type=int,
-                        default=10, help='评估episode数')
-    parser.add_argument('--render', type=int, default=1,
-                        help='渲染间隔（0=不渲染，N=每N步渲染一次，默认=1）')
-    parser.add_argument('--save-video', action='store_true', default=True, help='保存视频（默认开启）')
-    parser.add_argument('--no-save-video', dest='save_video', action='store_false', help='不保存视频')
-    parser.add_argument('--video-path', type=str, default='eval_video.mp4',
-                        help='视频保存路径')
-    parser.add_argument('--max-steps', type=int, default=1000,
-                        help='每个episode最大步数')
-    parser.add_argument('--hidden-dims', type=int, nargs='+', default=[512, 512, 256],
-                        help='网络隐藏层维度 (默认: [512, 512, 256]，自动从检查点推断)')
-    parser.add_argument('--shared-backbone', action='store_true', default=True,
-                        help='使用共享backbone (默认: True，自动从检查点推断)')
-    parser.add_argument('--env-type', type=str, default='walking',
-                        choices=['velocity', 'walking'],
-                        help='环境类型: velocity=速度跟踪(61维), walking=行走任务(65维，默认)')
-    parser.add_argument('--cpu', action='store_true',
-                        help='使用CPU运行（避免GPU冲突，速度较慢）')
-    parser.add_argument('--seed', type=int, default=42, help='随机种子')
+    parser = argparse.ArgumentParser(description="评估强化学习策略")
+    parser.add_argument("--checkpoint", type=str, required=True, help="检查点路径")
+    parser.add_argument(
+        "--xml-path",
+        type=str,
+        default=None,
+        help="MuJoCo XML路径（默认使用Open_Duck_Playground）",
+    )
+    parser.add_argument(
+        "--use-local-mjcf", action="store_true", help="使用本地assets/mjcf中的MJCF模型"
+    )
+    parser.add_argument("--num-episodes", type=int, default=10, help="评估episode数")
+    parser.add_argument(
+        "--render",
+        type=int,
+        default=1,
+        help="渲染间隔（0=不渲染，N=每N步渲染一次，默认=1）",
+    )
+    parser.add_argument(
+        "--save-video", action="store_true", default=True, help="保存视频（默认开启）"
+    )
+    parser.add_argument(
+        "--no-save-video", dest="save_video", action="store_false", help="不保存视频"
+    )
+    parser.add_argument(
+        "--video-path", type=str, default="eval_video.mp4", help="视频保存路径"
+    )
+    parser.add_argument("--max-steps", type=int, default=1000, help="每个episode最大步数")
+    parser.add_argument(
+        "--hidden-dims",
+        type=int,
+        nargs="+",
+        default=[512, 512, 256],
+        help="网络隐藏层维度 (默认: [512, 512, 256]，自动从检查点推断)",
+    )
+    parser.add_argument(
+        "--shared-backbone",
+        action="store_true",
+        default=True,
+        help="使用共享backbone (默认: True，自动从检查点推断)",
+    )
+    parser.add_argument(
+        "--env-type",
+        type=str,
+        default="walking",
+        choices=["velocity", "walking"],
+        help="环境类型: velocity=速度跟踪(61维), walking=行走任务(65维，默认)",
+    )
+    parser.add_argument("--cpu", action="store_true", help="使用CPU运行（避免GPU冲突，速度较慢）")
+    parser.add_argument("--seed", type=int, default=42, help="随机种子")
 
     args = parser.parse_args()
 
     # 设置设备
     if args.cpu:
         import os
-        os.environ['JAX_PLATFORMS'] = 'cpu'
+
+        os.environ["JAX_PLATFORMS"] = "cpu"
         console.print("[yellow]使用 CPU 模式运行（速度较慢）[/yellow]")
 
-    console.print(Panel.fit(
-        "[bold green]策略评估[/bold green]\n"
-        "[dim]加载检查点并评估策略性能[/dim]",
-        border_style="green"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold green]策略评估[/bold green]\n" "[dim]加载检查点并评估策略性能[/dim]",
+            border_style="green",
+        )
+    )
 
     # 🔍 自动推断检查点的网络配置
     console.print("\n[bold cyan]分析检查点[/bold cyan]")
@@ -364,8 +422,8 @@ def main():
 
         # 自动使用检查点的配置（优先级高于命令行）
         console.print(f"  [yellow]→ 自动使用检查点配置:[/yellow]")
-        args.hidden_dims = ckpt_config['hidden_dims']
-        args.shared_backbone = ckpt_config['shared_backbone']
+        args.hidden_dims = ckpt_config["hidden_dims"]
+        args.shared_backbone = ckpt_config["shared_backbone"]
         console.print(f"    hidden_dims={args.hidden_dims}")
         console.print(f"    shared_backbone={args.shared_backbone}")
 
@@ -393,7 +451,7 @@ def main():
 
     # 创建环境
     console.print("\n[bold cyan]创建环境[/bold cyan]")
-    if args.env_type == 'walking':
+    if args.env_type == "walking":
         env = create_walking_env(xml_path=xml_path, verbose=False)
         console.print(f"  ✓ 环境类型: 行走环境 (WalkingEnv)")
     else:
@@ -403,12 +461,12 @@ def main():
 
     # ⚠️ 检查环境和检查点是否匹配
     try:
-        if ckpt_config['obs_dim'] and env.observation_size != ckpt_config['obs_dim']:
+        if ckpt_config["obs_dim"] and env.observation_size != ckpt_config["obs_dim"]:
             console.print(f"  [red]✗ 观测空间不匹配！[/red]")
             console.print(f"    检查点需要: obs={ckpt_config['obs_dim']}")
             console.print(f"    当前环境: obs={env.observation_size}")
             console.print(f"  [red]→ 评估可能失败，请检查环境配置或使用正确的检查点[/red]")
-        if ckpt_config['action_dim'] and env.action_size != ckpt_config['action_dim']:
+        if ckpt_config["action_dim"] and env.action_size != ckpt_config["action_dim"]:
             console.print(f"  [red]✗ 动作空间不匹配！[/red]")
             console.print(f"    检查点需要: act={ckpt_config['action_dim']}")
             console.print(f"    当前环境: act={env.action_size}")
@@ -425,7 +483,9 @@ def main():
         hidden_dims=tuple(args.hidden_dims),
     )
     console.print(f"  ✓ 网络创建完成")
-    console.print(f"  ✓ shared_backbone={args.shared_backbone}, hidden_dims={args.hidden_dims}")
+    console.print(
+        f"  ✓ shared_backbone={args.shared_backbone}, hidden_dims={args.hidden_dims}"
+    )
 
     # 加载检查点
     console.print("\n[bold cyan]加载检查点[/bold cyan]")

@@ -26,8 +26,9 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # 多 GPU 训练
 
 # 启用JAX编译缓存 (使用绝对路径，确保持久化)
-cache_path = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", ".jax_cache"))
+cache_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", ".jax_cache")
+)
 os.makedirs(cache_path, exist_ok=True)
 os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_path
 
@@ -68,7 +69,7 @@ STAGE_CONFIGS = [
         "name": "standing",
         "config_file": f"{CONFIG_BASE_DIR}/stage0_standing.yaml",
         "description": "站立平衡",
-        "min_iterations": 2500,     # 164M步 (3天训练优化)
+        "min_iterations": 2500,  # 164M步 (3天训练优化)
         "transition_criteria": {
             "min_reward": 0.6,
             "max_fall_rate": 0.05,
@@ -79,7 +80,7 @@ STAGE_CONFIGS = [
         "name": "stepping",
         "config_file": f"{CONFIG_BASE_DIR}/stage1_stepping.yaml",
         "description": "原地踏步",
-        "min_iterations": 5000,     # 328M步
+        "min_iterations": 5000,  # 328M步
         "transition_criteria": {
             "min_gait_symmetry": 0.5,
             "min_foot_clearance": 0.3,
@@ -90,7 +91,7 @@ STAGE_CONFIGS = [
         "name": "slow_walk",
         "config_file": f"{CONFIG_BASE_DIR}/stage2_slow_walk.yaml",
         "description": "小步行走",
-        "min_iterations": 10000,    # 655M步
+        "min_iterations": 10000,  # 655M步
         "transition_criteria": {
             "min_velocity_tracking": 0.7,
         },
@@ -100,7 +101,7 @@ STAGE_CONFIGS = [
         "name": "normal_walk",
         "config_file": f"{CONFIG_BASE_DIR}/stage3_normal_walk.yaml",
         "description": "正常行走",
-        "min_iterations": 20000,    # 1.31B步 (重点阶段,40%时间)
+        "min_iterations": 20000,  # 1.31B步 (重点阶段,40%时间)
         "transition_criteria": {
             "min_velocity_tracking": 0.8,
         },
@@ -110,7 +111,7 @@ STAGE_CONFIGS = [
         "name": "fast_walk",
         "config_file": f"{CONFIG_BASE_DIR}/stage4_fast_walk.yaml",
         "description": "高速适应",
-        "min_iterations": 12500,    # 819M步
+        "min_iterations": 12500,  # 819M步
         "transition_criteria": {
             "min_velocity_tracking": 0.75,
             "min_max_velocity": 0.9,
@@ -269,6 +270,7 @@ QUICK_TEST_STAGE_CONFIGS = [
 
 # ==================== 工具函数 ====================
 
+
 def load_stage_config(config_path: str) -> Dict:
     """加载阶段配置文件,支持向后兼容旧路径"""
     if not os.path.exists(config_path):
@@ -281,7 +283,7 @@ def load_stage_config(config_path: str) -> Dict:
             console.print(f"[red]错误: 配置文件不存在: {config_path}[/red]")
             sys.exit(1)
 
-    with open(config_path, 'r', encoding='utf-8') as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     return config
@@ -289,11 +291,13 @@ def load_stage_config(config_path: str) -> Dict:
 
 def print_stage_info(stage_config: Dict):
     """打印阶段信息"""
-    console.print(Panel.fit(
-        f"[bold green]阶段 {stage_config['stage_id']}: {stage_config['description']}[/bold green]\n"
-        f"[dim]配置文件: {stage_config['config_file']}[/dim]",
-        border_style="green",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold green]阶段 {stage_config['stage_id']}: {stage_config['description']}[/bold green]\n"
+            f"[dim]配置文件: {stage_config['config_file']}[/dim]",
+            border_style="green",
+        )
+    )
 
 
 def check_transition_criteria(
@@ -325,13 +329,14 @@ def check_transition_criteria(
                 return False
         elif key.startswith("max_"):
             metric_name = key[4:]  # 去掉 "max_"
-            if metrics.get(metric_name, float('inf')) > threshold:
+            if metrics.get(metric_name, float("inf")) > threshold:
                 return False
 
     return True
 
 
 # ==================== 主训练函数 ====================
+
 
 def train_stage(
     stage_config: Dict,
@@ -358,7 +363,8 @@ def train_stage(
     cmd = [
         sys.executable,
         "scripts/train.py",
-        "--config", stage_config["config_file"],
+        "--config",
+        stage_config["config_file"],
     ]
 
     # 如果有上一阶段的检查点，添加恢复参数
@@ -374,7 +380,8 @@ def train_stage(
     from rl.envs import create_walking_env
     from rl.models.networks import ActorCriticNetwork
     from rl.models.optimizer import create_ppo_optimizer_cosine
-    from rl.training.logger import Logger, MetricsLogger, create_training_display
+    from rl.training.logger import (Logger, MetricsLogger,
+                                    create_training_display)
     from rl.training.ppo_trainer import PPOConfig, PPOTrainer
     from rl.training.train_state import create_train_state
     from rl.utils.checkpoint import create_checkpoint_manager
@@ -429,11 +436,14 @@ def train_stage(
 
     console.print(f"[cyan]场景: {scene}[/cyan]")
     console.print(f"[cyan]环境类型: {env_type}[/cyan]")
-    console.print(f"[cyan]命令范围: x={cmd_x_range}, y={cmd_y_range}, yaw={cmd_yaw_range}[/cyan]")
+    console.print(
+        f"[cyan]命令范围: x={cmd_x_range}, y={cmd_y_range}, yaw={cmd_yaw_range}[/cyan]"
+    )
 
     # 根据环境类型创建对应的环境
     if env_type == "standing":
         from rl.envs import create_standing_env
+
         env = create_standing_env(
             xml_path=scene_path,
             cmd_x_range=cmd_x_range,
@@ -515,7 +525,7 @@ def train_stage(
         console=console,
         total=config.num_updates,
         steps_per_epoch=1,
-        description=f"阶段 {stage_config['stage_id']} - {stage_config['name']}"
+        description=f"阶段 {stage_config['stage_id']} - {stage_config['name']}",
     )
 
     # 创建检查点管理器
@@ -537,6 +547,7 @@ def train_stage(
 
     # JIT编译训练函数
     from rl.training.ppo_trainer import create_train_step_fn
+
     train_step_fn = create_train_step_fn(
         config=config,
         env=env,
@@ -548,13 +559,8 @@ def train_stage(
         train_step_jit = jax.jit(train_step_fn)
 
         # 触发编译（带进度提示）
-        from rich.progress import (
-            BarColumn,
-            Progress,
-            SpinnerColumn,
-            TextColumn,
-            TimeElapsedColumn,
-        )
+        from rich.progress import (BarColumn, Progress, SpinnerColumn,
+                                   TextColumn, TimeElapsedColumn)
 
         # 在screen中禁用SpinnerColumn，避免显示异常
         progress_columns = [
@@ -571,7 +577,7 @@ def train_stage(
         ) as progress:
             compile_task = progress.add_task(
                 f"[yellow]编译 JIT 函数（阶段 {stage_config['stage_id']}）...",
-                total=None
+                total=None,
             )
             rng, reset_rng = jax.random.split(rng)
             env_state = env.batch_reset(reset_rng, config.num_envs)
@@ -617,7 +623,9 @@ def train_stage(
             # 定期日志
             if (update + 1) % log_interval == 0:
                 avg_metrics = metrics_logger.get_averages()
-                logger.log_scalars(metrics=avg_metrics, step=train_state.step, prefix="train")
+                logger.log_scalars(
+                    metrics=avg_metrics, step=train_state.step, prefix="train"
+                )
                 metrics_logger.reset()
 
             # 定期保存
@@ -705,52 +713,59 @@ def main():
     # 根据测试模式选择配置
     if args.quick_test:
         stage_configs = QUICK_TEST_STAGE_CONFIGS
-        console.print(Panel.fit(
-            f"[bold green]极速测试模式（无需重复编译）[/bold green]\n"
-            f"[dim]起始阶段: {args.start_stage}[/dim]\n"
-            f"[dim]结束阶段: min({args.end_stage}, 2)[/dim]\n"
-            f"[dim]预计时间: 首次~30秒（含编译），后续<10秒[/dim]\n"
-            f"[dim]策略: 固定网络结构和环境参数，复用JAX编译缓存[/dim]",
-            border_style="green",
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold green]极速测试模式（无需重复编译）[/bold green]\n"
+                f"[dim]起始阶段: {args.start_stage}[/dim]\n"
+                f"[dim]结束阶段: min({args.end_stage}, 2)[/dim]\n"
+                f"[dim]预计时间: 首次~30秒（含编译），后续<10秒[/dim]\n"
+                f"[dim]策略: 固定网络结构和环境参数，复用JAX编译缓存[/dim]",
+                border_style="green",
+            )
+        )
         # 极速测试模式最多到阶段2
         end_stage = min(args.end_stage, 2)
     elif args.test_mode:
         stage_configs = TEST_STAGE_CONFIGS
-        console.print(Panel.fit(
-            f"[bold yellow]流水线快速测试模式[/bold yellow]\n"
-            f"[dim]起始阶段: {args.start_stage}[/dim]\n"
-            f"[dim]结束阶段: min({args.end_stage}, 2)[/dim]\n"
-            f"[dim]预计时间: <3分钟[/dim]",
-            border_style="yellow",
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold yellow]流水线快速测试模式[/bold yellow]\n"
+                f"[dim]起始阶段: {args.start_stage}[/dim]\n"
+                f"[dim]结束阶段: min({args.end_stage}, 2)[/dim]\n"
+                f"[dim]预计时间: <3分钟[/dim]",
+                border_style="yellow",
+            )
+        )
         # 测试模式最多到阶段2
         end_stage = min(args.end_stage, 2)
     elif args.profile == "10h":
         stage_configs = TEN_HOUR_STAGE_CONFIGS
-        console.print(Panel.fit(
-            f"[bold cyan]10小时快速训练方案[/bold cyan]\n"
-            f"[dim]起始阶段: {args.start_stage}[/dim]\n"
-            f"[dim]结束阶段: {args.end_stage}[/dim]\n"
-            f"[dim]预计时间: ~12-14小时[/dim]\n"
-            f"[dim]配置路径: configs/train-10h/[/dim]",
-            border_style="cyan",
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold cyan]10小时快速训练方案[/bold cyan]\n"
+                f"[dim]起始阶段: {args.start_stage}[/dim]\n"
+                f"[dim]结束阶段: {args.end_stage}[/dim]\n"
+                f"[dim]预计时间: ~12-14小时[/dim]\n"
+                f"[dim]配置路径: configs/train-10h/[/dim]",
+                border_style="cyan",
+            )
+        )
         end_stage = args.end_stage
     else:
         stage_configs = STAGE_CONFIGS
-        console.print(Panel.fit(
-            f"[bold green]标准分阶段训练[/bold green]\n"
-            f"[dim]起始阶段: {args.start_stage}[/dim]\n"
-            f"[dim]结束阶段: {args.end_stage}[/dim]",
-            border_style="green",
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold green]标准分阶段训练[/bold green]\n"
+                f"[dim]起始阶段: {args.start_stage}[/dim]\n"
+                f"[dim]结束阶段: {args.end_stage}[/dim]",
+                border_style="green",
+            )
+        )
         end_stage = args.end_stage
 
     # 获取要训练的阶段
     stages_to_train = [
-        s for s in stage_configs
-        if args.start_stage <= s["stage_id"] <= end_stage
+        s for s in stage_configs if args.start_stage <= s["stage_id"] <= end_stage
     ]
 
     if not stages_to_train:
@@ -782,19 +797,24 @@ def main():
 
         except KeyboardInterrupt:
             console.print(f"[yellow]训练被用户中断（阶段 {stage_config['stage_id']}）[/yellow]")
-            console.print(f"[dim]可以使用 --resume-checkpoint {previous_checkpoint} 恢复训练[/dim]")
+            console.print(
+                f"[dim]可以使用 --resume-checkpoint {previous_checkpoint} 恢复训练[/dim]"
+            )
             sys.exit(0)
 
         except Exception as e:
             console.print(f"[red]阶段 {stage_config['stage_id']} 训练出错: {e}[/red]")
             import traceback
+
             console.print(traceback.format_exc())
             sys.exit(1)
 
-    console.print(Panel.fit(
-        "[bold green]所有阶段训练完成！[/bold green]",
-        border_style="green",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold green]所有阶段训练完成！[/bold green]",
+            border_style="green",
+        )
+    )
 
 
 if __name__ == "__main__":

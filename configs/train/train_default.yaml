@@ -26,17 +26,17 @@ entropy_coef: 0.01
 max_grad_norm: 0.5
 
 # ==================== 训练配置 ====================
-total_timesteps: 200000000  # 200M steps（确保覆盖所有课程阶段）
+total_timesteps: 500000000  # 500M steps（确保收敛）
 log_interval: 10
 eval_interval: 25
 save_interval: 500
 
 # ==================== 优化器配置 ====================
 learning_rate: 3.0e-4
-final_lr_fraction: 0.02
+final_lr_fraction: 0.01
 
 # ==================== 网络配置 ====================
-hidden_dims: [256, 256, 128]
+hidden_dims: [512, 512, 256]
 shared_backbone: true
 
 # ==================== 视频录制 ====================

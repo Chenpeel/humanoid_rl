@@ -57,6 +57,7 @@ def export_to_onnx(
 
             # 保存
             import onnx
+
             onnx.save(onnx_model, output_path)
             print(f"✓ 模型已导出为ONNX: {output_path}")
             print("  使用JAX2ONNX转换")
@@ -89,11 +90,11 @@ def export_to_onnx(
                 torch_fn,
                 torch_input,
                 output_path,
-                input_names=['observation'],
-                output_names=['action'],
+                input_names=["observation"],
+                output_names=["action"],
                 dynamic_axes={
-                    'observation': {0: 'batch_size'},
-                    'action': {0: 'batch_size'},
+                    "observation": {0: "batch_size"},
+                    "action": {0: "batch_size"},
                 },
                 opset_version=14,
             )
@@ -109,6 +110,7 @@ def export_to_onnx(
     except Exception as e:
         print(f"ONNX导出失败: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -151,9 +153,11 @@ def export_to_tensorflow(
                 super().__init__()
                 self.tf_fn = tf_fn
 
-            @tf.function(input_signature=[
-                tf.TensorSpec(shape=(None, observation_size), dtype=tf.float32)
-            ])
+            @tf.function(
+                input_signature=[
+                    tf.TensorSpec(shape=(None, observation_size), dtype=tf.float32)
+                ]
+            )
             def __call__(self, obs):
                 return self.tf_fn(obs)
 
@@ -162,7 +166,7 @@ def export_to_tensorflow(
         tf.saved_model.save(
             policy_module,
             output_path,
-            signatures={'serving_default': policy_module.__call__}
+            signatures={"serving_default": policy_module.__call__},
         )
 
         print(f"✓ 模型已导出为TensorFlow SavedModel: {output_path}")
@@ -177,6 +181,7 @@ def export_to_tensorflow(
     except Exception as e:
         print(f"TensorFlow导出失败: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -201,7 +206,7 @@ def export_to_msgpack(
         params_bytes = serialization.to_bytes(params)
 
         # 保存
-        with open(output_path, 'wb') as f:
+        with open(output_path, "wb") as f:
             f.write(params_bytes)
 
         print(f"✓ 参数已导出为MessagePack: {output_path}")
@@ -220,44 +225,30 @@ def main():
         "--checkpoint-path",
         type=str,
         required=True,
-        help="检查点路径（或包含checkpoints的日志目录）"
+        help="检查点路径（或包含checkpoints的日志目录）",
     )
     parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="exported_models",
-        help="导出目录"
+        "--output-dir", type=str, default="exported_models", help="导出目录"
     )
     parser.add_argument(
         "--format",
         type=str,
         choices=["onnx", "tensorflow", "msgpack", "all"],
         default="all",
-        help="导出格式"
+        help="导出格式",
     )
-    parser.add_argument(
-        "--use-best",
-        action="store_true",
-        help="使用最佳模型而非最新检查点"
-    )
+    parser.add_argument("--use-best", action="store_true", help="使用最佳模型而非最新检查点")
     parser.add_argument(
         "--observation-size",
         type=int,
         default=54,  # 根据你的环境调整
-        help="观测空间维度"
+        help="观测空间维度",
     )
     parser.add_argument(
-        "--action-size",
-        type=int,
-        default=10,  # 根据你的机器人调整
-        help="动作空间维度"
+        "--action-size", type=int, default=10, help="动作空间维度"  # 根据你的机器人调整
     )
     parser.add_argument(
-        "--hidden-dims",
-        type=int,
-        nargs="+",
-        default=[512, 512, 256],
-        help="隐藏层维度"
+        "--hidden-dims", type=int, nargs="+", default=[512, 512, 256], help="隐藏层维度"
     )
 
     args = parser.parse_args()
@@ -290,11 +281,12 @@ def main():
     else:
         # 直接加载检查点文件
         from flax import serialization
-        with open(checkpoint_path, 'rb') as f:
+
+        with open(checkpoint_path, "rb") as f:
             checkpoint_data = serialization.from_bytes(None, f.read())
 
-    params = checkpoint_data['params']
-    step = checkpoint_data.get('step', 0)
+    params = checkpoint_data["params"]
+    step = checkpoint_data.get("step", 0)
     print(f"  ✓ 检查点加载完成 (step={step})")
 
     # 2. 重建网络结构
@@ -330,7 +322,9 @@ def main():
 
         elif fmt == "tensorflow":
             output_path = output_dir / f"policy_step{step}_tf"
-            if export_to_tensorflow(params, network, args.observation_size, str(output_path)):
+            if export_to_tensorflow(
+                params, network, args.observation_size, str(output_path)
+            ):
                 success_count += 1
 
         elif fmt == "msgpack":

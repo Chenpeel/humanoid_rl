@@ -4,23 +4,25 @@
 
 import os
 import time
-import jax.numpy as jp
 from pathlib import Path
-from typing import Dict, Any, Optional
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn, TimeElapsedColumn, ProgressColumn, Task
-from rich.text import Text
-from rich.live import Live
-from rich.layout import Layout
-from rich.console import Group
-from rich.columns import Columns
-from rich.align import Align
-from rich import box
+from typing import Any, Dict, Optional
 
+import jax.numpy as jp
+from rich import box
+from rich.align import Align
+from rich.columns import Columns
+from rich.console import Console, Group
+from rich.layout import Layout
+from rich.live import Live
+from rich.panel import Panel
+from rich.progress import (BarColumn, Progress, ProgressColumn, SpinnerColumn,
+                           Task, TextColumn, TimeElapsedColumn,
+                           TimeRemainingColumn)
+from rich.table import Table
+from rich.text import Text
 
 # ==================== Rich进度列定制 ====================
+
 
 class MetricsColumn(ProgressColumn):
     """显示自定义指标"""
@@ -39,10 +41,13 @@ class MetricsColumn(ProgressColumn):
 
 # ==================== TensorBoard日志 ====================
 
+
 class Logger:
     """TensorBoard日志记录器"""
 
-    def __init__(self, log_dir: str = "logs", use_tensorboard: bool = True, use_rich: bool = True):
+    def __init__(
+        self, log_dir: str = "logs", use_tensorboard: bool = True, use_rich: bool = True
+    ):
         """初始化日志记录器
 
         Args:
@@ -58,6 +63,7 @@ class Logger:
         if use_tensorboard:
             try:
                 from torch.utils.tensorboard import SummaryWriter
+
                 self.writer = SummaryWriter(log_dir=str(self.log_dir), flush_secs=10)
                 self.disabled = False
             except ImportError:
@@ -107,6 +113,7 @@ class Logger:
 
 # ==================== 指标统计（类rsl_rl实现）====================
 
+
 class MetricsLogger:
     """指标统计器（带Episode统计）- 参考rsl_rl实现"""
 
@@ -118,6 +125,7 @@ class MetricsLogger:
         """
         self.window_size = window_size
         from collections import deque
+
         self.metrics = {}
         self.counts = {}
 
@@ -146,10 +154,7 @@ class MetricsLogger:
 
     def get_averages(self) -> Dict[str, float]:
         """获取平均值"""
-        return {
-            key: self.metrics[key] / self.counts[key]
-            for key in self.metrics
-        }
+        return {key: self.metrics[key] / self.counts[key] for key in self.metrics}
 
     def reset(self):
         """重置统计"""
@@ -159,6 +164,7 @@ class MetricsLogger:
 
 # ==================== 训练进度显示（参考rsl_rl格式）====================
 
+
 class TrainingDisplay:
     """训练进度显示（参考 rsl_rl 格式）
 
@@ -167,7 +173,13 @@ class TrainingDisplay:
     - 下方：Rich 进度条（无边框）
     """
 
-    def __init__(self, console: Console, total: int, steps_per_epoch: int = 1, description: str = "PPO训练"):
+    def __init__(
+        self,
+        console: Console,
+        total: int,
+        steps_per_epoch: int = 1,
+        description: str = "PPO训练",
+    ):
         """初始化训练显示
 
         Args:
@@ -222,11 +234,14 @@ class TrainingDisplay:
         # ==================== 性能指标 ====================
         if self.start_time:
             import time
+
             elapsed = time.time() - self.start_time
 
             # ETA
             if self.current_epoch > self.warmup_steps and self.total > 0:
-                time_per_epoch = elapsed / max(1, self.current_epoch - self.warmup_steps)
+                time_per_epoch = elapsed / max(
+                    1, self.current_epoch - self.warmup_steps
+                )
                 remaining = time_per_epoch * (self.total - self.current_epoch)
             else:
                 remaining = None
@@ -256,9 +271,13 @@ class TrainingDisplay:
 
         # Collection/Learning time
         if "collection_time" in self.current_metrics:
-            lines.append(f"{'Collection time:':<30}{self.current_metrics['collection_time']:.3f}s")
+            lines.append(
+                f"{'Collection time:':<30}{self.current_metrics['collection_time']:.3f}s"
+            )
         if "learning_time" in self.current_metrics:
-            lines.append(f"{'Learning time:':<30}{self.current_metrics['learning_time']:.3f}s")
+            lines.append(
+                f"{'Learning time:':<30}{self.current_metrics['learning_time']:.3f}s"
+            )
 
         lines.append("")  # 空行
 
@@ -267,7 +286,9 @@ class TrainingDisplay:
         if value_loss is not None:
             lines.append(f"{'Mean value loss:':<30}{value_loss:.4f}")
 
-        policy_loss = self._get_value("surrogate_loss", "policy_loss", "train/surrogate_loss")
+        policy_loss = self._get_value(
+            "surrogate_loss", "policy_loss", "train/surrogate_loss"
+        )
         if policy_loss is not None:
             lines.append(f"{'Mean policy loss:':<30}{policy_loss:.4f}")
 
@@ -286,7 +307,9 @@ class TrainingDisplay:
         lines.append("")  # 空行
 
         # ==================== 奖励与统计 ====================
-        episode_reward = self._get_value("episode_reward", "train/episode_reward", "mean_reward")
+        episode_reward = self._get_value(
+            "episode_reward", "train/episode_reward", "mean_reward"
+        )
         if episode_reward is not None:
             lines.append(f"{'Mean reward:':<30}{episode_reward:.2f}")
 
@@ -302,18 +325,38 @@ class TrainingDisplay:
         # 收集其他详细指标
         detail_lines = []
         for key in sorted(self.current_metrics.keys()):
-            if any(key.startswith(prefix) for prefix in [
-                "Episode_Reward/", "Metrics/", "Curriculum/", "Episode_Termination/",
-                "train/Episode_Reward/", "train/Metrics/", "train/Curriculum/", "train/Episode_Termination/"
-            ]):
+            if any(
+                key.startswith(prefix)
+                for prefix in [
+                    "Episode_Reward/",
+                    "Metrics/",
+                    "Curriculum/",
+                    "Episode_Termination/",
+                    "train/Episode_Reward/",
+                    "train/Metrics/",
+                    "train/Curriculum/",
+                    "train/Episode_Termination/",
+                ]
+            ):
                 # 跳过已显示的核心指标
-                if not any(x in key for x in ["episode_reward", "episode_length", "action_noise_std"]):
+                if not any(
+                    x in key
+                    for x in ["episode_reward", "episode_length", "action_noise_std"]
+                ):
                     value = self.current_metrics[key]
                     display_key = key
-                    for prefix in ["train/Episode_Reward/", "train/Metrics/", "train/Curriculum/", "train/Episode_Termination/",
-                                  "Episode_Reward/", "Metrics/", "Curriculum/", "Episode_Termination/"]:
+                    for prefix in [
+                        "train/Episode_Reward/",
+                        "train/Metrics/",
+                        "train/Curriculum/",
+                        "train/Episode_Termination/",
+                        "Episode_Reward/",
+                        "Metrics/",
+                        "Curriculum/",
+                        "Episode_Termination/",
+                    ]:
                         if key.startswith(prefix):
-                            display_key = key[len(prefix):]
+                            display_key = key[len(prefix) :]
                     display_key = display_key.replace("_", " ")
                     detail_lines.append(f"{display_key:<30}{float(value):.4f}")
 
@@ -342,15 +385,18 @@ class TrainingDisplay:
         if not self.started:
             self.live.start()
             # 添加进度条任务
-            self.progress_task_id = self.progress_bar.add_task(
-                "",
-                total=self.total
-            )
+            self.progress_task_id = self.progress_bar.add_task("", total=self.total)
             self.started = True
             import time
+
             self.start_time = time.time()
 
-    def update(self, epoch: Optional[int] = None, step: Optional[int] = None, metrics: Optional[Dict[str, Any]] = None):
+    def update(
+        self,
+        epoch: Optional[int] = None,
+        step: Optional[int] = None,
+        metrics: Optional[Dict[str, Any]] = None,
+    ):
         """更新显示
 
         Args:
@@ -392,6 +438,7 @@ class TrainingDisplay:
 
 # ==================== 便捷函数 ====================
 
+
 def create_logger(log_dir: str = "logs") -> Logger:
     """创建日志记录器
 
@@ -405,10 +452,7 @@ def create_logger(log_dir: str = "logs") -> Logger:
 
 
 def create_training_display(
-    console: Console,
-    total: int,
-    steps_per_epoch: int = 1,
-    description: str = "PPO训练"
+    console: Console, total: int, steps_per_epoch: int = 1, description: str = "PPO训练"
 ) -> TrainingDisplay:
     """创建训练显示
 
@@ -425,7 +469,7 @@ def create_training_display(
         console=console,
         total=total,
         steps_per_epoch=steps_per_epoch,
-        description=description
+        description=description,
     )
 
 

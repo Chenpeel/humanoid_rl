@@ -4,15 +4,17 @@
 """
 
 import time
+from pathlib import Path
+
 import jax
 import jax.numpy as jp
 import mujoco
-from mujoco import mjx
-from pathlib import Path
 import numpy as np
+from mujoco import mjx
 from rich.console import Console
+from rich.progress import (BarColumn, Progress, SpinnerColumn,
+                           TaskProgressColumn, TextColumn)
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
 console = Console()
 

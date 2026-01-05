@@ -21,7 +21,6 @@ from typing import Dict, Optional, Tuple
 import jax
 import jax.numpy as jp
 
-
 # ==================== 数学工具函数 ====================
 
 
@@ -43,11 +42,7 @@ def quat_to_euler(quat: jax.Array) -> jax.Array:
 
     # Pitch (y-axis rotation)
     sinp = 2 * (w * y - z * x)
-    pitch = jp.where(
-        jp.abs(sinp) >= 1,
-        jp.sign(sinp) * jp.pi / 2,
-        jp.arcsin(sinp)
-    )
+    pitch = jp.where(jp.abs(sinp) >= 1, jp.sign(sinp) * jp.pi / 2, jp.arcsin(sinp))
 
     # Yaw (z-axis rotation)
     siny_cosp = 2 * (w * z + x * y)
@@ -67,11 +62,7 @@ def normalize_quaternion(quat: jax.Array) -> jax.Array:
         归一化后的四元数
     """
     norm = jp.linalg.norm(quat, axis=-1, keepdims=True)
-    return jp.where(
-        norm > 1e-8,
-        quat / norm,
-        jp.array([1.0, 0.0, 0.0, 0.0])
-    )
+    return jp.where(norm > 1e-8, quat / norm, jp.array([1.0, 0.0, 0.0, 0.0]))
 
 
 def wrap_to_pi(angles: jax.Array) -> jax.Array:
@@ -89,10 +80,7 @@ def wrap_to_pi(angles: jax.Array) -> jax.Array:
 # ==================== 接触检测辅助函数 ====================
 
 
-def get_feet_contacts(
-    contact_sensors: jax.Array,
-    threshold: float = 1.0
-) -> jax.Array:
+def get_feet_contacts(contact_sensors: jax.Array, threshold: float = 1.0) -> jax.Array:
     """从传感器数据中提取脚部接触状态
 
     Args:
@@ -123,9 +111,7 @@ def get_feet_contacts(
 
 
 def compute_forward_velocity_reward(
-    base_linvel: jax.Array,
-    target_velocity: float,
-    tolerance: float = 0.5
+    base_linvel: jax.Array, target_velocity: float, tolerance: float = 0.5
 ) -> jax.Array:
     """计算前向速度奖励
 
@@ -145,9 +131,7 @@ def compute_forward_velocity_reward(
 # ==================== 步态相关奖励 ====================
 
 
-def compute_gait_symmetry_reward(
-    contacts: jax.Array
-) -> jax.Array:
+def compute_gait_symmetry_reward(contacts: jax.Array) -> jax.Array:
     """计算步态对称性奖励
 
     奖励左右脚交替接触的步态模式。
@@ -174,7 +158,7 @@ def compute_foot_clearance_reward(
     feet_positions: jax.Array,
     contacts: jax.Array,
     target_clearance: float = 0.05,
-    tolerance: float = 0.02
+    tolerance: float = 0.02,
 ) -> jax.Array:
     """计算脚部抬高奖励
 
@@ -195,7 +179,7 @@ def compute_foot_clearance_reward(
     feet_heights = feet_positions[..., 2]  # Z坐标
 
     # 只在摆动相（脚离地）时计算
-    swing_phase = (1.0 - contacts.astype(jp.float32))
+    swing_phase = 1.0 - contacts.astype(jp.float32)
 
     # 计算高度误差
     height_error = jp.abs(feet_heights - target_clearance)
@@ -212,9 +196,7 @@ def compute_foot_clearance_reward(
 
 
 def compute_trunk_height_reward(
-    torso_z: jax.Array,
-    target_height: float = 0.35,
-    tolerance: float = 0.08
+    torso_z: jax.Array, target_height: float = 0.35, tolerance: float = 0.08
 ) -> jax.Array:
     """计算躯干高度保持奖励（行走时）
 
@@ -233,8 +215,7 @@ def compute_trunk_height_reward(
 
 
 def compute_trunk_orientation_penalty(
-    quat: jax.Array,
-    max_tilt: float = 0.3
+    quat: jax.Array, max_tilt: float = 0.3
 ) -> jax.Array:
     """计算躯干过度倾斜惩罚
 
@@ -258,9 +239,7 @@ def compute_trunk_orientation_penalty(
     return roll_penalty + pitch_penalty
 
 
-def compute_trunk_lin_vel_z_penalty(
-    base_linvel: jax.Array
-) -> jax.Array:
+def compute_trunk_lin_vel_z_penalty(base_linvel: jax.Array) -> jax.Array:
     """计算躯干Z方向速度惩罚
 
     行走时躯干应该平稳移动，避免大幅度上下跳动。
@@ -278,9 +257,7 @@ def compute_trunk_lin_vel_z_penalty(
 
 
 def compute_drag_penalty(
-    feet_positions: jax.Array,
-    contacts: jax.Array,
-    drag_height_threshold: float = 0.02
+    feet_positions: jax.Array, contacts: jax.Array, drag_height_threshold: float = 0.02
 ) -> jax.Array:
     """计算拖地惩罚
 
@@ -295,7 +272,7 @@ def compute_drag_penalty(
         拖地惩罚值
     """
     feet_heights = feet_positions[..., 2]
-    swing_phase = (1.0 - contacts.astype(jp.float32))
+    swing_phase = 1.0 - contacts.astype(jp.float32)
 
     # 检测拖地：在摆动相但高度太低
     is_dragging = (feet_heights < drag_height_threshold) * swing_phase
@@ -306,10 +283,7 @@ def compute_drag_penalty(
 # ==================== 能量效率惩罚 ====================
 
 
-def compute_action_rate_penalty(
-    action: jax.Array,
-    last_action: jax.Array
-) -> jax.Array:
+def compute_action_rate_penalty(action: jax.Array, last_action: jax.Array) -> jax.Array:
     """计算动作变化率惩罚
 
     鼓励平滑的动作变化。
@@ -346,7 +320,7 @@ def compute_gait_periodicity_reward(
     phase: jax.Array,
     stance_duration: float = 0.6,
     swing_duration: float = 0.4,
-    tolerance: float = 0.1
+    tolerance: float = 0.1,
 ) -> jax.Array:
     """计算步态周期性奖励"""
     expected_contact = (phase < stance_duration).astype(jp.float32)
@@ -360,7 +334,7 @@ def compute_swing_trajectory_reward(
     contacts: jax.Array,
     phase: jax.Array,
     target_height: float = 0.08,
-    swing_start_phase: float = 0.6
+    swing_start_phase: float = 0.6,
 ) -> jax.Array:
     """计算摆动轨迹奖励"""
     feet_z = feet_positions[..., 2]
@@ -377,7 +351,7 @@ def compute_landing_impact_reward(
     contact_forces: jax.Array,
     landing_events: jax.Array,
     max_impact_force: float = 500.0,
-    tolerance: float = 100.0
+    tolerance: float = 100.0,
 ) -> jax.Array:
     """计算着地冲击奖励"""
     impact = contact_forces * landing_events
@@ -389,7 +363,7 @@ def compute_energy_efficiency_reward(
     torques: jax.Array,
     joint_velocities: jax.Array,
     target_efficiency: float = 0.8,
-    penalty_weight: float = 0.001
+    penalty_weight: float = 0.001,
 ) -> jax.Array:
     """计算能量效率奖励"""
     mechanical_power = jp.sum(jp.abs(torques * joint_velocities), axis=-1)
@@ -405,14 +379,19 @@ def compute_stability_reward(
     base_angvel: jax.Array,
     target_height: float = 0.35,
     height_tolerance: float = 0.05,
-    angular_velocity_penalty: float = 1.0
+    angular_velocity_penalty: float = 1.0,
 ) -> jax.Array:
     """计算综合稳定性奖励"""
     height_error = jp.abs(torso_z - target_height)
     height_reward = jp.exp(-height_error / height_tolerance)
     ang_vel_mag = jp.linalg.norm(base_angvel, axis=-1)
     ang_vel_reward = jp.exp(-ang_vel_mag * angular_velocity_penalty)
-    w, x, y, z = base_quat[..., 0], base_quat[..., 1], base_quat[..., 2], base_quat[..., 3]
+    w, x, y, z = (
+        base_quat[..., 0],
+        base_quat[..., 1],
+        base_quat[..., 2],
+        base_quat[..., 3],
+    )
     projected_gravity_x = 2 * (x * z - w * y)
     projected_gravity_y = 2 * (y * z + w * x)
     orientation_error = jp.square(projected_gravity_x) + jp.square(projected_gravity_y)
@@ -424,7 +403,7 @@ def compute_velocity_tracking_reward(
     actual_velocity: jax.Array,
     command: jax.Array,
     tracking_weights: Tuple[float, float, float] = (1.0, 0.5, 0.5),
-    tolerance: float = 0.1
+    tolerance: float = 0.1,
 ) -> jax.Array:
     """计算增强速度跟踪奖励"""
     error = actual_velocity - command
@@ -543,21 +522,15 @@ def compute_walking_reward(
     contacts = get_feet_contacts(contact_sensors)
 
     # 计算各项奖励
-    reward_forward_vel = compute_forward_velocity_reward(
-        base_linvel, target_velocity
-    )
+    reward_forward_vel = compute_forward_velocity_reward(base_linvel, target_velocity)
     reward_gait_symmetry = compute_gait_symmetry_reward(contacts)
-    reward_trunk_height = compute_trunk_height_reward(
-        torso_z, target_height
-    )
+    reward_trunk_height = compute_trunk_height_reward(torso_z, target_height)
     penalty_orientation = compute_trunk_orientation_penalty(base_quat)
     penalty_lin_vel_z = compute_trunk_lin_vel_z_penalty(base_linvel)
 
     # 可选的脚部相关奖励/惩罚
     if feet_positions is not None:
-        reward_foot_clearance = compute_foot_clearance_reward(
-            feet_positions, contacts
-        )
+        reward_foot_clearance = compute_foot_clearance_reward(feet_positions, contacts)
         penalty_drag = compute_drag_penalty(feet_positions, contacts)
     else:
         reward_foot_clearance = jp.array(0.0)
@@ -580,7 +553,11 @@ def compute_walking_reward(
     # ==================== 核心奖励 ====================
 
     # 1. 速度跟踪（使用多轴跟踪或单轴）
-    if "velocity_tracking" in reward_weights and command is not None and actual_velocity is not None:
+    if (
+        "velocity_tracking" in reward_weights
+        and command is not None
+        and actual_velocity is not None
+    ):
         # 多轴速度跟踪（阶段3）
         tracking_reward = compute_velocity_tracking_reward(
             actual_velocity, command, tracking_weights=(2.0, 0.5, 0.3)
@@ -615,12 +592,16 @@ def compute_walking_reward(
 
     # 7. 脚部空中时间（新增，阶段2-3）
     if "feet_air_time" in reward_weights and contact_history is not None:
-        air_time_reward = compute_feet_air_time_reward(contact_history, target_duty_cycle=0.5)
+        air_time_reward = compute_feet_air_time_reward(
+            contact_history, target_duty_cycle=0.5
+        )
         reward += reward_weights["feet_air_time"] * air_time_reward
 
     # 8. 接触力平衡（新增，阶段2-3）
     if "feet_contact_forces" in reward_weights:
-        contact_reward = compute_contact_force_balance_reward(contact_sensors, target_force=50.0)
+        contact_reward = compute_contact_force_balance_reward(
+            contact_sensors, target_force=50.0
+        )
         reward += reward_weights["feet_contact_forces"] * contact_reward
 
     # ==================== 约束和惩罚 ====================
@@ -635,18 +616,32 @@ def compute_walking_reward(
 
     # 11. 脚部滑动惩罚（新增，阶段2-3）
     if "feet_slide" in reward_weights and feet_velocities is not None:
-        slide_penalty = compute_feet_slide_penalty(feet_velocities, get_feet_contacts(contact_sensors), slide_threshold=0.1)
+        slide_penalty = compute_feet_slide_penalty(
+            feet_velocities, get_feet_contacts(contact_sensors), slide_threshold=0.1
+        )
         reward += reward_weights["feet_slide"] * slide_penalty
 
     # 12. 绊脚惩罚（新增，阶段2-3）
-    if "stumbling" in reward_weights and feet_positions is not None and feet_velocities is not None:
+    if (
+        "stumbling" in reward_weights
+        and feet_positions is not None
+        and feet_velocities is not None
+    ):
         feet_heights = feet_positions[..., 2]
-        stumble_penalty = compute_stumbling_penalty(feet_heights, feet_velocities, stumble_threshold=0.02)
+        stumble_penalty = compute_stumbling_penalty(
+            feet_heights, feet_velocities, stumble_threshold=0.02
+        )
         reward += reward_weights["stumbling"] * stumble_penalty
 
     # 13. 关节限位惩罚（新增，阶段1-2）
-    if "joint_limits" in reward_weights and joint_limits is not None and joint_pos is not None:
-        limits_penalty = compute_joint_limits_penalty(joint_pos, joint_limits[0], joint_limits[1], margin=0.1)
+    if (
+        "joint_limits" in reward_weights
+        and joint_limits is not None
+        and joint_pos is not None
+    ):
+        limits_penalty = compute_joint_limits_penalty(
+            joint_pos, joint_limits[0], joint_limits[1], margin=0.1
+        )
         reward += reward_weights["joint_limits"] * limits_penalty
 
     # 14. 关节对称性奖励（新增，阶段2-3）
@@ -669,7 +664,9 @@ def compute_walking_reward(
         # 兼容性：joint_vel 或 joint_velocities
         jvel = joint_vel if joint_vel is not None else joint_velocities
         if jvel is not None and torques is not None:
-            efficiency_reward = compute_energy_efficiency_reward(torques, jvel, target_efficiency=0.8, penalty_weight=0.001)
+            efficiency_reward = compute_energy_efficiency_reward(
+                torques, jvel, target_efficiency=0.8, penalty_weight=0.001
+            )
             reward += reward_weights["energy_efficiency"] * efficiency_reward
 
     # ==================== 存活和其他 ====================
@@ -683,34 +680,50 @@ def compute_walking_reward(
     # 19. 步态周期性奖励（需要相位信息）
     if "gait_periodicity" in reward_weights and phase is not None:
         periodicity_reward = compute_gait_periodicity_reward(
-            get_feet_contacts(contact_sensors), phase,
-            stance_duration=0.6, swing_duration=0.4, tolerance=0.1
+            get_feet_contacts(contact_sensors),
+            phase,
+            stance_duration=0.6,
+            swing_duration=0.4,
+            tolerance=0.1,
         )
         reward += reward_weights["gait_periodicity"] * periodicity_reward
 
     # 20. 摆动轨迹奖励
-    if "swing_trajectory" in reward_weights and phase is not None and feet_positions is not None:
+    if (
+        "swing_trajectory" in reward_weights
+        and phase is not None
+        and feet_positions is not None
+    ):
         trajectory_reward = compute_swing_trajectory_reward(
-            feet_positions, get_feet_contacts(contact_sensors), phase,
-            target_height=0.08, swing_start_phase=0.6
+            feet_positions,
+            get_feet_contacts(contact_sensors),
+            phase,
+            target_height=0.08,
+            swing_start_phase=0.6,
         )
         reward += reward_weights["swing_trajectory"] * trajectory_reward
 
     # 21. 着地冲击控制
-    if "landing_impact" in reward_weights and landing_events is not None and contact_forces is not None:
+    if (
+        "landing_impact" in reward_weights
+        and landing_events is not None
+        and contact_forces is not None
+    ):
         impact_reward = compute_landing_impact_reward(
-            contact_forces, landing_events,
-            max_impact_force=500.0, tolerance=100.0
+            contact_forces, landing_events, max_impact_force=500.0, tolerance=100.0
         )
         reward += reward_weights["landing_impact"] * impact_reward
 
     # 22. 综合稳定性
     if "stability" in reward_weights:
         stability_reward = compute_stability_reward(
-            torso_z, base_quat, base_linvel, base_angvel,
+            torso_z,
+            base_quat,
+            base_linvel,
+            base_angvel,
             target_height=target_height,
             height_tolerance=0.05,
-            angular_velocity_penalty=1.0
+            angular_velocity_penalty=1.0,
         )
         reward += reward_weights["stability"] * stability_reward
 
@@ -755,8 +768,8 @@ def check_walking_termination(
     roll, pitch = euler[..., 0], euler[..., 1]
 
     height_fail = torso_z < height_threshold
-    orientation_fail = (
-        (jp.abs(roll) > angle_threshold) | (jp.abs(pitch) > angle_threshold)
+    orientation_fail = (jp.abs(roll) > angle_threshold) | (
+        jp.abs(pitch) > angle_threshold
     )
 
     return height_fail | orientation_fail
@@ -799,8 +812,7 @@ def compute_termination_penalty() -> jax.Array:
 
 
 def compute_upright_bonus(
-    base_quat: jax.Array,
-    threshold: float = 0.93  # cos(20°)
+    base_quat: jax.Array, threshold: float = 0.93  # cos(20°)
 ) -> jax.Array:
     """直立姿态奖励（参考 Isaac Lab）
 
@@ -814,7 +826,12 @@ def compute_upright_bonus(
         奖励值，范围 [0, 1]
     """
     # 提取 Z 轴在世界坐标系中的方向
-    qw, qx, qy, qz = base_quat[..., 0], base_quat[..., 1], base_quat[..., 2], base_quat[..., 3]
+    qw, qx, qy, qz = (
+        base_quat[..., 0],
+        base_quat[..., 1],
+        base_quat[..., 2],
+        base_quat[..., 3],
+    )
 
     # 计算 Z 轴方向向量 (旋转后的 [0, 0, 1])
     z_x = 2.0 * (qx * qz + qw * qy)
@@ -832,7 +849,7 @@ def compute_upright_bonus(
 def compute_feet_slide_penalty(
     feet_linvel: jax.Array,  # 脚部线速度 (n_feet, 3)
     contact_sensors: jax.Array,  # 接触传感器 (n_feet,)
-    slide_threshold: float = 0.1
+    slide_threshold: float = 0.1,
 ) -> jax.Array:
     """脚部滑动惩罚（参考 Isaac Lab H1）
 
@@ -855,14 +872,16 @@ def compute_feet_slide_penalty(
     is_sliding = (slide_velocity > slide_threshold) & is_contact
 
     # 计算惩罚（归一化到每只脚）
-    penalty = jp.sum(is_sliding.astype(jp.float32) * slide_velocity) / jp.maximum(len(contact_sensors), 1)
+    penalty = jp.sum(is_sliding.astype(jp.float32) * slide_velocity) / jp.maximum(
+        len(contact_sensors), 1
+    )
     return penalty
 
 
 def compute_joint_symmetry_reward(
     joint_pos: jax.Array,  # 关节位置 (n_joints,)
     right_indices: tuple = None,  # 右侧关节索引（可选，自动推断）
-    left_indices: tuple = None,   # 左侧关节索引（可选，自动推断）
+    left_indices: tuple = None,  # 左侧关节索引（可选，自动推断）
     mirror_signs: jax.Array = None,  # 镜像系数（可选，+1或-1）
 ) -> jax.Array:
     """关节镜像对称性奖励（支持双足和全身人形机器人）
@@ -938,7 +957,7 @@ def compute_joint_symmetry_reward(
 def compute_stumbling_penalty(
     feet_heights: jax.Array,  # 脚部高度 (n_feet,)
     feet_velocities: jax.Array,  # 脚部速度 (n_feet, 3)
-    stumble_threshold: float = 0.02
+    stumble_threshold: float = 0.02,
 ) -> jax.Array:
     """绊脚检测惩罚
 
@@ -970,7 +989,7 @@ def compute_joint_limits_penalty(
     joint_pos: jax.Array,
     joint_limits_lower: jax.Array,  # 从模型中提取
     joint_limits_upper: jax.Array,
-    margin: float = 0.1  # 10% 边界容差
+    margin: float = 0.1,  # 10% 边界容差
 ) -> jax.Array:
     """关节接近限位惩罚
 
@@ -999,7 +1018,7 @@ def compute_joint_limits_penalty(
 
 def compute_contact_force_balance_reward(
     contact_forces: jax.Array,  # 接触力 (n_feet,)
-    target_force: float = 50.0  # 目标单脚承重 (N)
+    target_force: float = 50.0,  # 目标单脚承重 (N)
 ) -> jax.Array:
     """接触力平衡奖励
 
@@ -1023,7 +1042,7 @@ def compute_contact_force_balance_reward(
 
 def compute_feet_air_time_reward(
     contact_history: jax.Array,  # 接触历史 (history_length, n_feet)
-    target_duty_cycle: float = 0.5  # 期望接地率 50%
+    target_duty_cycle: float = 0.5,  # 期望接地率 50%
 ) -> jax.Array:
     """脚部空中时间奖励（参考 Isaac Lab）
 
@@ -1056,27 +1075,23 @@ def compute_feet_air_time_reward(
 # 优先级：存活 > 姿态 > 能量
 STAGE1_WEIGHTS = {
     # 核心目标：不摔倒
-    "termination": -200.0,            # 强力终止惩罚
-    "alive": 5.0,                     # 高存活奖励
-
+    "termination": -200.0,  # 强力终止惩罚
+    "alive": 5.0,  # 高存活奖励
     # 姿态控制
-    "upright_bonus": 2.0,             # 直立奖励
-    "trunk_height": 2.0,              # 保持目标高度
-    "orientation": -1.5,              # 严格姿态约束
-
+    "upright_bonus": 2.0,  # 直立奖励
+    "trunk_height": 2.0,  # 保持目标高度
+    "orientation": -1.5,  # 严格姿态约束
     # 抑制移动
-    "trunk_lin_vel_z": -1.0,          # 防止跳跃
-
+    "trunk_lin_vel_z": -1.0,  # 防止跳跃
     # 能量约束
-    "action_rate": -0.02,             # 鼓励平滑动作
-    "torques": -0.0002,               # 限制扭矩
-    "joint_limits": -0.2,             # 防止关节超限
-
+    "action_rate": -0.02,  # 鼓励平滑动作
+    "torques": -0.0002,  # 限制扭矩
+    "joint_limits": -0.2,  # 防止关节超限
     # 暂时禁用的项（减少干扰）
-    "forward_velocity": 0.0,          # 禁用
-    "gait_symmetry": 0.0,             # 禁用
-    "foot_clearance": 0.0,            # 禁用
-    "drag": 0.0,                      # 禁用
+    "forward_velocity": 0.0,  # 禁用
+    "gait_symmetry": 0.0,  # 禁用
+    "foot_clearance": 0.0,  # 禁用
+    "drag": 0.0,  # 禁用
 }
 
 
@@ -1086,30 +1101,26 @@ STAGE1_WEIGHTS = {
 STAGE2_WEIGHTS = {
     # 终止和存活
     "termination": -200.0,
-    "alive": 2.0,                     # 降低：不再是主要目标
-
+    "alive": 2.0,  # 降低：不再是主要目标
     # 步态发展（核心）
-    "gait_symmetry": 1.5,             # 激活：步态对称性
-    "foot_clearance": 0.8,            # 激活：抬脚奖励
-    "feet_contact_forces": 0.3,       # 接触力平衡
-    "feet_air_time": 0.5,             # 鼓励摆动相
-
+    "gait_symmetry": 1.5,  # 激活：步态对称性
+    "foot_clearance": 0.8,  # 激活：抬脚奖励
+    "feet_contact_forces": 0.3,  # 接触力平衡
+    "feet_air_time": 0.5,  # 鼓励摆动相
     # 速度跟踪
-    "forward_velocity": 1.0,          # 激活：低权重速度奖励
-
+    "forward_velocity": 1.0,  # 激活：低权重速度奖励
     # 姿态稳定
-    "upright_bonus": 0.5,             # 降低：已学会
-    "trunk_height": 1.0,              # 降低
-    "orientation": -0.8,              # 降低：允许更多自由度
-
+    "upright_bonus": 0.5,  # 降低：已学会
+    "trunk_height": 1.0,  # 降低
+    "orientation": -0.8,  # 降低：允许更多自由度
     # 能量和平滑
     "trunk_lin_vel_z": -0.5,
-    "drag": -0.8,                     # 激活：防拖地
-    "feet_slide": -0.8,               # 防滑动
+    "drag": -0.8,  # 激活：防拖地
+    "feet_slide": -0.8,  # 防滑动
     "action_rate": -0.01,
     "torques": -0.0001,
-    "joint_symmetry": 0.2,            # 关节对称性
-    "stumbling": -0.5,                # 防绊脚
+    "joint_symmetry": 0.2,  # 关节对称性
+    "stumbling": -0.5,  # 防绊脚
 }
 
 
@@ -1119,36 +1130,30 @@ STAGE2_WEIGHTS = {
 STAGE3_WEIGHTS = {
     # 终止和存活
     "termination": -200.0,
-    "alive": 0.3,                     # 进一步降低
-
+    "alive": 0.3,  # 进一步降低
     # 速度跟踪（主任务）
-    "velocity_tracking": 2.0,         # 多轴跟踪
-
+    "velocity_tracking": 2.0,  # 多轴跟踪
     # 步态质量
     "gait_symmetry": 0.3,
     "foot_clearance": 0.2,
     "feet_air_time": 0.25,
     "feet_contact_forces": 0.1,
-
     # 姿态稳定
-    "trunk_height": 0.8,              # 提升：恢复严格要求
-    "orientation": -0.5,              # 提升
-    "upright_bonus": 0.0,             # 禁用（已内含在orientation中）
-
+    "trunk_height": 0.8,  # 提升：恢复严格要求
+    "orientation": -0.5,  # 提升
+    "upright_bonus": 0.0,  # 禁用（已内含在orientation中）
     # 约束和惩罚
     "trunk_lin_vel_z": -0.5,
     "drag": -1.0,
     "feet_slide": -0.5,
-    "stumbling": -0.8,                # 加强
-
+    "stumbling": -0.8,  # 加强
     # 能量效率
     "action_rate": -0.01,
-    "torques": -0.001,                # 提升：更重视能量
-    "energy_efficiency": 0.001,       # 激活：机械功率优化
+    "torques": -0.001,  # 提升：更重视能量
+    "energy_efficiency": 0.001,  # 激活：机械功率优化
     "joint_symmetry": 0.15,
     "joint_limits": -0.1,
-
     # 增强项（可选，需要额外传感器数据）
-    "landing_impact": 0.2,            # 激活：着地冲击控制
-    "stability": 0.1,                 # 激活：综合稳定性
+    "landing_impact": 0.2,  # 激活：着地冲击控制
+    "stability": 0.1,  # 激活：综合稳定性
 }

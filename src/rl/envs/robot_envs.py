@@ -14,16 +14,20 @@ from rich.console import Console
 
 from .mjx_base_env import EnvState, MJXBaseEnv
 
+
 # 简单的四元数乘法函数 (q1 * q2)
 def quaternion_multiply(q1, q2):
     w1, x1, y1, z1 = q1
     w2, x2, y2, z2 = q2
-    return jp.array([
-        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
-        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
-        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
-        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
-    ])
+    return jp.array(
+        [
+            w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+            w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+            w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+            w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+        ]
+    )
+
 
 console = Console()
 
@@ -115,8 +119,7 @@ class VelocityTrackingEnv(MJXBaseEnv):
 
         # 找到传感器
         sensor_names = [
-            mujoco.mj_id2name(
-                model, mujoco.mjtObj.mjOBJ_SENSOR, i) or f"sensor_{i}"
+            mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_SENSOR, i) or f"sensor_{i}"
             for i in range(model.nsensor)
         ]
 
@@ -199,12 +202,11 @@ class VelocityTrackingEnv(MJXBaseEnv):
 
         # 尝试获取home keyframe
         try:
-            home_key_id = mujoco.mj_name2id(
-                model, mujoco.mjtObj.mjOBJ_KEY, "home")
+            home_key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
                 self.default_qpos = jp.array(
                     model.key_qpos[
-                        home_key_id * model.nq: (home_key_id + 1) * model.nq
+                        home_key_id * model.nq : (home_key_id + 1) * model.nq
                     ]
                 )
         except:
@@ -243,10 +245,10 @@ class VelocityTrackingEnv(MJXBaseEnv):
             # 随机化xy位置: ±0.05m
             dxy = jax.random.uniform(key1, (2,), minval=-0.05, maxval=0.05)
             base_xy = qpos[
-                self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
+                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
             ]
             qpos = qpos.at[
-                self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
+                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
             ].set(base_xy + dxy)
 
             # 随机化yaw角度: ±π（生成标准坐标系的旋转）
@@ -264,18 +266,17 @@ class VelocityTrackingEnv(MJXBaseEnv):
             quat_physical = jp.where(
                 quat_norm > 1e-8,
                 quat_physical / quat_norm,
-                jp.array([0.70710678, 0.70710678, 0.0, 0.0])  # 默认为 Jiyuan 直立姿态
+                jp.array([0.70710678, 0.70710678, 0.0, 0.0]),  # 默认为 Jiyuan 直立姿态
             )
             # freejoint的四元数从索引3开始 (位置: 0-2, 四元数: 3-6)
             qpos = qpos.at[
-                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
             ].set(quat_physical)
 
         # 随机化关节位置: ±0.1 rad
         rng, key4 = jax.random.split(rng)
         if self.nu > 0:
-            joint_noise = jax.random.uniform(
-                key4, (self.nu,), minval=-0.1, maxval=0.1)
+            joint_noise = jax.random.uniform(key4, (self.nu,), minval=-0.1, maxval=0.1)
 
             # 使用actuator索引更新关节位置
             # 将Python列表转换为JAX数组进行索引
@@ -305,16 +306,16 @@ class VelocityTrackingEnv(MJXBaseEnv):
         # 这里简化处理：仿真中直接使用qpos，实际部署时需要替换为IMU融合输出
         if self.floating_base_qpos_addr is not None:
             base_quat = qpos[
-                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
             ]
             # 确保四元数归一化（防止除零）
             quat_norm = jp.linalg.norm(base_quat)
             base_quat = jp.where(
                 quat_norm > 1e-8,
                 base_quat / quat_norm,
-                jp.array([1.0, 0.0, 0.0, 0.0])  # 默认四元数（无旋转）
+                jp.array([1.0, 0.0, 0.0, 0.0]),  # 默认四元数（无旋转）
             )
-            
+
             # [CRITICAL FIX] 校正 Jiyuan 坐标系
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
@@ -323,11 +324,11 @@ class VelocityTrackingEnv(MJXBaseEnv):
 
         # 2. 浮动基座角速度 - 从IMU陀螺仪读取
         if self.gyro_idx is not None:
-            base_angvel = sensordata[self.gyro_idx:self.gyro_idx + 3]
+            base_angvel = sensordata[self.gyro_idx : self.gyro_idx + 3]
         elif self.floating_base_qvel_addr is not None:
             # 降级方案：使用qvel（仅用于仿真，真实硬件必须有IMU）
             base_angvel = qvel[
-                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
+                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
             ]
         else:
             base_angvel = jp.zeros(3)
@@ -340,7 +341,7 @@ class VelocityTrackingEnv(MJXBaseEnv):
         # 这里仍使用qvel作为ground truth，实际部署时需要替换
         if self.floating_base_qvel_addr is not None:
             base_linvel = qvel[
-                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
+                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
             ]
         else:
             base_linvel = jp.zeros(3)
@@ -387,10 +388,10 @@ class VelocityTrackingEnv(MJXBaseEnv):
         qvel = pipeline_state.qvel
         if self.floating_base_qvel_addr is not None:
             base_linvel = qvel[
-                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
+                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
             ]
             base_angvel = qvel[
-                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
+                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
             ]
         else:
             base_linvel = jp.zeros(3)
@@ -460,14 +461,16 @@ class VelocityTrackingEnv(MJXBaseEnv):
 
         # 提取实际速度（基座线速度和角速度）
         # qvel: [base_vx, base_vy, base_vz, base_wx, base_wy, base_wz, joint_vels...]
-        base_lin_vel = pipeline_state.qvel[:3]   # [vx, vy, vz]
+        base_lin_vel = pipeline_state.qvel[:3]  # [vx, vy, vz]
         base_ang_vel = pipeline_state.qvel[3:6]  # [wx, wy, wz]
 
-        info["actual_velocity"] = jp.array([
-            base_lin_vel[0],   # actual_vx
-            base_lin_vel[1],   # actual_vy
-            base_ang_vel[2],   # actual_vyaw (wz)
-        ])
+        info["actual_velocity"] = jp.array(
+            [
+                base_lin_vel[0],  # actual_vx
+                base_lin_vel[1],  # actual_vy
+                base_ang_vel[2],  # actual_vyaw (wz)
+            ]
+        )
 
         return info
 
@@ -569,9 +572,8 @@ class StandingEnv(MJXBaseEnv):
         """
         # 统一从 standing_rewards 导入
         from ..rewards.standing_rewards import (
-            DEFAULT_STANDING_REWARD_WEIGHTS,
-            compute_standing_reward
-        )
+            DEFAULT_STANDING_REWARD_WEIGHTS, compute_standing_reward)
+
         self._compute_reward_fn = compute_standing_reward
         default_weights = DEFAULT_STANDING_REWARD_WEIGHTS
 
@@ -624,12 +626,12 @@ class StandingEnv(MJXBaseEnv):
 
         # 尝试获取home keyframe
         try:
-            home_key_id = mujoco.mj_name2id(
-                model, mujoco.mjtObj.mjOBJ_KEY, "home")
+            home_key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
                 self.default_qpos = jp.array(
-                    model.key_qpos[home_key_id *
-                                   model.nq: (home_key_id + 1) * model.nq]
+                    model.key_qpos[
+                        home_key_id * model.nq : (home_key_id + 1) * model.nq
+                    ]
                 )
         except Exception:
             pass
@@ -664,10 +666,12 @@ class StandingEnv(MJXBaseEnv):
 
             # 随机化xy位置: ±0.02m
             dxy = jax.random.uniform(key1, (2,), minval=-0.02, maxval=0.02)
-            base_xy = qpos[self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2]
-            qpos = qpos.at[self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2].set(
-                base_xy + dxy
-            )
+            base_xy = qpos[
+                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
+            ]
+            qpos = qpos.at[
+                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
+            ].set(base_xy + dxy)
 
             # 随机化yaw: ±0.1 rad（生成标准坐标系的旋转）
             yaw = jax.random.uniform(key2, minval=-0.1, maxval=0.1)
@@ -684,17 +688,18 @@ class StandingEnv(MJXBaseEnv):
             quat_physical = jp.where(
                 quat_norm > 1e-8,
                 quat_physical / quat_norm,
-                jp.array([0.70710678, 0.70710678, 0.0, 0.0])  # 默认为 Jiyuan 直立姿态
+                jp.array([0.70710678, 0.70710678, 0.0, 0.0]),  # 默认为 Jiyuan 直立姿态
             )
-            qpos = qpos.at[self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7].set(
-                quat_physical
-            )
+            qpos = qpos.at[
+                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+            ].set(quat_physical)
 
         # 随机化关节位置: ±0.05 rad
         rng, key3 = jax.random.split(rng)
         if self.nu > 0:
             joint_noise = jax.random.uniform(
-                key3, (self.nu,), minval=-0.05, maxval=0.05)
+                key3, (self.nu,), minval=-0.05, maxval=0.05
+            )
             indices = jp.array(self.actuator_qpos_indices)
             joint_pos = qpos[indices]
             qpos = qpos.at[indices].set(joint_pos + joint_noise)
@@ -720,16 +725,15 @@ class StandingEnv(MJXBaseEnv):
 
         # 浮动基座姿态和速度
         if self.floating_base_qpos_addr is not None:
-            base_quat = qpos[self.floating_base_qpos_addr +
-                             3: self.floating_base_qpos_addr + 7]
+            base_quat = qpos[
+                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+            ]
             # 归一化四元数（防止除零）
             quat_norm = jp.linalg.norm(base_quat)
             base_quat = jp.where(
-                quat_norm > 1e-8,
-                base_quat / quat_norm,
-                jp.array([1.0, 0.0, 0.0, 0.0])
+                quat_norm > 1e-8, base_quat / quat_norm, jp.array([1.0, 0.0, 0.0, 0.0])
             )
-            
+
             # [CRITICAL FIX] 校正 Jiyuan 坐标系
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
@@ -737,10 +741,12 @@ class StandingEnv(MJXBaseEnv):
             base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
 
         if self.floating_base_qvel_addr is not None:
-            base_linvel = qvel[self.floating_base_qvel_addr:
-                               self.floating_base_qvel_addr + 3]
-            base_angvel = qvel[self.floating_base_qvel_addr +
-                               3: self.floating_base_qvel_addr + 6]
+            base_linvel = qvel[
+                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
+            ]
+            base_angvel = qvel[
+                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
+            ]
         else:
             base_linvel = jp.zeros(3)
             base_angvel = jp.zeros(3)
@@ -751,14 +757,16 @@ class StandingEnv(MJXBaseEnv):
         joint_pos = qpos[qpos_indices]
         joint_vel = qvel[qvel_indices]
 
-        obs = jp.concatenate([
-            base_quat,      # 4
-            base_linvel,    # 3
-            base_angvel,    # 3
-            joint_pos,      # nu
-            joint_vel,      # nu
-            action,         # nu
-        ])
+        obs = jp.concatenate(
+            [
+                base_quat,  # 4
+                base_linvel,  # 3
+                base_angvel,  # 3
+                joint_pos,  # nu
+                joint_vel,  # nu
+                action,  # nu
+            ]
+        )
 
         # NaN/Inf 检测和替换（防止训练初期数值问题）
         obs = jp.nan_to_num(obs, nan=0.0, posinf=1e6, neginf=-1e6)
@@ -787,19 +795,26 @@ class StandingEnv(MJXBaseEnv):
         # 获取躯干状态
         if self.floating_base_qpos_addr is not None:
             torso_z = qpos[self.floating_base_qpos_addr + 2]
-            base_quat = qpos[self.floating_base_qpos_addr +
-                             3: self.floating_base_qpos_addr + 7]
+            base_quat = qpos[
+                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+            ]
         else:
             torso_z = self.target_height
             base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
 
         if self.floating_base_qvel_addr is not None:
-            base_linvel = qvel[self.floating_base_qvel_addr:
-                               self.floating_base_qvel_addr + 3]
-            base_angvel = qvel[self.floating_base_qvel_addr +
-                               3: self.floating_base_qvel_addr + 6]
+            base_linvel = qvel[
+                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
+            ]
+            base_angvel = qvel[
+                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
+            ]
             # 计算加速度
-            base_linacc = (base_linvel - prev_state.base_linvel) / self.dt if hasattr(prev_state, 'base_linvel') else jp.zeros(3)
+            base_linacc = (
+                (base_linvel - prev_state.base_linvel) / self.dt
+                if hasattr(prev_state, "base_linvel")
+                else jp.zeros(3)
+            )
         else:
             base_linvel = jp.zeros(3)
             base_angvel = jp.zeros(3)
@@ -809,15 +824,15 @@ class StandingEnv(MJXBaseEnv):
 
         # 基础参数
         reward_params = {
-            'torso_z': torso_z,
-            'base_quat': base_quat,
-            'base_linvel': base_linvel,
-            'base_angvel': base_angvel,
-            'action': action,
-            'last_action': prev_state.last_action,
-            'torques': torques,
-            'target_height': self.target_height,
-            'reward_weights': self.reward_weights,
+            "torso_z": torso_z,
+            "base_quat": base_quat,
+            "base_linvel": base_linvel,
+            "base_angvel": base_angvel,
+            "action": action,
+            "last_action": prev_state.last_action,
+            "torques": torques,
+            "target_height": self.target_height,
+            "reward_weights": self.reward_weights,
         }
 
         return self._compute_reward_fn(**reward_params)
@@ -840,13 +855,14 @@ class StandingEnv(MJXBaseEnv):
 
         if self.floating_base_qpos_addr is not None:
             torso_z = qpos[self.floating_base_qpos_addr + 2]
-            base_quat = qpos[self.floating_base_qpos_addr +
-                             3: self.floating_base_qpos_addr + 7]
-                             
+            base_quat = qpos[
+                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+            ]
+
             # [CRITICAL FIX] 校正 Jiyuan 坐标系
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
-            
+
             return check_standing_termination(torso_z, base_quat)
         else:
             return jp.array(False)
@@ -965,7 +981,9 @@ class WalkingEnv(MJXBaseEnv):
             console.print(f"  动作维度: {self.action_size}")
             console.print(f"  目标速度: {target_velocity}m/s")
             console.print(f"  目标高度: {target_height}m")
-            console.print(f"  命令范围: x={cmd_x_range}, y={cmd_y_range}, yaw={cmd_yaw_range}")
+            console.print(
+                f"  命令范围: x={cmd_x_range}, y={cmd_y_range}, yaw={cmd_yaw_range}"
+            )
 
     def _extract_indices(self) -> None:
         """提取关键索引"""
@@ -994,8 +1012,7 @@ class WalkingEnv(MJXBaseEnv):
 
         # 找到传感器
         sensor_names = [
-            mujoco.mj_id2name(
-                model, mujoco.mjtObj.mjOBJ_SENSOR, i) or f"sensor_{i}"
+            mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_SENSOR, i) or f"sensor_{i}"
             for i in range(model.nsensor)
         ]
 
@@ -1026,13 +1043,11 @@ class WalkingEnv(MJXBaseEnv):
 
         # 尝试获取home keyframe
         try:
-            home_key_id = mujoco.mj_name2id(
-                model, mujoco.mjtObj.mjOBJ_KEY, "home"
-            )
+            home_key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
                 self.default_qpos = jp.array(
                     model.key_qpos[
-                        home_key_id * model.nq: (home_key_id + 1) * model.nq
+                        home_key_id * model.nq : (home_key_id + 1) * model.nq
                     ]
                 )
         except Exception:
@@ -1048,7 +1063,9 @@ class WalkingEnv(MJXBaseEnv):
         # 如果没有找到传感器，默认使用4个零值（与 _get_obs 保持一致）
         if num_contacts == 0:
             num_contacts = 4
-        self._observation_size = 4 + 3 + 3 + self.nu + self.nu + self.nu + 3 + num_contacts
+        self._observation_size = (
+            4 + 3 + 3 + self.nu + self.nu + self.nu + 3 + num_contacts
+        )
 
     @property
     def observation_size(self) -> int:
@@ -1074,10 +1091,10 @@ class WalkingEnv(MJXBaseEnv):
             # 随机化xy位置: ±0.02m
             dxy = jax.random.uniform(key1, (2,), minval=-0.02, maxval=0.02)
             base_xy = qpos[
-                self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
+                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
             ]
             qpos = qpos.at[
-                self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
+                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
             ].set(base_xy + dxy)
 
             # 随机化yaw: ±0.1 rad（生成标准坐标系的旋转）
@@ -1095,10 +1112,10 @@ class WalkingEnv(MJXBaseEnv):
             quat_physical = jp.where(
                 quat_norm > 1e-8,
                 quat_physical / quat_norm,
-                jp.array([0.70710678, 0.70710678, 0.0, 0.0])  # 默认为 Jiyuan 直立姿态
+                jp.array([0.70710678, 0.70710678, 0.0, 0.0]),  # 默认为 Jiyuan 直立姿态
             )
             qpos = qpos.at[
-                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
             ].set(quat_physical)
 
         # 随机化关节位置: ±0.05 rad
@@ -1134,16 +1151,14 @@ class WalkingEnv(MJXBaseEnv):
         # 浮动基座姿态和速度
         if self.floating_base_qpos_addr is not None:
             base_quat = qpos[
-                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
             ]
             # 确保四元数归一化（防止除零）
             quat_norm = jp.linalg.norm(base_quat)
             base_quat = jp.where(
-                quat_norm > 1e-8,
-                base_quat / quat_norm,
-                jp.array([1.0, 0.0, 0.0, 0.0])
+                quat_norm > 1e-8, base_quat / quat_norm, jp.array([1.0, 0.0, 0.0, 0.0])
             )
-            
+
             # [CRITICAL FIX] 校正 Jiyuan 坐标系
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
@@ -1152,10 +1167,10 @@ class WalkingEnv(MJXBaseEnv):
 
         if self.floating_base_qvel_addr is not None:
             base_linvel = qvel[
-                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
+                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
             ]
             base_angvel = qvel[
-                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
+                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
             ]
         else:
             base_linvel = jp.zeros(3)
@@ -1179,16 +1194,18 @@ class WalkingEnv(MJXBaseEnv):
         # 命令（此处为默认值，将在reset时设置）
         command = jp.array([self.target_velocity, 0.0, 0.0])
 
-        obs = jp.concatenate([
-            base_quat,       # 4
-            base_linvel,     # 3
-            base_angvel,     # 3
-            joint_pos,       # nu
-            joint_vel,       # nu
-            action,          # nu
-            command,         # 3
-            contact_data,    # num_contacts
-        ])
+        obs = jp.concatenate(
+            [
+                base_quat,  # 4
+                base_linvel,  # 3
+                base_angvel,  # 3
+                joint_pos,  # nu
+                joint_vel,  # nu
+                action,  # nu
+                command,  # 3
+                contact_data,  # num_contacts
+            ]
+        )
 
         # NaN/Inf 检测和替换（防止训练初期数值问题）
         obs = jp.nan_to_num(obs, nan=0.0, posinf=1e6, neginf=-1e6)
@@ -1275,7 +1292,7 @@ class WalkingEnv(MJXBaseEnv):
         if self.floating_base_qpos_addr is not None:
             torso_z = qpos[self.floating_base_qpos_addr + 2]
             base_quat = qpos[
-                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
             ]
 
             # [CRITICAL FIX] Jiyuan 机器人的 base_link 在 XML 中旋转了 90 度 (quat=[0.707, 0.707, 0, 0])
@@ -1291,10 +1308,10 @@ class WalkingEnv(MJXBaseEnv):
 
         if self.floating_base_qvel_addr is not None:
             base_linvel = qvel[
-                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
+                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
             ]
             base_angvel = qvel[
-                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
+                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
             ]
         else:
             base_linvel = jp.zeros(3)
@@ -1330,10 +1347,20 @@ class WalkingEnv(MJXBaseEnv):
         # 关节限位（从模型中提取）
         try:
             # actuator_joint_ids 在 _extract_indices 中定义
-            if hasattr(self, 'actuator_joint_ids'):
+            if hasattr(self, "actuator_joint_ids"):
                 joint_limits = (
-                    jp.array([self.mj_model.jnt_range[jid, 0] for jid in self.actuator_joint_ids]),
-                    jp.array([self.mj_model.jnt_range[jid, 1] for jid in self.actuator_joint_ids]),
+                    jp.array(
+                        [
+                            self.mj_model.jnt_range[jid, 0]
+                            for jid in self.actuator_joint_ids
+                        ]
+                    ),
+                    jp.array(
+                        [
+                            self.mj_model.jnt_range[jid, 1]
+                            for jid in self.actuator_joint_ids
+                        ]
+                    ),
                 )
             else:
                 joint_limits = None
@@ -1346,7 +1373,9 @@ class WalkingEnv(MJXBaseEnv):
         torques = pipeline_state.qfrc_actuator
 
         # 从info中获取命令（如果存在），否则使用默认值
-        command = prev_state.info.get("command", jp.array([self.target_velocity, 0.0, 0.0]))
+        command = prev_state.info.get(
+            "command", jp.array([self.target_velocity, 0.0, 0.0])
+        )
         target_vel = command[0]  # 使用命令的x分量作为目标速度
 
         return compute_walking_reward(
@@ -1390,13 +1419,13 @@ class WalkingEnv(MJXBaseEnv):
         if self.floating_base_qpos_addr is not None:
             torso_z = qpos[self.floating_base_qpos_addr + 2]
             base_quat = qpos[
-                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
             ]
-            
+
             # [CRITICAL FIX] 校正 Jiyuan 坐标系
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
-            
+
             return check_walking_termination(torso_z, base_quat)
         else:
             return jp.array(False)
@@ -1427,31 +1456,38 @@ class WalkingEnv(MJXBaseEnv):
         # 提取实际速度（基座线速度和角速度）
         if self.floating_base_qvel_addr is not None:
             base_lin_vel = pipeline_state.qvel[
-                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
+                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
             ]
             base_ang_vel = pipeline_state.qvel[
-                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
+                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
             ]
 
-            info["actual_velocity"] = jp.array([
-                base_lin_vel[0],   # actual_vx
-                base_lin_vel[1],   # actual_vy
-                base_ang_vel[2],   # actual_vyaw (wz)
-            ])
+            info["actual_velocity"] = jp.array(
+                [
+                    base_lin_vel[0],  # actual_vx
+                    base_lin_vel[1],  # actual_vy
+                    base_ang_vel[2],  # actual_vyaw (wz)
+                ]
+            )
 
         # 维护接触历史（滚动窗口）
         if self.contact_sensor_indices:
             contact_indices = jp.array(self.contact_sensor_indices)
-            current_contacts = (pipeline_state.sensordata[contact_indices] > 1.0).astype(jp.float32)
+            current_contacts = (
+                pipeline_state.sensordata[contact_indices] > 1.0
+            ).astype(jp.float32)
 
             # 获取之前的历史
             prev_history = state.info.get("contact_history", jp.zeros((10, 4)))
 
             # 更新：移除最旧的一步，添加当前接触状态
-            new_history = jp.concatenate([
-                prev_history[1:, :],  # 移除第一行
-                current_contacts[jp.newaxis, :],  # 添加当前状态
-            ], axis=0)
+            new_history = jp.concatenate(
+                [
+                    prev_history[1:, :],  # 移除第一行
+                    current_contacts[jp.newaxis, :],  # 添加当前状态
+                ],
+                axis=0,
+            )
 
             info["contact_history"] = new_history
 
@@ -1491,7 +1527,7 @@ class WalkingEnv(MJXBaseEnv):
         reward = jp.where(
             done,
             reward + termination_penalty,  # 终止时施加惩罚（termination通常为 -200.0）
-            reward
+            reward,
         )
 
         # 更新步数
@@ -1540,7 +1576,9 @@ class WalkingEnv(MJXBaseEnv):
 
         # 重新计算obs（包含命令）
         # 更新观测的最后3个元素为命令
-        obs = state.obs.at[-3-len(self.contact_sensor_indices):-len(self.contact_sensor_indices)].set(command)
+        obs = state.obs.at[
+            -3 - len(self.contact_sensor_indices) : -len(self.contact_sensor_indices)
+        ].set(command)
 
         # 更新state
         state = state.replace(

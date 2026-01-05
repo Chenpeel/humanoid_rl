@@ -150,7 +150,10 @@ def main():
     # 第一阶段：解析 --config 参数
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument(
-        "--config", type=str, default="configs/train.yaml", help="YAML配置文件路径"
+        "--config",
+        type=str,
+        default="configs/train/train_default.yaml",
+        help="YAML配置文件路径",
     )
     pre_args, remaining_argv = pre_parser.parse_known_args()
 
@@ -478,9 +481,7 @@ def main():
 
     # 确保有足够的更新次数用于调度
     if total_updates < 50:
-        console.print(
-            f"[red]错误: 总更新次数({total_updates})过少！需要增加总训练步数或减少batch size[/red]"
-        )
+        console.print(f"[red]错误: 总更新次数({total_updates})过少！需要增加总训练步数或减少batch size[/red]")
         # 自动调整：将总训练步数增加到保证至少100次更新
         required_timesteps = config.batch_size * 100
         console.print(
@@ -627,7 +628,8 @@ def main():
     else:
         console.print("[dim]首次编译，将创建缓存以加速后续训练[/dim]")
 
-    from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn
+    from rich.progress import (Progress, SpinnerColumn, TextColumn,
+                               TimeElapsedColumn)
 
     # ✅ 使用纯函数版本（支持持久化缓存）
     train_step_fn = create_train_step_fn(

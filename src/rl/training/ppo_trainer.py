@@ -110,7 +110,7 @@ class PPOTrainer:
             # 计算log概率（增强数值稳定性）
             action_diff = jp.clip((action - mean) / std, -100.0, 100.0)
             log_prob = -0.5 * jp.sum(
-                action_diff ** 2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
+                action_diff**2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
             )
             log_prob = jp.clip(log_prob, -1000.0, 100.0)  # 裁剪 log_prob
 
@@ -247,8 +247,7 @@ class PPOTrainer:
             # ✅ 梯度NaN保护：防止NaN梯度污染参数
             # 将梯度中的NaN/Inf替换为0（相当于跳过这次更新）
             grads = jax.tree.map(
-                lambda g: jp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0),
-                grads
+                lambda g: jp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0), grads
             )
 
             # 应用梯度
@@ -266,7 +265,9 @@ class PPOTrainer:
             perm = jax.random.permutation(rng, self.config.batch_size)
 
             # 将索引分成mini-batches
-            mb_indices = perm.reshape(self.config.num_minibatches, self.config.minibatch_size)
+            mb_indices = perm.reshape(
+                self.config.num_minibatches, self.config.minibatch_size
+            )
 
             # 使用scan更新所有mini-batches
             state, infos = jax.lax.scan(update_minibatch, state, mb_indices)
@@ -278,10 +279,7 @@ class PPOTrainer:
 
         # 使用scan执行多个epochs
         train_state, infos = jax.lax.scan(
-            update_epoch,
-            train_state,
-            None,
-            length=self.config.num_epochs
+            update_epoch, train_state, None, length=self.config.num_epochs
         )
 
         # 平均所有epoch的指标
@@ -319,6 +317,7 @@ class PPOTrainer:
 
 
 # ==================== 纯函数版本（用于 JIT 持久化缓存） ====================
+
 
 def create_train_step_fn(config: PPOConfig, env, network, optimizer):
     """创建纯函数版本的 train_step（支持持久化缓存）
@@ -358,7 +357,7 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
             # 计算 log 概率（增强数值稳定性）
             action_diff = jp.clip((action - mean) / std, -100.0, 100.0)
             log_prob = -0.5 * jp.sum(
-                action_diff ** 2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
+                action_diff**2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
             )
             log_prob = jp.clip(log_prob, -1000.0, 100.0)  # 裁剪 log_prob
 
@@ -402,9 +401,7 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
 
         # 计算 GAE（对每个环境分别计算）
         advantages, returns = jax.vmap(
-            lambda r, v, d: compute_gae_scan(
-                r, v, d, config.gamma, config.gae_lambda
-            ),
+            lambda r, v, d: compute_gae_scan(r, v, d, config.gamma, config.gae_lambda),
             in_axes=1,
             out_axes=1,
         )(rewards, values_with_last, dones)
@@ -482,8 +479,7 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
             # ✅ 梯度NaN保护：防止NaN梯度污染参数
             # 将梯度中的NaN/Inf替换为0（相当于跳过这次更新）
             grads = jax.tree.map(
-                lambda g: jp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0),
-                grads
+                lambda g: jp.nan_to_num(g, nan=0.0, posinf=0.0, neginf=0.0), grads
             )
 
             # 应用梯度
@@ -513,10 +509,7 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
 
         # 使用 scan 执行多个 epochs
         train_state, infos = jax.lax.scan(
-            update_epoch,
-            train_state,
-            None,
-            length=config.num_epochs
+            update_epoch, train_state, None, length=config.num_epochs
         )
 
         # 平均所有 epoch 的指标

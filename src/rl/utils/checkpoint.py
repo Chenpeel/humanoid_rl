@@ -53,7 +53,7 @@ class CheckpointManager:
         self.metric_mode = metric_mode
 
         # 最佳模型追踪
-        self.best_metric = float('-inf') if metric_mode == "max" else float('inf')
+        self.best_metric = float("-inf") if metric_mode == "max" else float("inf")
         self.best_step = None
 
         # 创建子目录
@@ -84,21 +84,21 @@ class CheckpointManager:
         """
         # 创建检查点数据
         checkpoint_data = {
-            'step': int(train_state.step),
-            'env_steps': int(train_state.env_steps),
-            'params': train_state.params,
-            'opt_state': train_state.opt_state,
-            'rng': train_state.rng,
+            "step": int(train_state.step),
+            "env_steps": int(train_state.env_steps),
+            "params": train_state.params,
+            "opt_state": train_state.opt_state,
+            "rng": train_state.rng,
         }
 
         if metrics is not None:
-            checkpoint_data['metrics'] = metrics
+            checkpoint_data["metrics"] = metrics
 
         # 保存检查点
         checkpoint_path = self.model_dir / f"checkpoint_{step}"
 
         # 使用Flax的serialization保存（支持大模型）
-        with open(checkpoint_path, 'wb') as f:
+        with open(checkpoint_path, "wb") as f:
             f.write(serialization.to_bytes(checkpoint_data))
 
         # 清理旧检查点（保留最新的max_to_keep个）
@@ -114,20 +114,16 @@ class CheckpointManager:
     def _cleanup_old_checkpoints(self):
         """清理旧检查点，只保留最新的max_to_keep个"""
         checkpoints = sorted(
-            self.model_dir.glob("checkpoint_*"),
-            key=lambda p: int(p.name.split('_')[1])
+            self.model_dir.glob("checkpoint_*"), key=lambda p: int(p.name.split("_")[1])
         )
 
         # 删除多余的检查点
         if len(checkpoints) > self.max_to_keep:
-            for old_ckpt in checkpoints[:-self.max_to_keep]:
+            for old_ckpt in checkpoints[: -self.max_to_keep]:
                 old_ckpt.unlink()
 
     def _maybe_save_best_model(
-        self,
-        train_state: TrainState,
-        step: int,
-        metrics: Dict[str, float]
+        self, train_state: TrainState, step: int, metrics: Dict[str, float]
     ):
         """如果是最佳模型则保存"""
         if self.metric_name not in metrics:
@@ -147,21 +143,21 @@ class CheckpointManager:
 
             # 保存最佳模型（仅保存参数，不保存优化器状态）
             best_model_data = {
-                'step': int(train_state.step),
-                'env_steps': int(train_state.env_steps),
-                'params': train_state.params,
-                'metrics': metrics,
-                'metric_name': self.metric_name,
-                'metric_value': float(current_metric),
+                "step": int(train_state.step),
+                "env_steps": int(train_state.env_steps),
+                "params": train_state.params,
+                "metrics": metrics,
+                "metric_name": self.metric_name,
+                "metric_value": float(current_metric),
             }
 
             best_model_path = self.best_model_dir / "best_model"
-            with open(best_model_path, 'wb') as f:
+            with open(best_model_path, "wb") as f:
                 f.write(serialization.to_bytes(best_model_data))
 
             # 保存元信息
             meta_path = self.best_model_dir / "metadata.txt"
-            with open(meta_path, 'w') as f:
+            with open(meta_path, "w") as f:
                 f.write(f"Best {self.metric_name}: {current_metric:.6f}\n")
                 f.write(f"Step: {step}\n")
                 f.write(f"Env steps: {train_state.env_steps}\n")
@@ -189,14 +185,14 @@ class CheckpointManager:
             # 加载最新的检查点
             checkpoints = sorted(
                 self.model_dir.glob("checkpoint_*"),
-                key=lambda p: int(p.name.split('_')[1])
+                key=lambda p: int(p.name.split("_")[1]),
             )
             if not checkpoints:
                 raise FileNotFoundError(f"未找到检查点: {self.model_dir}")
             ckpt_path = checkpoints[-1]
 
         # 加载检查点
-        with open(ckpt_path, 'rb') as f:
+        with open(ckpt_path, "rb") as f:
             checkpoint_data = serialization.from_bytes(None, f.read())
 
         return checkpoint_data
@@ -212,7 +208,7 @@ class CheckpointManager:
         if not best_model_path.exists():
             raise FileNotFoundError(f"未找到最佳模型: {best_model_path}")
 
-        with open(best_model_path, 'rb') as f:
+        with open(best_model_path, "rb") as f:
             best_model_data = serialization.from_bytes(None, f.read())
 
         return best_model_data
@@ -232,11 +228,11 @@ class CheckpointManager:
             恢复的TrainState
         """
         return TrainState(
-            step=checkpoint_data['step'],
-            env_steps=checkpoint_data['env_steps'],
-            params=checkpoint_data['params'],
-            opt_state=checkpoint_data['opt_state'],
-            rng=checkpoint_data['rng'],
+            step=checkpoint_data["step"],
+            env_steps=checkpoint_data["env_steps"],
+            params=checkpoint_data["params"],
+            opt_state=checkpoint_data["opt_state"],
+            rng=checkpoint_data["rng"],
         )
 
     def export_for_inference(
@@ -258,12 +254,12 @@ class CheckpointManager:
         if format == "msgpack":
             # MessagePack格式（紧凑，跨语言）
             params_bytes = serialization.to_bytes(params)
-            with open(export_path, 'wb') as f:
+            with open(export_path, "wb") as f:
                 f.write(params_bytes)
 
         elif format == "pickle":
             # Pickle格式（Python专用）
-            with open(export_path, 'wb') as f:
+            with open(export_path, "wb") as f:
                 pickle.dump(params, f)
 
         elif format == "flax":
@@ -285,14 +281,10 @@ class CheckpointManager:
             检查点列表 [(step, path), ...]
         """
         checkpoints = sorted(
-            self.model_dir.glob("checkpoint_*"),
-            key=lambda p: int(p.name.split('_')[1])
+            self.model_dir.glob("checkpoint_*"), key=lambda p: int(p.name.split("_")[1])
         )
 
-        return [
-            (int(ckpt.name.split('_')[1]), str(ckpt))
-            for ckpt in checkpoints
-        ]
+        return [(int(ckpt.name.split("_")[1]), str(ckpt)) for ckpt in checkpoints]
 
     def get_best_model_info(self) -> Optional[Dict[str, Any]]:
         """获取最佳模型信息
@@ -305,13 +297,13 @@ class CheckpointManager:
         if not meta_path.exists():
             return None
 
-        with open(meta_path, 'r') as f:
+        with open(meta_path, "r") as f:
             lines = f.readlines()
 
         info = {}
         for line in lines:
-            if ':' in line:
-                key, value = line.strip().split(':', 1)
+            if ":" in line:
+                key, value = line.strip().split(":", 1)
                 info[key.strip()] = value.strip()
 
         return info

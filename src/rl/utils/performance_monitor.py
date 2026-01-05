@@ -5,6 +5,7 @@
 
 import time
 from typing import Dict, Optional
+
 import jax
 import jax.numpy as jp
 
@@ -69,7 +70,9 @@ class PerformanceMonitor:
         self.compile_time = compile_time
 
 
-def benchmark_train_step(train_step_fn, train_state, env_state, num_warmup=3, num_iterations=10):
+def benchmark_train_step(
+    train_step_fn, train_state, env_state, num_warmup=3, num_iterations=10
+):
     """基准测试训练步性能
 
     Args:
@@ -108,7 +111,9 @@ def benchmark_train_step(train_step_fn, train_state, env_state, num_warmup=3, nu
     }
 
 
-def estimate_gpu_utilization(step_time: float, theoretical_min_time: Optional[float] = None) -> float:
+def estimate_gpu_utilization(
+    step_time: float, theoretical_min_time: Optional[float] = None
+) -> float:
     """估算GPU利用率
 
     Args:

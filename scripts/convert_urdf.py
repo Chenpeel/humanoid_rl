@@ -13,25 +13,24 @@ Usage:
     python scripts/convert_urdf.py assets/urdf/robot.urdf
 """
 
-import sys
 import argparse
+import sys
 from pathlib import Path
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from utils.urdf2mjcf import convert_urdf, fix_mesh_paths
-from utils.urdf2mjcf import mirror_mjcf
+from utils.urdf2mjcf import convert_urdf, fix_mesh_paths, mirror_mjcf
 from utils.xml_tools import MJCFModularSplitter
 
 
 def run_pipeline(input_urdf: Path):
     """Execute complete conversion pipeline"""
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("🚀 URDF to Modular MJCF Conversion Pipeline")
-    print("="*60)
+    print("=" * 60)
     print(f"\nInput: {input_urdf}")
 
     if not input_urdf.exists():
@@ -49,9 +48,9 @@ def run_pipeline(input_urdf: Path):
 
     try:
         # Step 1: URDF → MJCF
-        print("\n" + "─"*60)
+        print("\n" + "─" * 60)
         print("📋 Step 1/3: Converting URDF to MJCF")
-        print("─"*60)
+        print("─" * 60)
         convert_urdf(input_urdf, temp_mjcf)
 
         if not temp_mjcf.exists():
@@ -59,9 +58,9 @@ def run_pipeline(input_urdf: Path):
             return False
 
         # Step 2: Mirror to bilateral
-        print("\n" + "─"*60)
+        print("\n" + "─" * 60)
         print("🔄 Step 2/3: Mirroring to bilateral model")
-        print("─"*60)
+        print("─" * 60)
         mirror_mjcf(temp_mjcf, bilateral_mjcf)
 
         if not bilateral_mjcf.exists():
@@ -73,9 +72,9 @@ def run_pipeline(input_urdf: Path):
         print(f"  ✓ Cleaned up temporary file")
 
         # Step 3: Split to modular
-        print("\n" + "─"*60)
+        print("\n" + "─" * 60)
         print("📦 Step 3/3: Splitting to modular structure")
-        print("─"*60)
+        print("─" * 60)
         splitter = MJCFModularSplitter(bilateral_mjcf, output_dir)
         splitter.split()
 
@@ -86,9 +85,9 @@ def run_pipeline(input_urdf: Path):
             return False
 
         # Success summary
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("✅ Pipeline Complete!")
-        print("="*60)
+        print("=" * 60)
         print(f"\n📁 Output locations:")
         print(f"  Bilateral MJCF: {bilateral_mjcf}")
         print(f"  Modular model:  {output_dir}/")
@@ -108,13 +107,14 @@ def run_pipeline(input_urdf: Path):
     except Exception as e:
         print(f"\n❌ Pipeline failed with error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Standard URDF to Modular MJCF Conversion Pipeline',
+        description="Standard URDF to Modular MJCF Conversion Pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Pipeline Steps:
@@ -133,12 +133,15 @@ Output:
     ├── index.xml                   - Entry point
     ├── params/                     - Editable parameters
     └── geometry/                   - Stable geometry
-        """
+        """,
     )
 
-    parser.add_argument('urdf', type=str, help='Input URDF file path')
-    parser.add_argument('--no-mirror', action='store_true',
-                       help='Skip mirroring (URDF already bilateral)')
+    parser.add_argument("urdf", type=str, help="Input URDF file path")
+    parser.add_argument(
+        "--no-mirror",
+        action="store_true",
+        help="Skip mirroring (URDF already bilateral)",
+    )
 
     args = parser.parse_args()
 
@@ -154,5 +157,5 @@ Output:
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
