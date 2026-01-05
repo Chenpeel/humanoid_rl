@@ -308,6 +308,10 @@ class VelocityTrackingEnv(MJXBaseEnv):
                 base_quat / quat_norm,
                 jp.array([1.0, 0.0, 0.0, 0.0])  # 默认四元数（无旋转）
             )
+            
+            # [CRITICAL FIX] 校正 Jiyuan 坐标系
+            fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
+            base_quat = quaternion_multiply(fix_quat, base_quat)
         else:
             base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
 
@@ -723,6 +727,10 @@ class StandingEnv(MJXBaseEnv):
                 base_quat / quat_norm,
                 jp.array([1.0, 0.0, 0.0, 0.0])
             )
+            
+            # [CRITICAL FIX] 校正 Jiyuan 坐标系
+            fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
+            base_quat = quaternion_multiply(fix_quat, base_quat)
         else:
             base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
 
@@ -876,6 +884,11 @@ class StandingEnv(MJXBaseEnv):
             torso_z = qpos[self.floating_base_qpos_addr + 2]
             base_quat = qpos[self.floating_base_qpos_addr +
                              3: self.floating_base_qpos_addr + 7]
+                             
+            # [CRITICAL FIX] 校正 Jiyuan 坐标系
+            fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
+            base_quat = quaternion_multiply(fix_quat, base_quat)
+            
             return check_standing_termination(torso_z, base_quat)
         else:
             return jp.array(False)
@@ -1156,15 +1169,18 @@ class WalkingEnv(MJXBaseEnv):
             base_quat = qpos[
                 self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
-            # 归一化四元数（防止除零）
+            # 确保四元数归一化（防止除零）
             quat_norm = jp.linalg.norm(base_quat)
             base_quat = jp.where(
                 quat_norm > 1e-8,
                 base_quat / quat_norm,
                 jp.array([1.0, 0.0, 0.0, 0.0])
             )
+            
+            # [CRITICAL FIX] 校正 Jiyuan 坐标系
+            fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
+            base_quat = quaternion_multiply(fix_quat, base_quat)
         else:
-            base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
 
         if self.floating_base_qvel_addr is not None:
             base_linvel = qvel[
@@ -1356,6 +1372,11 @@ class WalkingEnv(MJXBaseEnv):
             base_quat = qpos[
                 self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
+            
+            # [CRITICAL FIX] 校正 Jiyuan 坐标系
+            fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
+            base_quat = quaternion_multiply(fix_quat, base_quat)
+            
             return check_walking_termination(torso_z, base_quat)
         else:
             return jp.array(False)
