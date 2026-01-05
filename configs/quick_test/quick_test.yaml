@@ -1,0 +1,42 @@
+# ==================== 快速测试配置（自动课程学习）====================
+# 用于快速验证代码正确性，不追求训练效果
+# 小批次、少步数，适合调试
+
+# ==================== 场景配置 ====================
+scene: flat_terrain
+env_type: walking
+
+# ==================== 环境配置（最小化）====================
+num_envs: 128           # 最小并行环境数
+num_steps: 32           # 最小rollout步数
+max_episode_steps: 200  # 短episode
+
+# ==================== PPO超参数 ====================
+num_epochs: 2
+num_minibatches: 4
+gamma: 0.99
+gae_lambda: 0.95
+clip_epsilon: 0.2
+value_coef: 0.5
+entropy_coef: 0.01
+max_grad_norm: 0.5
+
+# ==================== 训练配置（快速测试）====================
+total_timesteps: 1000000  # 1M steps（足够触发课程学习切换）
+log_interval: 5
+eval_interval: 10
+save_interval: 50
+
+# ==================== 优化器配置 ====================
+learning_rate: 3.0e-4
+final_lr_fraction: 0.02
+
+# ==================== 网络配置（小网络）====================
+hidden_dims: [128, 128]
+shared_backbone: true
+
+# ==================== 视频录制 ====================
+enable_video: false
+video_interval: 100
+video_frames: 60
+video_camera: "track"
