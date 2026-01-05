@@ -1181,6 +1181,7 @@ class WalkingEnv(MJXBaseEnv):
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
         else:
+            base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
 
         if self.floating_base_qvel_addr is not None:
             base_linvel = qvel[
