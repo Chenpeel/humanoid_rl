@@ -1,7 +1,7 @@
 # Makefile for JRL - JAX Reinforcement Learning Training
-# 用于管理四足机器人分阶段训练
+# 用于管理四足机器人训练（自动课程学习）
 
-.PHONY: help install train train-stage train-all train-10h eval clean clean-cache clean-all
+.PHONY: help install train train-long train-test train-quick eval clean clean-cache clean-all
 .DEFAULT_GOAL := help
 
 # ==================== 配置变量 ====================
@@ -14,43 +14,51 @@ LOG_DIR := $(PROJECT_ROOT)/logs
 CACHE_DIR := $(PROJECT_ROOT)/.jax_cache
 TRAIN_SCRIPT := scripts/train.py
 EVAL_SCRIPT := scripts/eval.py
-CONFIG_DIR := configs
-TRAIN_CONFIG_DIR := $(CONFIG_DIR)/train
-TEST_CONFIG_DIR := $(CONFIG_DIR)/test
+
+# 配置文件路径
+CONFIG_TRAIN := configs/train/train_default.yaml
+CONFIG_LONG := configs/train-10h/train_long.yaml
+CONFIG_QUICK := configs/quick_test/quick_test.yaml
 
 # ==================== 帮助信息 ====================
 
 help:
-	@echo "JRL 训练系统 - Makefile 命令"
+	@echo "JRL 训练系统 - Makefile 命令（自动课程学习）"
 	@echo ""
 	@echo "环境配置："
 	@echo "  make install              安装JAX依赖"
 	@echo "  make install-dev          安装开发依赖"
 	@echo "  make check-env            检查JAX/CUDA环境"
 	@echo ""
-	@echo "训练命令："
-	@echo "  make train                训练阶段0（站立）"
-	@echo "  make train-stage STAGE=N  训练指定阶段(0-4)"
-	@echo "  make train-all            流水线训练所有阶段（约3天）"
-	@echo "  make train-10h            快速训练（10小时，明天见效果）"
-	@echo "  make train-range FROM=N TO=M  训练阶段N到M"
+	@echo "训练命令（自动课程学习）："
+	@echo "  make train                标准训练（2048 envs，200M steps，约8-12小时）"
+	@echo "  make train-long           长时间训练（4096 envs，500M steps，约24-48小时）"
+	@echo "  make train-test           快速测试（128 envs，1M steps，约5-10分钟）"
+	@echo "  make train-custom CONFIG=path/to/config.yaml  自定义配置训练"
 	@echo ""
-	@echo "测试命令："
-	@echo "  make quick-test           极速测试（32 envs，Eager模式，无需编译）"
-	@echo "  make test-pipeline        标准测试（128 envs，JIT模式，<4分钟）"
+	@echo "课程学习机制："
+	@echo "  - 阶段1 (0-50k steps):    站立平衡"
+	@echo "  - 阶段2 (50k-150k steps): 低速行走"
+	@echo "  - 阶段3 (150k+ steps):    全速行走"
+	@echo "  - 奖励权重和环境参数自动切换，无需手动干预"
+	@echo ""
+	@echo "评估命令："
+	@echo "  make eval CKPT=path/to/checkpoint         评估模型（默认渲染+保存视频）"
+	@echo "  make eval CKPT=... CPU=1                   使用CPU评估"
+	@echo "  make eval CKPT=... NO_VIDEO=1              不保存视频"
+	@echo "  make eval CKPT=... ENV_TYPE=walking        指定环境类型"
+	@echo ""
+	@echo "开发工具："
+	@echo "  make tensorboard          启动TensorBoard"
+	@echo "  make format               格式化代码"
+	@echo "  make test                 运行单元测试"
 	@echo "  make validate-config      验证配置文件语法"
 	@echo ""
-	@echo "说明："
-	@echo "  - quick-test: 使用Eager模式（禁用JIT），无需编译但较慢"
-	@echo "  - test-pipeline: 使用JIT模式，首次编译后缓存"
-	@echo "  - train: 所有阶段统一网络结构，首次编译后全程复用"
-	@echo ""
-	@echo "其他："
-	@echo "  make eval CKPT=...              评估模型（默认渲染+保存视频）"
-	@echo "  make eval CKPT=... RENDER=0     评估模型（不渲染）"
-	@echo "  make eval CKPT=... CPU=1        评估模型（使用CPU）"
-	@echo "  make tensorboard                启动TensorBoard"
-	@echo "  make clean-all                  清理所有缓存和日志"
+	@echo "清理命令："
+	@echo "  make clean                清理临时文件"
+	@echo "  make clean-cache          清理JAX缓存"
+	@echo "  make clean-logs           清理所有日志"
+	@echo "  make clean-all            清理所有（缓存+日志+临时文件）"
 
 # ==================== 安装相关 ====================
 
@@ -76,74 +84,59 @@ check-env:
 # ==================== 训练相关 ====================
 
 train:
-	@echo "=== 开始训练（阶段0：站立平衡） ==="
-	$(PYTHON) $(TRAIN_SCRIPT) --config $(TRAIN_CONFIG_DIR)/stage0_standing.yaml
-
-train-stage:
-	@if [ -z "$(STAGE)" ]; then \
-		echo "错误: 请指定阶段号 STAGE=0-4"; \
-		echo "示例: make train-stage STAGE=0"; \
-		exit 1; \
-	fi
-	@echo "=== 训练阶段$(STAGE) ==="
-	@if [ "$(STAGE)" = "0" ]; then \
-		$(PYTHON) $(TRAIN_SCRIPT) --config $(TRAIN_CONFIG_DIR)/stage0_standing.yaml; \
-	elif [ "$(STAGE)" = "1" ]; then \
-		$(PYTHON) $(TRAIN_SCRIPT) --config $(TRAIN_CONFIG_DIR)/stage1_stepping.yaml; \
-	elif [ "$(STAGE)" = "2" ]; then \
-		$(PYTHON) $(TRAIN_SCRIPT) --config $(TRAIN_CONFIG_DIR)/stage2_slow_walk.yaml; \
-	elif [ "$(STAGE)" = "3" ]; then \
-		$(PYTHON) $(TRAIN_SCRIPT) --config $(TRAIN_CONFIG_DIR)/stage3_normal_walk.yaml; \
-	elif [ "$(STAGE)" = "4" ]; then \
-		$(PYTHON) $(TRAIN_SCRIPT) --config $(TRAIN_CONFIG_DIR)/stage4_fast_walk.yaml; \
-	else \
-		echo "错误: STAGE必须是0-4之间的数字"; exit 1; \
-	fi
-
-train-all:
-	@echo "=== 开始分阶段训练（自动化） ==="
-	$(PYTHON) scripts/train_staged.py --start-stage 0 --end-stage 4
-	@echo "=== 分阶段训练完成 ==="
-
-train-range:
-	@if [ -z "$(FROM)" ] || [ -z "$(TO)" ]; then \
-		echo "错误: 请指定起止阶段 FROM=N TO=M"; \
-		echo "示例: make train-range FROM=2 TO=4"; \
-		exit 1; \
-	fi
-	@echo "=== 训练阶段$(FROM)到$(TO) ==="
-	$(PYTHON) scripts/train_staged.py --start-stage $(FROM) --end-stage $(TO)
-	@echo "=== 训练完成 ==="
-
-train-10h:
-	@echo "=== 10小时快速训练流水线 ==="
-	@echo "配置: configs/train-10h/stage[0-4]*.yaml"
-	@echo "预计时间: ~12-14小时 (2000 iterations)"
+	@echo "=== 标准训练（自动课程学习）==="
+	@echo "配置: $(CONFIG_TRAIN)"
+	@echo "环境数: 2048，总步数: 200M"
+	@echo "预计时间: 8-12小时"
 	@echo "开始时间: $$(date)"
-	$(PYTHON) scripts/train_staged.py --profile 10h --start-stage 0 --end-stage 4
+	@echo ""
+	$(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_TRAIN)
+	@echo ""
 	@echo "=== 训练完成 ==="
 	@echo "结束时间: $$(date)"
 
-# ==================== 测试相关 ====================
+train-long:
+	@echo "=== 长时间训练（自动课程学习）==="
+	@echo "配置: $(CONFIG_LONG)"
+	@echo "环境数: 4096，总步数: 500M"
+	@echo "预计时间: 24-48小时"
+	@echo "开始时间: $$(date)"
+	@echo ""
+	$(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_LONG)
+	@echo ""
+	@echo "=== 训练完成 ==="
+	@echo "结束时间: $$(date)"
 
-quick-test:
-	@echo "=== 极速测试（32 envs，3阶段，Eager模式）==="
-	@echo "策略：禁用JIT编译，直接执行（无需等待编译）"
-	$(PYTHON) scripts/train_staged.py --quick-test --no-jit --start-stage 0 --end-stage 2
+train-test:
+	@echo "=== 快速测试（自动课程学习）==="
+	@echo "配置: $(CONFIG_QUICK)"
+	@echo "环境数: 128，总步数: 1M"
+	@echo "预计时间: 5-10分钟"
+	@echo ""
+	$(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_QUICK)
+	@echo ""
+	@echo "=== 测试完成 ==="
 
-test-pipeline:
-	@echo "=== 标准流水线测试（128 envs，3阶段）==="
-	$(PYTHON) scripts/train_staged.py --test-mode --start-stage 0 --end-stage 2
+train-custom:
+	@if [ -z "$(CONFIG)" ]; then \
+		echo "错误: 请指定配置文件 CONFIG=path/to/config.yaml"; \
+		echo "示例: make train-custom CONFIG=configs/train/train_default.yaml"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(CONFIG)" ]; then \
+		echo "错误: 配置文件不存在: $(CONFIG)"; \
+		exit 1; \
+	fi
+	@echo "=== 自定义配置训练 ==="
+	@echo "配置: $(CONFIG)"
+	@echo ""
+	$(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG)
+	@echo ""
+	@echo "=== 训练完成 ==="
 
 validate-config:
 	@echo "=== 验证配置文件 ==="
-	@$(PYTHON) -c "import yaml, sys; \
-		configs = ['$(TRAIN_CONFIG_DIR)/stage0_standing.yaml', \
-		           '$(TRAIN_CONFIG_DIR)/stage1_stepping.yaml', \
-		           'configs/quick_test/stage0_standing.yaml', \
-		           '$(TEST_CONFIG_DIR)/pipeline_stage0_standing.yaml']; \
-		[yaml.safe_load(open(c)) for c in configs]; \
-		print('✓ 所有配置文件有效')"
+	@$(PYTHON) -c "import yaml, sys; configs = ['$(CONFIG_TRAIN)', '$(CONFIG_LONG)', '$(CONFIG_QUICK)']; [yaml.safe_load(open(c)) or print(f'✓ {c}') for c in configs]; print('✓ 所有配置文件有效')"
 
 # ==================== 评估相关 ====================
 
@@ -169,14 +162,14 @@ eval:
 
 tensorboard:
 	@echo "=== 启动TensorBoard ==="
+	@echo "访问: http://localhost:6006"
 	tensorboard --logdir=$(LOG_DIR) --host=0.0.0.0 --port=6006
 
 # ==================== 清理相关 ====================
 
 clean:
-	@echo "=== 清理日志 ==="
-	find $(LOG_DIR) -type f -name "*.log" -delete 2>/dev/null || true
-	find $(PROJECT_ROOT) -type f -name "*.pyc" -delete
+	@echo "=== 清理临时文件 ==="
+	find $(PROJECT_ROOT) -type f -name "*.pyc" -delete 2>/dev/null || true
 	find $(PROJECT_ROOT) -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@echo "✓ 清理完成"
 
@@ -212,14 +205,23 @@ test:
 # ==================== 信息相关 ====================
 
 info:
-	@echo "JRL 项目信息"
+	@echo "JRL 项目信息（自动课程学习）"
 	@echo ""
 	@echo "项目根目录: $(PROJECT_ROOT)"
 	@echo "日志目录: $(LOG_DIR)"
 	@echo "缓存目录: $(CACHE_DIR)"
 	@echo ""
-	@echo "训练阶段配置:"
-	@ls -1 $(TRAIN_CONFIG_DIR)/stage*.yaml 2>/dev/null || echo "  无阶段配置文件"
+	@echo "配置文件:"
+	@echo "  标准训练: $(CONFIG_TRAIN)"
+	@echo "  长时间训练: $(CONFIG_LONG)"
+	@echo "  快速测试: $(CONFIG_QUICK)"
 	@echo ""
-	@echo "测试配置:"
-	@ls -1 $(TEST_CONFIG_DIR)/*.yaml 2>/dev/null || echo "  无测试配置文件"
+	@echo "课程学习阶段:"
+	@echo "  阶段1 (0-50k):    站立平衡（学习保持直立）"
+	@echo "  阶段2 (50k-150k): 低速行走（学习基本步态）"
+	@echo "  阶段3 (150k+):    全速行走（跟踪任意速度）"
+	@echo ""
+	@echo "训练日志字段:"
+	@echo "  - curriculum_stage: 当前阶段名称"
+	@echo "  - curriculum_stage_index: 阶段索引 (0/1/2)"
+	@echo "  - curriculum_progress: 当前阶段进度 (0-1)"
