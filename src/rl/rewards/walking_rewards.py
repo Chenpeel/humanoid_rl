@@ -16,7 +16,7 @@
 4. 姿态稳定 - 保持直立
 """
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import jax
 import jax.numpy as jp
@@ -338,6 +338,106 @@ def compute_torque_penalty(torques: jax.Array) -> jax.Array:
     return jp.sum(jp.square(torques), axis=-1)
 
 
+# ==================== 增强行走奖励分量 ====================
+
+
+def compute_gait_periodicity_reward(
+    contacts: jax.Array,
+    phase: jax.Array,
+    stance_duration: float = 0.6,
+    swing_duration: float = 0.4,
+    tolerance: float = 0.1
+) -> jax.Array:
+    """计算步态周期性奖励"""
+    expected_contact = (phase < stance_duration).astype(jp.float32)
+    actual_contact = contacts.astype(jp.float32)
+    error = jp.abs(expected_contact - actual_contact)
+    return jp.mean(jp.exp(-error / tolerance), axis=-1)
+
+
+def compute_swing_trajectory_reward(
+    feet_positions: jax.Array,
+    contacts: jax.Array,
+    phase: jax.Array,
+    target_height: float = 0.08,
+    swing_start_phase: float = 0.6
+) -> jax.Array:
+    """计算摆动轨迹奖励"""
+    feet_z = feet_positions[..., 2]
+    swing_progress = (phase - swing_start_phase) / (1.0 - swing_start_phase)
+    swing_progress = jp.clip(swing_progress, 0.0, 1.0)
+    expected_height = target_height * jp.sin(swing_progress * jp.pi)
+    is_swing = (phase > swing_start_phase).astype(jp.float32)
+    error = jp.abs(feet_z - expected_height)
+    reward = jp.exp(-error / 0.02)
+    return jp.sum(reward * is_swing, axis=-1)
+
+
+def compute_landing_impact_reward(
+    contact_forces: jax.Array,
+    landing_events: jax.Array,
+    max_impact_force: float = 500.0,
+    tolerance: float = 100.0
+) -> jax.Array:
+    """计算着地冲击奖励"""
+    impact = contact_forces * landing_events
+    excess_force = jp.clip(impact - max_impact_force, min=0.0)
+    return jp.mean(jp.exp(-excess_force / tolerance), axis=-1)
+
+
+def compute_energy_efficiency_reward(
+    torques: jax.Array,
+    joint_velocities: jax.Array,
+    target_efficiency: float = 0.8,
+    penalty_weight: float = 0.001
+) -> jax.Array:
+    """计算能量效率奖励"""
+    mechanical_power = jp.sum(jp.abs(torques * joint_velocities), axis=-1)
+    thermal_loss = jp.sum(jp.square(torques), axis=-1)
+    total_energy = mechanical_power + thermal_loss
+    return -penalty_weight * total_energy
+
+
+def compute_stability_reward(
+    torso_z: jax.Array,
+    base_quat: jax.Array,
+    base_linvel: jax.Array,
+    base_angvel: jax.Array,
+    target_height: float = 0.35,
+    height_tolerance: float = 0.05,
+    angular_velocity_penalty: float = 1.0
+) -> jax.Array:
+    """计算综合稳定性奖励"""
+    height_error = jp.abs(torso_z - target_height)
+    height_reward = jp.exp(-height_error / height_tolerance)
+    ang_vel_mag = jp.linalg.norm(base_angvel, axis=-1)
+    ang_vel_reward = jp.exp(-ang_vel_mag * angular_velocity_penalty)
+    w, x, y, z = base_quat[..., 0], base_quat[..., 1], base_quat[..., 2], base_quat[..., 3]
+    projected_gravity_x = 2 * (x * z - w * y)
+    projected_gravity_y = 2 * (y * z + w * x)
+    orientation_error = jp.square(projected_gravity_x) + jp.square(projected_gravity_y)
+    orientation_reward = jp.exp(-orientation_error * 5.0)
+    return (height_reward + ang_vel_reward + orientation_reward) / 3.0
+
+
+def compute_velocity_tracking_reward(
+    actual_velocity: jax.Array,
+    command: jax.Array,
+    tracking_weights: Tuple[float, float, float] = (1.0, 0.5, 0.5),
+    tolerance: float = 0.1
+) -> jax.Array:
+    """计算增强速度跟踪奖励"""
+    error = actual_velocity - command
+    error_x = jp.abs(error[..., 0])
+    error_y = jp.abs(error[..., 1])
+    error_yaw = jp.abs(error[..., 2])
+    reward_x = jp.exp(-error_x / tolerance)
+    reward_y = jp.exp(-error_y / tolerance)
+    reward_yaw = jp.exp(-error_yaw / tolerance)
+    wx, wy, wyaw = tracking_weights
+    return (wx * reward_x + wy * reward_y + wyaw * reward_yaw) / (wx + wy + wyaw)
+
+
 # ==================== 完整奖励函数 ====================
 
 
@@ -471,15 +571,6 @@ def compute_walking_reward(
     )
 
     if has_enhanced_rewards:
-        from .walking_rewards_enhanced import (
-            compute_gait_periodicity_reward,
-            compute_swing_trajectory_reward,
-            compute_landing_impact_reward,
-            compute_energy_efficiency_reward,
-            compute_stability_reward,
-            compute_velocity_tracking_reward,
-        )
-
         # 1. 步态周期性奖励（需要相位信息）
         if "gait_periodicity" in reward_weights and phase is not None:
             periodicity_reward = compute_gait_periodicity_reward(
