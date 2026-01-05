@@ -42,4 +42,5 @@ build/
 CLAUDE.md
 .claude/
 .std_docs/
-.migrate/.gemini/
+.migrate/
+.gemini/
