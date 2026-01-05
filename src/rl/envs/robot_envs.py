@@ -549,7 +549,6 @@ class StandingEnv(MJXBaseEnv):
         verbose: bool = True,
         target_height: float = 0.3,
         reward_weights: Dict[str, float] = None,
-        use_enhanced_rewards: bool = True,  # 是否使用增强版奖励
     ):
         """初始化站立环境
 
@@ -561,28 +560,18 @@ class StandingEnv(MJXBaseEnv):
             verbose: 是否显示信息
             target_height: 目标躯干高度 (m)
             reward_weights: 奖励权重字典
-            use_enhanced_rewards: 是否使用增强版奖励（包含抬脚和悬空时间奖励）
         """
-        # 延迟导入避免循环依赖
-        if use_enhanced_rewards:
-            from ..rewards.standing_rewards_enhanced import (
-                DEFAULT_ENHANCED_STANDING_WEIGHTS,
-                compute_enhanced_standing_reward
-            )
-            self._compute_reward_fn = compute_enhanced_standing_reward
-            default_weights = DEFAULT_ENHANCED_STANDING_WEIGHTS
-        else:
-            from ..rewards.standing_rewards import (
-                DEFAULT_STANDING_REWARD_WEIGHTS,
-                compute_standing_reward
-            )
-            self._compute_reward_fn = compute_standing_reward
-            default_weights = DEFAULT_STANDING_REWARD_WEIGHTS
+        # 统一从 standing_rewards 导入
+        from ..rewards.standing_rewards import (
+            DEFAULT_STANDING_REWARD_WEIGHTS,
+            compute_standing_reward
+        )
+        self._compute_reward_fn = compute_standing_reward
+        default_weights = DEFAULT_STANDING_REWARD_WEIGHTS
 
         super().__init__(xml_path, max_steps, dt, frame_skip, verbose)
 
         self.target_height = target_height
-        self.use_enhanced_rewards = use_enhanced_rewards
 
         # 站立任务的奖励权重
         if reward_weights is None:
@@ -771,9 +760,6 @@ class StandingEnv(MJXBaseEnv):
     ) -> jax.Array:
         """计算站立奖励
 
-        根据use_enhanced_rewards选择使用基础版或增强版奖励函数。
-        增强版包含抬脚奖励、悬空时间奖励等基于Unitree研究的奖励项。
-
         Args:
             prev_state: 上一步的环境状态
             action: 当前动作
@@ -809,12 +795,11 @@ class StandingEnv(MJXBaseEnv):
         torques = pipeline_state.qfrc_actuator
 
         # 基础参数
-        base_reward_params = {
+        reward_params = {
             'torso_z': torso_z,
             'base_quat': base_quat,
             'base_linvel': base_linvel,
             'base_angvel': base_angvel,
-            'base_linacc': base_linacc,
             'action': action,
             'last_action': prev_state.last_action,
             'torques': torques,
@@ -822,47 +807,7 @@ class StandingEnv(MJXBaseEnv):
             'reward_weights': self.reward_weights,
         }
 
-        # 如果使用增强版奖励，添加额外参数
-        if self.use_enhanced_rewards:
-            # 获取脚部位置（假设前两个site是脚部）
-            if len(pipeline_state.site_xpos) >= 2:
-                feet_positions = pipeline_state.site_xpos[:2]  # [2, 3]
-            else:
-                feet_positions = None
-
-            # 获取接触状态（假设有接触传感器）
-            if hasattr(pipeline_state, 'contact') and pipeline_state.contact is not None:
-                # 简化：假设contact数组表示脚部接触
-                contacts = jp.array([1.0 if c.dist < 0.001 else 0.0 for c in pipeline_state.contact[:2]])
-            else:
-                contacts = jp.array([1.0, 1.0])  # 默认双脚接触
-
-            # 获取接触力
-            if hasattr(pipeline_state, 'cfrc_ext') and pipeline_state.cfrc_ext is not None:
-                contact_forces = pipeline_state.cfrc_ext[:2]  # 简化处理
-            else:
-                contact_forces = None
-
-            # 获取历史接触状态（从状态缓存中）
-            if hasattr(prev_state, 'contacts_history'):
-                contacts_history = prev_state.contacts_history
-            else:
-                contacts_history = None
-
-            # 添加增强参数
-            enhanced_reward_params = base_reward_params.copy()
-            enhanced_reward_params.update({
-                'feet_positions': feet_positions,
-                'contacts': contacts,
-                'contact_forces': contact_forces,
-                'contacts_history': contacts_history,
-            })
-
-            return self._compute_reward_fn(**enhanced_reward_params)
-        else:
-            # 使用基础版奖励（移除不需要的参数）
-            base_reward_params.pop('base_linacc', None)
-            return self._compute_reward_fn(**base_reward_params)
+        return self._compute_reward_fn(**reward_params)
 
     def _is_done(self, state: EnvState, pipeline_state: Any) -> jax.Array:
         """检查是否摔倒
