@@ -249,21 +249,27 @@ class VelocityTrackingEnv(MJXBaseEnv):
                 self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
             ].set(base_xy + dxy)
 
-            # 随机化yaw角度: ±π
+            # 随机化yaw角度: ±π（生成标准坐标系的旋转）
             yaw = jax.random.uniform(key2, minval=-jp.pi, maxval=jp.pi)
-            # 将yaw转换为quaternion (qw, qx, qy, qz)
-            quat = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
+            quat_standard = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
+
+            # [CRITICAL FIX] 应用逆校正，将标准坐标系转换为 Jiyuan 物理坐标系
+            # Jiyuan 的 base_link 在 XML 中有 quat=[0.707, 0.707, 0, 0] 的预旋转
+            # 需要先乘以这个旋转，才能得到正确的物理四元数
+            jiyuan_base_rotation = jp.array([0.70710678, 0.70710678, 0.0, 0.0])
+            quat_physical = quaternion_multiply(jiyuan_base_rotation, quat_standard)
+
             # 归一化四元数（防止除零）
-            quat_norm = jp.linalg.norm(quat)
-            quat = jp.where(
+            quat_norm = jp.linalg.norm(quat_physical)
+            quat_physical = jp.where(
                 quat_norm > 1e-8,
-                quat / quat_norm,
-                jp.array([1.0, 0.0, 0.0, 0.0])
+                quat_physical / quat_norm,
+                jp.array([0.70710678, 0.70710678, 0.0, 0.0])  # 默认为 Jiyuan 直立姿态
             )
             # freejoint的四元数从索引3开始 (位置: 0-2, 四元数: 3-6)
             qpos = qpos.at[
                 self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
-            ].set(quat)
+            ].set(quat_physical)
 
         # 随机化关节位置: ±0.1 rad
         rng, key4 = jax.random.split(rng)
@@ -663,18 +669,25 @@ class StandingEnv(MJXBaseEnv):
                 base_xy + dxy
             )
 
-            # 随机化yaw: ±0.1 rad
+            # 随机化yaw: ±0.1 rad（生成标准坐标系的旋转）
             yaw = jax.random.uniform(key2, minval=-0.1, maxval=0.1)
-            quat = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
+            quat_standard = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
+
+            # [CRITICAL FIX] 应用逆校正，将标准坐标系转换为 Jiyuan 物理坐标系
+            # Jiyuan 的 base_link 在 XML 中有 quat=[0.707, 0.707, 0, 0] 的预旋转
+            # 需要先乘以这个旋转，才能得到正确的物理四元数
+            jiyuan_base_rotation = jp.array([0.70710678, 0.70710678, 0.0, 0.0])
+            quat_physical = quaternion_multiply(jiyuan_base_rotation, quat_standard)
+
             # 归一化四元数（防止除零）
-            quat_norm = jp.linalg.norm(quat)
-            quat = jp.where(
+            quat_norm = jp.linalg.norm(quat_physical)
+            quat_physical = jp.where(
                 quat_norm > 1e-8,
-                quat / quat_norm,
-                jp.array([1.0, 0.0, 0.0, 0.0])
+                quat_physical / quat_norm,
+                jp.array([0.70710678, 0.70710678, 0.0, 0.0])  # 默认为 Jiyuan 直立姿态
             )
             qpos = qpos.at[self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7].set(
-                quat
+                quat_physical
             )
 
         # 随机化关节位置: ±0.05 rad
@@ -1065,19 +1078,26 @@ class WalkingEnv(MJXBaseEnv):
                 self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
             ].set(base_xy + dxy)
 
-            # 随机化yaw: ±0.1 rad
+            # 随机化yaw: ±0.1 rad（生成标准坐标系的旋转）
             yaw = jax.random.uniform(key2, minval=-0.1, maxval=0.1)
-            quat = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
+            quat_standard = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
+
+            # [CRITICAL FIX] 应用逆校正，将标准坐标系转换为 Jiyuan 物理坐标系
+            # Jiyuan 的 base_link 在 XML 中有 quat=[0.707, 0.707, 0, 0] 的预旋转
+            # 需要先乘以这个旋转，才能得到正确的物理四元数
+            jiyuan_base_rotation = jp.array([0.70710678, 0.70710678, 0.0, 0.0])
+            quat_physical = quaternion_multiply(jiyuan_base_rotation, quat_standard)
+
             # 归一化四元数（防止除零）
-            quat_norm = jp.linalg.norm(quat)
-            quat = jp.where(
+            quat_norm = jp.linalg.norm(quat_physical)
+            quat_physical = jp.where(
                 quat_norm > 1e-8,
-                quat / quat_norm,
-                jp.array([1.0, 0.0, 0.0, 0.0])
+                quat_physical / quat_norm,
+                jp.array([0.70710678, 0.70710678, 0.0, 0.0])  # 默认为 Jiyuan 直立姿态
             )
             qpos = qpos.at[
                 self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
-            ].set(quat)
+            ].set(quat_physical)
 
         # 随机化关节位置: ±0.05 rad
         rng, key3 = jax.random.split(rng)
