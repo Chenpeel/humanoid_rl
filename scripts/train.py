@@ -821,17 +821,50 @@ def main():
 
         # 训练循环
         for update in range(1, config.num_updates):
-            # ==================== 课程学习阶段切换 ====================
-            if curriculum is not None:
-                # 计算当前总训练步数（全局步数）
-                current_global_step = update * config.batch_size
-                curriculum.apply_to_env(env, current_global_step)
+            # ==================== 首次迭代特殊处理 ====================
+            if update == 1:
+                # 首次循环迭代可能触发二次编译，显示进度提示
+                from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+                from rich.console import Console
 
-            # ✅ 纯函数调用，无UI依赖
-            train_state, env_state, info = train_step_jit(train_state, env_state)
+                _console = Console()
+                _console.print("\n[yellow]⚙️  首次循环迭代中（可能触发二次编译，请稍候）...[/yellow]")
 
-            # 确保计算完成（用于准确的性能测量）
-            jax.block_until_ready(train_state)
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[bold yellow]正在执行..."),
+                    TimeElapsedColumn(),
+                    console=_console,
+                    transient=False,
+                ) as progress:
+                    task = progress.add_task("首次迭代", total=None)
+                    t0 = time.time()
+
+                    # 课程学习阶段切换
+                    if curriculum is not None:
+                        current_global_step = update * config.batch_size
+                        curriculum.apply_to_env(env, current_global_step)
+
+                    # 首次迭代
+                    train_state, env_state, info = train_step_jit(train_state, env_state)
+                    jax.block_until_ready(train_state)
+
+                    first_iter_time = time.time() - t0
+
+                _console.print(f"[green]✓ 首次迭代完成 (耗时: {first_iter_time:.2f}s)[/green]\n")
+            else:
+                # 正常训练迭代
+                # ==================== 课程学习阶段切换 ====================
+                if curriculum is not None:
+                    # 计算当前总训练步数（全局步数）
+                    current_global_step = update * config.batch_size
+                    curriculum.apply_to_env(env, current_global_step)
+
+                # ✅ 纯函数调用，无UI依赖
+                train_state, env_state, info = train_step_jit(train_state, env_state)
+
+                # 确保计算完成（用于准确的性能测量）
+                jax.block_until_ready(train_state)
 
             # 记录性能指标
             perf_metrics = perf_monitor.step(config.batch_size)
