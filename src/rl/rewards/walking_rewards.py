@@ -860,29 +860,77 @@ def compute_feet_slide_penalty(
 
 
 def compute_joint_symmetry_reward(
-    joint_pos: jax.Array,  # 关节位置 (16,)
-    right_indices: tuple = (0, 1, 2, 3, 4, 5, 6, 7),  # 右腿关节索引
-    left_indices: tuple = (8, 9, 10, 11, 12, 13, 14, 15),  # 左腿关节索引
+    joint_pos: jax.Array,  # 关节位置 (n_joints,)
+    right_indices: tuple = None,  # 右侧关节索引（可选，自动推断）
+    left_indices: tuple = None,   # 左侧关节索引（可选，自动推断）
+    mirror_signs: jax.Array = None,  # 镜像系数（可选，+1或-1）
 ) -> jax.Array:
-    """关节镜像对称性奖励
+    """关节镜像对称性奖励（支持双足和全身人形机器人）
 
-    鼓励左右腿的关节角度保持镜像对称。
+    鼓励左右对称肢体的关节角度保持镜像对称。
+
+    **适用场景**：
+    - 双足机器人（仅下肢，无手臂）：Jiyuan 当前配置（16关节）
+    - 全身人形机器人（包括手臂）：未来扩展（≥24关节）
+
+    **自动推断机制**：
+    - 如果未提供 right_indices 和 left_indices：
+      * 假设前半部分关节是右侧，后半部分是左侧
+      * 适用于对称设计的机器人（如Jiyuan：前8个右腿，后8个左腿）
+
+    **镜像系数说明**：
+    - 大部分关节（hip_roll, knee, ankle_pitch等）：左右角度应相同（系数=+1）
+    - 某些关节（hip_yaw, ankle_yaw等）：左右角度应相反（系数=-1）
+    - 如果未提供 mirror_signs，默认全部使用 +1（简化处理）
 
     Args:
-        joint_pos: 关节位置数组
-        right_indices: 右腿关节索引
-        left_indices: 左腿关节索引（对应顺序）
+        joint_pos: 关节位置数组，形状 (n_joints,)
+        right_indices: 右侧关节索引（可选）
+        left_indices: 左侧关节索引（可选，需与 right_indices 对应）
+        mirror_signs: 镜像系数数组，形状与 right_indices 相同（可选）
 
     Returns:
         奖励值，范围 [0, 1]
+
+    注意:
+        - 对于非对称步态（如单脚站立、行走中）会有低奖励，这是预期行为
+        - 主要用于鼓励站立平衡阶段的对称性
+        - 未来扩展上半身时，只需在调用时指定完整的索引和镜像系数即可
+
+    示例:
+        # 双足机器人（当前 Jiyuan）- 自动推断
+        reward = compute_joint_symmetry_reward(joint_pos)
+
+        # 全身人形机器人（未来扩展）- 手动指定
+        right_indices = (0, 1, 2, ..., 16, 17, 18)  # 右腿 + 右臂
+        left_indices = (8, 9, 10, ..., 24, 25, 26)  # 左腿 + 左臂
+        mirror_signs = jp.array([1, -1, 1, ..., 1, -1, 1])  # 根据关节类型
+        reward = compute_joint_symmetry_reward(
+            joint_pos, right_indices, left_indices, mirror_signs
+        )
     """
+    # 自动推断左右侧索引（如果未提供）
+    if right_indices is None or left_indices is None:
+        n_joints = joint_pos.shape[-1]
+        half = n_joints // 2
+        right_indices = tuple(range(half))
+        left_indices = tuple(range(half, n_joints))
+
     right_joints = joint_pos[..., jp.array(right_indices)]
     left_joints = joint_pos[..., jp.array(left_indices)]
 
-    # 镜像对称误差（某些关节需要取反，这里简化处理）
-    symmetry_error = jp.sum(jp.square(right_joints - left_joints))
+    # 应用镜像系数（如果未提供，默认全部为 +1）
+    if mirror_signs is None:
+        mirror_signs = jp.ones_like(right_joints)
+    else:
+        mirror_signs = jp.asarray(mirror_signs)
 
-    # 指数奖励
+    # 镜像对称误差
+    # 对于系数=+1的关节：期望 left = right
+    # 对于系数=-1的关节：期望 left = -right
+    symmetry_error = jp.sum(jp.square(left_joints - mirror_signs * right_joints))
+
+    # 指数奖励（容差设为 0.2 rad ≈ 11.5°）
     reward = jp.exp(-symmetry_error / 0.2)
     return reward
 

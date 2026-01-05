@@ -980,13 +980,15 @@ class WalkingEnv(MJXBaseEnv):
                 self.floating_base_qvel_addr = model.jnt_dofadr[i]
                 break
 
-        # 执行器关节地址
+        # 执行器关节地址（同时保存 joint_id 用于提取关节限位）
         self.actuator_qpos_indices = []
         self.actuator_qvel_indices = []
+        self.actuator_joint_ids = []  # ← 新增：保存关节ID用于提取关节限位
         for i in range(model.nu):
             trnid = model.actuator_trnid[i, 0]
             if trnid >= 0:
                 joint_id = trnid
+                self.actuator_joint_ids.append(joint_id)  # ← 新增
                 self.actuator_qpos_indices.append(model.jnt_qposadr[joint_id])
                 self.actuator_qvel_indices.append(model.jnt_dofadr[joint_id])
 
@@ -1207,6 +1209,21 @@ class WalkingEnv(MJXBaseEnv):
         left_foot_pos = pipeline_state.xpos[self.left_foot_body_id]
         return jp.stack([right_foot_pos, left_foot_pos], axis=0)
 
+    def _get_feet_velocities(self, pipeline_state: Any) -> jax.Array:
+        """获取脚部速度（用于 feet_slide 和 stumbling 检测）
+
+        Args:
+            pipeline_state: MJX pipeline状态
+
+        Returns:
+            脚部速度，形状 (2, 3) [right_foot, left_foot]
+        """
+        # 从 cvel (body velocities) 中获取脚部线速度
+        # cvel 的形状是 (nbody, 6)，前3个是线速度，后3个是角速度
+        right_foot_vel = pipeline_state.cvel[self.right_foot_body_id, :3]
+        left_foot_vel = pipeline_state.cvel[self.left_foot_body_id, :3]
+        return jp.stack([right_foot_vel, left_foot_vel], axis=0)
+
     def _sample_command(self, rng: jax.Array) -> jax.Array:
         """采样速度命令
 
@@ -1260,14 +1277,14 @@ class WalkingEnv(MJXBaseEnv):
             base_quat = qpos[
                 self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
-            
+
             # [CRITICAL FIX] Jiyuan 机器人的 base_link 在 XML 中旋转了 90 度 (quat=[0.707, 0.707, 0, 0])
             # 这导致"直立"姿态的物理四元数也是 [0.707, 0.707, 0, 0]
             # 但奖励函数期望直立姿态为 [1, 0, 0, 0]
             # 因此，在计算奖励前，我们需要乘以逆旋转 [0.707, -0.707, 0, 0] 来校正
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
-            
+
         else:
             torso_z = self.target_height
             base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
@@ -1296,6 +1313,36 @@ class WalkingEnv(MJXBaseEnv):
         except Exception:
             feet_positions = None
 
+        # ==================== 新增：提取额外参数用于课程学习 ====================
+
+        # 脚部速度（用于 feet_slide 和 stumbling 检测）
+        try:
+            feet_velocities = self._get_feet_velocities(pipeline_state)
+        except Exception:
+            feet_velocities = None
+
+        # 关节位置和速度
+        qpos_indices = jp.array(self.actuator_qpos_indices)
+        qvel_indices = jp.array(self.actuator_qvel_indices)
+        joint_pos = qpos[qpos_indices]
+        joint_vel = qvel[qvel_indices]
+
+        # 关节限位（从模型中提取）
+        try:
+            # actuator_joint_ids 在 _extract_indices 中定义
+            if hasattr(self, 'actuator_joint_ids'):
+                joint_limits = (
+                    jp.array([self.mj_model.jnt_range[jid, 0] for jid in self.actuator_joint_ids]),
+                    jp.array([self.mj_model.jnt_range[jid, 1] for jid in self.actuator_joint_ids]),
+                )
+            else:
+                joint_limits = None
+        except Exception:
+            joint_limits = None
+
+        # 接触历史（从 info 中获取，需要在 _get_info 中维护）
+        contact_history = prev_state.info.get("contact_history", None)
+
         torques = pipeline_state.qfrc_actuator
 
         # 从info中获取命令（如果存在），否则使用默认值
@@ -1312,6 +1359,13 @@ class WalkingEnv(MJXBaseEnv):
             action=action,
             last_action=prev_state.last_action,
             torques=torques,
+            # ==================== 新增参数 ====================
+            feet_velocities=feet_velocities,
+            joint_pos=joint_pos,
+            joint_vel=joint_vel,
+            joint_limits=joint_limits,
+            contact_history=contact_history,
+            # ==================== 保持原有参数 ====================
             target_velocity=target_vel,
             target_height=self.target_height,
             reward_weights=self.reward_weights,
@@ -1361,12 +1415,13 @@ class WalkingEnv(MJXBaseEnv):
             pipeline_state: 当前MJX pipeline状态
 
         Returns:
-            额外信息字典（始终包含 command 和 actual_velocity）
+            额外信息字典（始终包含 command、actual_velocity 和 contact_history）
         """
         # 始终保持相同的字典结构（JAX scan 要求）
         info = {
             "command": state.info.get("command", jp.zeros(3)),
             "actual_velocity": jp.zeros(3),  # 默认值
+            "contact_history": jp.zeros((10, 4)),  # 默认值：10步历史，4个接触点
         }
 
         # 提取实际速度（基座线速度和角速度）
@@ -1384,7 +1439,81 @@ class WalkingEnv(MJXBaseEnv):
                 base_ang_vel[2],   # actual_vyaw (wz)
             ])
 
+        # 维护接触历史（滚动窗口）
+        if self.contact_sensor_indices:
+            contact_indices = jp.array(self.contact_sensor_indices)
+            current_contacts = (pipeline_state.sensordata[contact_indices] > 1.0).astype(jp.float32)
+
+            # 获取之前的历史
+            prev_history = state.info.get("contact_history", jp.zeros((10, 4)))
+
+            # 更新：移除最旧的一步，添加当前接触状态
+            new_history = jp.concatenate([
+                prev_history[1:, :],  # 移除第一行
+                current_contacts[jp.newaxis, :],  # 添加当前状态
+            ], axis=0)
+
+            info["contact_history"] = new_history
+
         return info
+
+    def step(self, state: EnvState, action: jax.Array) -> EnvState:
+        """执行一步（重写基类方法以添加终止惩罚）
+
+        Args:
+            state: 当前EnvState
+            action: 动作向量
+
+        Returns:
+            新的EnvState
+        """
+        # 调用基类的物理仿真和计算逻辑
+        # 裁剪动作到合理范围
+        action = jp.clip(action, -1.0, 1.0)
+
+        # 执行物理仿真 (frame_skip步)
+        pipeline_state = state.pipeline_state
+        for _ in range(self.frame_skip):
+            pipeline_state = self._step_pipeline(pipeline_state, action)
+
+        # 计算观测
+        obs = self._get_obs(pipeline_state, action)
+
+        # 计算奖励
+        reward = self._compute_reward(state, action, pipeline_state)
+
+        # 检查终止条件
+        done = self._is_done(state, pipeline_state)
+
+        # [NEW] 应用终止惩罚（参考 Isaac Lab 和 Gait-Conditioned RL 2025）
+        # 当机器人摔倒时，施加 -200.0 的强力惩罚，迫使策略学习避免摔倒
+        termination_penalty = self.reward_weights.get("termination", 0.0)
+        reward = jp.where(
+            done,
+            reward + termination_penalty,  # 终止时施加惩罚（termination通常为 -200.0）
+            reward
+        )
+
+        # 更新步数
+        step = state.step + 1
+        done = jp.logical_or(done, step >= self.max_steps)
+
+        # 获取额外信息（包含接触历史）
+        info = self._get_info(state, action, pipeline_state)
+
+        # 创建新状态
+        new_state = EnvState(
+            pipeline_state=pipeline_state,
+            obs=obs,
+            reward=reward,
+            done=done,
+            step=step,
+            rng=state.rng,
+            last_action=action,
+            info=info,
+        )
+
+        return new_state
 
     def reset(self, rng: jax.Array) -> EnvState:
         """重置环境（带命令采样）
@@ -1402,10 +1531,11 @@ class WalkingEnv(MJXBaseEnv):
         rng, cmd_rng = jax.random.split(state.rng)
         command = self._sample_command(cmd_rng)
 
-        # 初始化 info（包含命令和 actual_velocity，保持 pytree 结构一致）
+        # 初始化 info（包含命令、actual_velocity 和 contact_history，保持 pytree 结构一致）
         info = {
             "command": command,
             "actual_velocity": jp.zeros(3),  # 初始速度为零
+            "contact_history": jp.zeros((10, 4)),  # 初始化接触历史（10步，4个接触点）
         }
 
         # 重新计算obs（包含命令）
