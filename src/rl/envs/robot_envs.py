@@ -14,6 +14,17 @@ from rich.console import Console
 
 from .mjx_base_env import EnvState, MJXBaseEnv
 
+# 简单的四元数乘法函数 (q1 * q2)
+def quaternion_multiply(q1, q2):
+    w1, x1, y1, z1 = q1
+    w2, x2, y2, z2 = q2
+    return jp.array([
+        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+    ])
+
 console = Console()
 
 
@@ -1267,6 +1278,14 @@ class WalkingEnv(MJXBaseEnv):
             base_quat = qpos[
                 self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
+            
+            # [CRITICAL FIX] Jiyuan 机器人的 base_link 在 XML 中旋转了 90 度 (quat=[0.707, 0.707, 0, 0])
+            # 这导致"直立"姿态的物理四元数也是 [0.707, 0.707, 0, 0]
+            # 但奖励函数期望直立姿态为 [1, 0, 0, 0]
+            # 因此，在计算奖励前，我们需要乘以逆旋转 [0.707, -0.707, 0, 0] 来校正
+            fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
+            base_quat = quaternion_multiply(fix_quat, base_quat)
+            
         else:
             torso_z = self.target_height
             base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
