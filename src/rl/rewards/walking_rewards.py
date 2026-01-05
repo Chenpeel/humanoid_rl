@@ -540,9 +540,12 @@ def compute_walking_reward(
         reward_foot_clearance = jp.array(0.0)
         penalty_drag = jp.array(0.0)
 
-    # 能量效率惩罚
+    # 能量效率惩罚（添加裁剪防止数值爆炸）
     action_rate_penalty = compute_action_rate_penalty(action, last_action)
+    action_rate_penalty = jp.clip(action_rate_penalty, 0.0, 100.0)  # 限制最大惩罚
+
     torque_penalty = compute_torque_penalty(torques)
+    torque_penalty = jp.clip(torque_penalty, 0.0, 10000.0)  # 限制最大惩罚
 
     # 如果reward_weights为None，使用默认权重
     if reward_weights is None:
@@ -627,6 +630,13 @@ def compute_walking_reward(
             # 替换原有的forward_velocity奖励
             base_tracking_weight = reward_weights.get("forward_velocity", 0.0)
             reward += (reward_weights["velocity_tracking"] - base_tracking_weight) * enhanced_tracking
+
+    # [CRITICAL FIX] 裁剪总奖励到合理范围（防止训练崩溃）
+    # 参考 VelocityTrackingEnv，裁剪到 [-10, 10]
+    reward = jp.clip(reward, -10.0, 10.0)
+
+    # NaN/Inf 保护（防止数值问题导致训练失败）
+    reward = jp.nan_to_num(reward, nan=0.0, posinf=10.0, neginf=-10.0)
 
     return reward
 
