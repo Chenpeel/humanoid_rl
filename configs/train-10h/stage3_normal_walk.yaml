@@ -8,6 +8,7 @@ env_type: walking
 num_envs: 1024
 num_steps: 64
 max_episode_steps: 2000
+target_height: 0.78
 
 cmd_x_range: [-0.2, 0.8]
 cmd_y_range: [-0.3, 0.3]
@@ -22,8 +23,8 @@ reward_weights:
   trunk_lin_vel_z: -0.3
   drag: -0.6
   alive: 0.3
-  action_rate: -0.008
-  torques: -0.00008
+  action_rate: -0.002
+  torques: -0.00003
   stability: 1.2
 
 num_epochs: 4

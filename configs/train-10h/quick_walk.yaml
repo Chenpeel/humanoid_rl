@@ -11,6 +11,7 @@ env_type: walking
 num_envs: 1024           # 1080Ti 11GB限制
 num_steps: 64
 max_episode_steps: 1000
+target_height: 0.78
 
 # ==================== 任务参数（课程学习） ====================
 # 速度命令范围：简化任务
