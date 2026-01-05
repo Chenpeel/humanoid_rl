@@ -12,15 +12,18 @@ import argparse
 import os
 import sys
 import time
-import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
+import yaml
+
 # ==================== JAX配置 (必须在导入jax之前) ====================
 # 🔧 指定使用 GPU device:0（第一张显卡）
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# 多 GPU 训练
 
 # 启用JAX编译缓存 (使用绝对路径，确保持久化)
 cache_path = os.path.abspath(os.path.join(
@@ -33,9 +36,9 @@ os.environ["JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES"] = "0"  # 缓存所有编
 os.environ["JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS"] = "0"  # 缓存所有编译
 
 # 最大化显存使用
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.8"
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.85"
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+# os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 # 导入JAX
 import jax
@@ -368,12 +371,12 @@ def train_stage(
     # 实际使用时可以通过subprocess调用
 
     # 导入训练模块
-    from rl.training.ppo_trainer import PPOConfig, PPOTrainer
     from rl.envs import create_walking_env
     from rl.models.networks import ActorCriticNetwork
     from rl.models.optimizer import create_ppo_optimizer_cosine
-    from rl.training.train_state import create_train_state
     from rl.training.logger import Logger, MetricsLogger, create_training_display
+    from rl.training.ppo_trainer import PPOConfig, PPOTrainer
+    from rl.training.train_state import create_train_state
     from rl.utils.checkpoint import create_checkpoint_manager
     from rl.utils.performance_monitor import PerformanceMonitor
 
@@ -441,11 +444,13 @@ def train_stage(
             reward_weights=reward_weights,
         )
     else:  # 默认创建行走环境
+        target_height = yaml_config.get("target_height", 0.35)
         env = create_walking_env(
             xml_path=scene_path,
             cmd_x_range=cmd_x_range,
             cmd_y_range=cmd_y_range,
             cmd_yaw_range=cmd_yaw_range,
+            target_height=target_height,
             reward_weights=reward_weights,
         )
 
@@ -545,7 +550,13 @@ def train_stage(
         train_step_jit = jax.jit(train_step_fn)
 
         # 触发编译（带进度提示）
-        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+        from rich.progress import (
+            BarColumn,
+            Progress,
+            SpinnerColumn,
+            TextColumn,
+            TimeElapsedColumn,
+        )
 
         # 在screen中禁用SpinnerColumn，避免显示异常
         progress_columns = [
@@ -675,7 +686,7 @@ def main():
     parser.add_argument(
         "--no-jit",
         action="store_true",
-        help="禁用JIT编译（eager模式，慢但不需要编译）",
+        help="禁用JIT编译",
     )
     parser.add_argument(
         "--resume-checkpoint",

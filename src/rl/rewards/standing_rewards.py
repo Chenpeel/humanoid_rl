@@ -45,7 +45,7 @@ def quat_to_euler(quat: jax.Array) -> jax.Array:
 def compute_height_reward(
     torso_z: jax.Array,
     target_height: float,
-    tolerance: float = 0.05
+    tolerance: float = 0.08
 ) -> jax.Array:
     """计算高度保持奖励
 
