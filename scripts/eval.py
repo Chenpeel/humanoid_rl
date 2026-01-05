@@ -385,8 +385,8 @@ def main():
         console.print("[cyan]使用本地MJCF模型...[/cyan]")
         xml_path = "assets/xmls/scenes/flat_terrain.xml"
     elif xml_path is None:
-        # 默认使用jiyuan_fit平地场景
-        xml_path = "assets/xmls/scenes/jiyuan_fit_flat_terrain.xml"
+        # 默认使用平地场景
+        xml_path = "assets/xmls/scenes/flat_terrain.xml"
         console.print(f"[yellow]未指定场景文件，使用默认场景: {xml_path}[/yellow]")
 
     console.print(f"[cyan]模型文件: {xml_path}[/cyan]")

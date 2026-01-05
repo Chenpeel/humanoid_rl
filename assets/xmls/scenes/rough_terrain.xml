@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<mujoco model="jiyuan_rough_terrain">
+<mujoco model="rough_terrain">
   <compiler angle="radian" />
 
   <!-- 仿真选项 -->
@@ -7,56 +6,45 @@
     <flag warmstart="enable" />
   </option>
 
-  <!-- 视觉配置 -->
-  <visual>
-    <global offwidth="1920" offheight="1080" />
-    <quality shadowsize="4096" />
-    <map znear="0.01" />
-  </visual>
+  <!-- 包含机器人模型定义 -->
+  <!-- 这将导入机器人的 visual, default, asset, worldbody(base_link), actuator, sensor 等 -->
+  <include file="../models/jiyuan_fit.xml"/>
 
-  <!-- === 加载机器人参数和资产 === -->
-  <include file="../models/jiyuan/params/default_classes.xml" />
-  <include file="../models/jiyuan/params/materials.xml" />
-  <include file="../models/jiyuan/geometry/meshes.xml" />
-
-  <!-- 额外材质 -->
-  <asset>
-    <material name="obstacle" rgba="0.5 0.5 0.5 1" />
-  </asset>
-
-  <!-- === 世界环境 === -->
   <worldbody>
     <!-- 光照 -->
     <light diffuse="0.8 0.8 0.8" pos="0 0 4" dir="0 0 -1" />
 
-    <!-- 地面：粗糙地形（更低摩擦） -->
+    <!-- 地面：粗糙地形（较低摩擦力） -->
     <geom name="ground" type="plane" size="0 0 0.05" material="ground"
-      condim="3" friction="0.8 0.01 0.01" />
+      condim="3" contype="1" conaffinity="62" friction="0.8 0.01 0.01" />
 
-    <!-- 随机障碍物 -->
-    <body name="obstacle_1" pos="1.5 0 0.05">
-      <geom type="box" size="0.2 0.3 0.05" material="obstacle" />
+    <!-- 障碍物：随机分布的箱形障碍物（避免圆柱体与mesh碰撞） -->
+    <body name="obstacle_box_1" pos="1.0 0.5 0.05">
+      <geom name="obstacle_box_1_geom" type="box" size="0.1 0.1 0.05" rgba="0.6 0.3 0.2 1" />
     </body>
-
-    <body name="obstacle_2" pos="2.5 0.5 0.08">
-      <geom type="box" size="0.15 0.2 0.08" material="obstacle" />
+    <body name="obstacle_box_2" pos="1.5 -0.3 0.08">
+      <geom name="obstacle_box_2_geom" type="box" size="0.08 0.08 0.08" rgba="0.6 0.3 0.2 1" />
     </body>
-
-    <body name="obstacle_3" pos="3.0 -0.4 0.06">
-      <geom type="cylinder" size="0.15 0.06" material="obstacle" />
+    <body name="obstacle_box_3" pos="2.0 0.2 0.06">
+      <geom name="obstacle_box_3_geom" type="box" size="0.06 0.06 0.06" rgba="0.4 0.4 0.5 1" />
     </body>
-
-    <!-- 机器人 -->
-    <body name="base_link" pos="0.00000000 0.00000000 0.99150000"
-      quat="0.70710678 0.70710678 0.00000000 0.00000000" childclass="robot">
-      <freejoint name="floating_base" />
-      <include file="../models/jiyuan/geometry/base.xml" />
-      <include file="../models/jiyuan/geometry/right_leg.xml" />
-      <include file="../models/jiyuan/geometry/left_leg.xml" />
+    <body name="obstacle_box_4" pos="-1.0 0.8 0.04">
+      <geom name="obstacle_box_4_geom" type="box" size="0.12 0.12 0.04" rgba="0.6 0.3 0.2 1" />
+    </body>
+    <body name="obstacle_box_5" pos="-1.5 -0.5 0.07">
+      <geom name="obstacle_box_5_geom" type="box" size="0.07 0.05 0.07" rgba="0.4 0.4 0.5 1" />
+    </body>
+    <body name="obstacle_box_6" pos="0.5 1.5 0.05">
+      <geom name="obstacle_box_6_geom" type="box" size="0.1 0.1 0.05" rgba="0.6 0.3 0.2 1" />
+    </body>
+    <body name="obstacle_box_7" pos="-0.8 -1.2 0.05">
+      <geom name="obstacle_box_7_geom" type="box" size="0.09 0.09 0.05" rgba="0.5 0.3 0.4 1" />
+    </body>
+    <body name="obstacle_box_8" pos="2.2 -0.8 0.06">
+      <geom name="obstacle_box_8_geom" type="box" size="0.08 0.12 0.06" rgba="0.3 0.5 0.4 1" />
     </body>
 
     <!-- ==================== 相机定义 ==================== -->
-
     <!-- 跟踪相机（第三人称跟随机器人） -->
     <camera name="track" mode="trackcom" pos="-3 0 1.5" xyaxes="0 -1 0 0.3 0 1" />
 
@@ -65,15 +53,6 @@
 
     <!-- 俯视相机（鸟瞰视角） -->
     <camera name="top" pos="0 0 8" xyaxes="1 0 0 0 1 0" />
-
   </worldbody>
 
-  <!-- === 约束 === -->
-  <include file="../models/jiyuan/equality.xml" />
-  <include file="../models/jiyuan/tendon.xml" />
-
-  <!-- === 执行器和传感器 === -->
-  <include file="../models/jiyuan/actuators.xml" />
-  <include file="../models/jiyuan/sensors.xml" />
-  <include file="../models/jiyuan/contact_exclude.xml" />
 </mujoco>

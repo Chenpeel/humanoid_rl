@@ -2,7 +2,7 @@
 # 优先级：命令行参数 > YAML配置 > 代码默认值
 
 # ==================== 场景配置 ====================
-scene: jiyuan_fit_flat # 训练场景 (flat_terrain / rough_terrain / jiyuan_fit_flat / jiyuan_fit_rough)
+scene: flat_terrain # 训练场景 (flat_terrain / rough_terrain / flat_terrain / rough_terrain)
 
 # ==================== 环境配置 ====================
 num_envs: 1024 # 并行环境数（1080Ti 11GB优化配置）

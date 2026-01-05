@@ -381,7 +381,7 @@ def train_stage(
     from rl.utils.performance_monitor import PerformanceMonitor
 
     # 解析配置
-    scene = yaml_config.get("scene", "jiyuan_fit_flat")
+    scene = yaml_config.get("scene", "flat_terrain")
     env_type = yaml_config.get("env_type", "walking")
 
     # 环境配置
@@ -423,8 +423,6 @@ def train_stage(
     scene_file_map = {
         "flat_terrain": "flat_terrain",
         "rough_terrain": "rough_terrain",
-        "jiyuan_fit_flat": "jiyuan_fit_flat_terrain",
-        "jiyuan_fit_rough": "jiyuan_fit_rough_terrain",
     }
     scene_file = scene_file_map.get(scene, scene)
     scene_path = f"assets/xmls/scenes/{scene_file}.xml"

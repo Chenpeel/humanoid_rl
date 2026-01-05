@@ -2,7 +2,7 @@
 # 目标：冲击更高速度
 # 预算：约1.0小时 (200 iters)
 
-scene: jiyuan_fit_flat
+scene: flat_terrain
 env_type: walking
 
 num_envs: 1024

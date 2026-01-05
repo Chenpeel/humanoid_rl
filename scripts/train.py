@@ -166,14 +166,12 @@ def main():
     parser.add_argument(
         "--scene",
         type=str,
-        default=yaml_config.get("scene", "jiyuan_fit_flat"),
+        default=yaml_config.get("scene", "flat_terrain"),
         choices=[
-            "flat_terrain",  # 原始 jiyuan 模型，平坦地形
-            "rough_terrain",  # 原始 jiyuan 模型，粗糙地形
-            "jiyuan_fit_flat",  # jiyuan_fit 模型，平坦地形
-            "jiyuan_fit_rough",  # jiyuan_fit 模型，粗糙地形
+            "flat_terrain",
+            "rough_terrain",
         ],
-        help="选择训练场景: flat_terrain=平坦地面(jiyuan), rough_terrain=粗糙地面(jiyuan), jiyuan_fit_flat=平坦地面(jiyuan_fit), jiyuan_fit_rough=粗糙地面(jiyuan_fit)"
+        help="选择训练场景: flat_terrain=平坦地面, rough_terrain=粗糙地面"
     )
     parser.add_argument(
         "--xml-path",
@@ -340,8 +338,6 @@ def main():
         scene_file_map = {
             "flat_terrain": "flat_terrain",
             "rough_terrain": "rough_terrain",
-            "jiyuan_fit_flat": "jiyuan_fit_flat_terrain",
-            "jiyuan_fit_rough": "jiyuan_fit_rough_terrain",
         }
         scene_file = scene_file_map.get(args.scene, args.scene)
         scene_path = f"assets/xmls/scenes/{scene_file}.xml"

@@ -3,7 +3,7 @@
 # 降低内存使用，避免段错误
 #
 # ==================== Scene Configuration ====================
-scene: jiyuan_fit_flat
+scene: flat_terrain
 env_type: walking
 
 # ==================== Environment Configuration ====================

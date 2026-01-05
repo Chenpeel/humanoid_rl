@@ -2,7 +2,7 @@
 # 目标：快速学会踏步
 # 预算：约1.5小时 (300 iters)
 
-scene: jiyuan_fit_flat
+scene: flat_terrain
 env_type: walking
 
 num_envs: 1024
