@@ -80,6 +80,7 @@ if True:
     from rl.training.train_state import create_train_state
     from rl.utils.performance_monitor import PerformanceMonitor
     from rl.utils.checkpoint import create_checkpoint_manager
+    from rl.curriculum import WalkingCurriculum
 
 
 console = Console()
@@ -353,6 +354,19 @@ def main():
 
     console.print(f"  观测维度: {env.observation_size}")
     console.print(f"  动作维度: {env.action_size}")
+
+    # ==================== 初始化课程学习（仅 WalkingEnv）====================
+    curriculum = None
+    if args.env_type == "walking":
+        console.print("\n[bold cyan]3.5. 初始化课程学习[/bold cyan]")
+        curriculum = WalkingCurriculum()
+        console.print(f"✓ 课程学习模块创建完成")
+        console.print(f"  阶段数: {len(curriculum.stages)}")
+        for i, stage in enumerate(curriculum.stages):
+            console.print(f"  阶段{i+1}: {stage.name} ({stage.step_range[0]:,}-{stage.step_range[1]:,} steps)")
+        # 应用初始阶段（阶段0）配置
+        curriculum.apply_to_env(env, current_step=0)
+        console.print(f"[dim]已应用初始阶段: {curriculum.stages[0].name}[/dim]")
 
     # ==================== 创建网络 ====================
     console.print("\n[bold cyan]4. 创建Actor-Critic网络[/bold cyan]")
@@ -733,6 +747,12 @@ def main():
 
         # 训练循环
         for update in range(1, config.num_updates):
+            # ==================== 课程学习阶段切换 ====================
+            if curriculum is not None:
+                # 计算当前总训练步数（全局步数）
+                current_global_step = update * config.batch_size
+                curriculum.apply_to_env(env, current_global_step)
+
             # ✅ 纯函数调用，无UI依赖
             train_state, env_state, info = train_step_jit(
                 train_state, env_state)
@@ -758,6 +778,15 @@ def main():
                     (1 + jp.cos(jp.pi * progress_ratio))
 
             info["learning_rate"] = float(current_lr)
+
+            # 添加课程学习阶段信息到日志
+            if curriculum is not None:
+                current_global_step = update * config.batch_size
+                stage_info = curriculum.get_stage_info(current_global_step)
+                info["curriculum_stage"] = stage_info["stage_name"]
+                info["curriculum_stage_index"] = stage_info["stage_index"]
+                if stage_info["progress"] is not None:
+                    info["curriculum_progress"] = stage_info["progress"]
 
             # 记录指标
             metrics_logger.log_dict(info)
