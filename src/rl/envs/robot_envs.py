@@ -1530,6 +1530,12 @@ class WalkingEnv(MJXBaseEnv):
             reward,
         )
 
+        # [CRITICAL] 终止惩罚后再次裁剪，防止极端奖励破坏训练
+        # 虽然 termination_penalty 可能是 -200，但最终奖励仍需在合理范围内
+        # 这样可以保持"摔倒很糟糕"的信号，同时避免 value 爆炸
+        reward = jp.clip(reward, -10.0, 10.0)
+        reward = jp.nan_to_num(reward, nan=0.0, posinf=10.0, neginf=-10.0)
+
         # 更新步数
         step = state.step + 1
         done = jp.logical_or(done, step >= self.max_steps)
