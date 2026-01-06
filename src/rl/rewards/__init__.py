@@ -12,19 +12,14 @@ from .standing_rewards import (DEFAULT_STANDING_REWARD_WEIGHTS,
                                compute_standing_reward, compute_torque_penalty,
                                compute_velocity_penalty, quat_to_euler)
 from .walking_rewards import (DEFAULT_WALKING_REWARD_WEIGHTS,
-                              check_walking_termination)
-from .walking_rewards import \
-    compute_action_rate_penalty as compute_walking_action_rate_penalty
-from .walking_rewards import (compute_drag_penalty,
+                              check_walking_termination,
+                              compute_drag_penalty,
                               compute_energy_efficiency_reward,
                               compute_foot_clearance_reward,
                               compute_forward_velocity_reward,
                               compute_gait_symmetry_reward,
-                              compute_normalized_torque_penalty)
-from .walking_rewards import \
-    compute_torque_penalty as compute_walking_torque_penalty
-from .walking_rewards import (compute_trunk_height_reward,
-                              compute_trunk_lin_vel_z_penalty,
+                              compute_normalized_torque_penalty,
+                              compute_trunk_height_reward,
                               compute_trunk_orientation_penalty,
                               compute_walking_reward, get_feet_contacts,
                               normalize_quaternion, wrap_to_pi)
@@ -46,7 +41,6 @@ __all__ = [
     "compute_foot_clearance_reward",
     "compute_trunk_height_reward",
     "compute_trunk_orientation_penalty",
-    "compute_trunk_lin_vel_z_penalty",
     "compute_drag_penalty",
     "compute_normalized_torque_penalty",
     "compute_energy_efficiency_reward",

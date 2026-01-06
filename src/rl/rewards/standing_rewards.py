@@ -11,6 +11,55 @@ import jax
 import jax.numpy as jp
 
 # =============================================================================================
+# ======================================= 默认奖励权重 =========================================
+# =============================================================================================
+
+DEFAULT_STANDING_REWARD_WEIGHTS = {
+    "height": 2.0,
+    "orientation": 1.0,
+    "lin_vel": -0.5,
+    "ang_vel": -0.5,
+    "alive": 1.0,
+    "action_rate": -0.01,
+    "torques": -0.001,
+}
+
+# =============================================================================================
+# ======================================= 终止条件检查 ==========================================
+# =============================================================================================
+
+
+def check_standing_termination(
+    torso_z: jax.Array,
+    base_quat: jax.Array,
+    height_threshold: float = 0.25,
+    upright_threshold: float = 0.5,
+) -> jax.Array:
+    """
+    检查站立是否终止 (摔倒检测)
+
+    Args:
+        torso_z: 躯干高度
+        base_quat: 基座四元数
+        height_threshold: 最小高度阈值 (m)
+        upright_threshold: 最小直立度阈值 (z-axis projection)
+
+    Returns:
+        bool array, True 表示终止
+    """
+    # 1. 高度过低
+    is_fallen_height = torso_z < height_threshold
+
+    # 2. 姿态倾斜过大
+    # z-component of z-axis in world frame: 1 - 2(x^2 + y^2)
+    qx, qy = base_quat[..., 1], base_quat[..., 2]
+    z_z = 1.0 - 2.0 * (qx**2 + qy**2)
+    is_fallen_orientation = z_z < upright_threshold
+
+    return is_fallen_height | is_fallen_orientation
+
+
+# =============================================================================================
 # ========================================= 数学工具函数 ========================================
 # =============================================================================================
 
@@ -48,6 +97,22 @@ def normalize_quaternion(quat: jax.Array) -> jax.Array:
 # =============================================================================================
 
 
+def compute_action_rate_penalty(action: jax.Array, last_action: jax.Array) -> jax.Array:
+    """计算动作变化率惩罚"""
+    return jp.sum(jp.square(action - last_action), axis=-1)
+
+
+# ---------------------------------------------------------------------------------------------
+
+
+def compute_torque_penalty(torques: jax.Array) -> jax.Array:
+    """计算扭矩惩罚"""
+    return jp.sum(jp.square(torques), axis=-1)
+
+
+# ---------------------------------------------------------------------------------------------
+
+
 def compute_height_reward(
     torso_z: jax.Array, target_height: float, tolerance: float = 0.05
 ) -> jax.Array:
@@ -80,6 +145,17 @@ def compute_velocity_penalties(
         "lin_vel_penalty": jp.sum(jp.square(base_linvel), axis=-1),
         "ang_vel_penalty": jp.sum(jp.square(base_angvel), axis=-1),
     }
+
+
+# ---------------------------------------------------------------------------------------------
+
+
+def compute_velocity_penalty(
+    base_linvel: jax.Array, base_angvel: jax.Array
+) -> jax.Array:
+    """计算总速度惩罚 (Wrapper for compatibility)"""
+    penalties = compute_velocity_penalties(base_linvel, base_angvel)
+    return penalties["lin_vel_penalty"] + penalties["ang_vel_penalty"]
 
 
 # =============================================================================================
