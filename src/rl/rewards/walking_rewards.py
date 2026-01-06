@@ -557,20 +557,39 @@ def compute_walking_reward(
         reward += val
         reward_info["reward/gait_symmetry"] = val
 
-    if "feet_air_time" in weights and contact_history is not None:
-        val = weights["feet_air_time"] * \
-            compute_feet_air_time_reward(contact_history)
+    if "foot_clearance" in weights:
+        if feet_positions is not None:
+            val = weights["foot_clearance"] * compute_foot_clearance_reward(
+                feet_positions, contacts
+            )
+        else:
+            val = jp.array(0.0)
+        reward += val
+        reward_info["reward/foot_clearance"] = val
+
+    if "feet_air_time" in weights:
+        if contact_history is not None:
+            val = weights["feet_air_time"] * \
+                compute_feet_air_time_reward(contact_history)
+        else:
+            val = jp.array(0.0)
         reward += val
         reward_info["reward/feet_air_time"] = val
 
     # 4. 物理惩罚项
-    if "drag" in weights and feet_positions is not None:
-        val = weights["drag"] * compute_drag_penalty(feet_positions, contacts)
+    if "drag" in weights:
+        if feet_positions is not None:
+            val = weights["drag"] * compute_drag_penalty(feet_positions, contacts)
+        else:
+            val = jp.array(0.0)
         reward += val
         reward_info["reward/drag"] = val
 
-    if "torques" in weights and torques is not None:
-        val = weights["torques"] * jp.sum(jp.square(torques), axis=-1)
+    if "torques" in weights:
+        if torques is not None:
+            val = weights["torques"] * jp.sum(jp.square(torques), axis=-1)
+        else:
+            val = jp.array(0.0)
         reward += val
         reward_info["reward/torques"] = val
 
@@ -580,21 +599,27 @@ def compute_walking_reward(
         reward_info["reward/alive"] = val
 
     # 5. 动作平滑性和关节约束
-    if "action_rate" in weights and action is not None and last_action is not None:
-        # 惩罚相邻时间步动作变化过大
-        action_diff = jp.sum(jp.square(action - last_action), axis=-1)
-        val = weights["action_rate"] * action_diff
+    if "action_rate" in weights:
+        if action is not None and last_action is not None:
+            # 惩罚相邻时间步动作变化过大
+            action_diff = jp.sum(jp.square(action - last_action), axis=-1)
+            val = weights["action_rate"] * action_diff
+        else:
+            val = jp.array(0.0)
         reward += val
         reward_info["reward/action_rate"] = val
 
-    if "joint_limits" in weights and joint_pos is not None and joint_limits is not None:
-        # 惩罚接近关节限制的动作
-        lower_limits, upper_limits = joint_limits
-        # 计算距离限制的距离（软约束）
-        lower_violation = jp.maximum(0.0, lower_limits - joint_pos)
-        upper_violation = jp.maximum(0.0, joint_pos - upper_limits)
-        limits_penalty = jp.sum(jp.square(lower_violation) + jp.square(upper_violation), axis=-1)
-        val = weights["joint_limits"] * limits_penalty
+    if "joint_limits" in weights:
+        if joint_pos is not None and joint_limits is not None:
+            # 惩罚接近关节限制的动作
+            lower_limits, upper_limits = joint_limits
+            # 计算距离限制的距离(软约束)
+            lower_violation = jp.maximum(0.0, lower_limits - joint_pos)
+            upper_violation = jp.maximum(0.0, joint_pos - upper_limits)
+            limits_penalty = jp.sum(jp.square(lower_violation) + jp.square(upper_violation), axis=-1)
+            val = weights["joint_limits"] * limits_penalty
+        else:
+            val = jp.array(0.0)
         reward += val
         reward_info["reward/joint_limits"] = val
 
