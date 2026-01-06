@@ -1277,10 +1277,21 @@ class WalkingEnv(MJXBaseEnv):
         rng, cmd_rng = jax.random.split(state.rng)
         command = self._sample_command(cmd_rng)
 
+        # 初始化所有可能的 info 键(包括 reward 相关键)
+        # 确保 pytree 结构在 reset 和 step 中保持一致
         info = {
             "command": command,
             "actual_velocity": jp.zeros(3),
             "contact_history": jp.zeros((10, 4)),
+            # 预初始化所有可能的 reward 键(step() 中会更新)
+            "reward/alive": jp.float32(0.0),
+            "reward/forward_velocity": jp.float32(0.0),
+            "reward/gait_symmetry": jp.float32(0.0),
+            "reward/trunk_height": jp.float32(0.0),
+            "reward/orientation": jp.float32(0.0),
+            "reward/drag": jp.float32(0.0),
+            "reward/torques": jp.float32(0.0),
+            "reward/upright_bonus": jp.float32(0.0),
         }
 
         obs = state.obs.at[

@@ -622,20 +622,15 @@ def main():
     )
     train_step_jit = jax.jit(train_step_fn)
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[bold cyan]正在编译 JAX 计算图..."),
-        TimeElapsedColumn(),
-        console=console,
-        transient=False,
-    ) as progress:
-        task = progress.add_task("编译中", total=None)
-        t0 = time.time()
-        train_state, env_state, info = train_step_jit(train_state, env_state)
-        jax.block_until_ready(train_state)
-        compile_time = time.time() - t0
-
+    # ==================== 11. JIT编译 ====================
+    console.print("\n[bold cyan]11. JIT编译[/bold cyan]")
+    console.print("[dim]正在编译 JAX 计算图...[/dim]")
+    t0 = time.time()
+    train_state, env_state, info = train_step_jit(train_state, env_state)
+    jax.block_until_ready(train_state)
+    compile_time = time.time() - t0
     console.print(f"✓ 编译完成 (耗时: {compile_time:.2f}s)")
+
 
     # -------------------------------- 8. 训练循环 --------------------------------
     console.print("\n[bold cyan]开始训练[/bold cyan]")
