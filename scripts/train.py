@@ -440,12 +440,15 @@ def main():
         scene_path = f"assets/xmls/scenes/{scene_file}.xml"
         console.print(f"使用预设场景: {args.scene}")
 
+    t0 = time.time()
     if args.env_type == "walking":
         env = create_walking_env(xml_path=scene_path)
-        console.print(f"✓ WalkingEnv 创建完成")
+        env_create_time = time.time() - t0
+        console.print(f"✓ WalkingEnv 创建完成 (耗时: {env_create_time:.2f}s)")
     else:
         env = create_velocity_tracking_env(xml_path=scene_path)
-        console.print(f"✓ VelocityTrackingEnv 创建完成")
+        env_create_time = time.time() - t0
+        console.print(f"✓ VelocityTrackingEnv 创建完成 (耗时: {env_create_time:.2f}s)")
 
     console.print(f"  观测维度: {env.observation_size}")
     console.print(f"  动作维度: {env.action_size}")
@@ -454,6 +457,7 @@ def main():
     curriculum = None
     if args.env_type == "walking":
         console.print("\n[bold cyan]3.5. 初始化课程学习[/bold cyan]")
+        t0 = time.time()
         curriculum_file = yaml_config.get("curriculum_file") or yaml_config.get(
             "weights_file"
         )
@@ -491,7 +495,8 @@ def main():
                 )
                 sys.exit(1)
 
-        console.print(f"✓ 课程学习模块创建完成")
+        curriculum_init_time = time.time() - t0
+        console.print(f"✓ 课程学习模块创建完成 (耗时: {curriculum_init_time:.2f}s)")
         console.print(f"  阶段数: {len(curriculum.stages)}")
         for i, stage in enumerate(curriculum.stages):
             console.print(
@@ -508,6 +513,7 @@ def main():
         hidden_dims=tuple(args.hidden_dims),
     )
 
+    t0 = time.time()
     rng = jax.random.PRNGKey(42)
     rng, init_rng = jax.random.split(rng)
     dummy_obs = jp.zeros((1, env.observation_size))
@@ -521,8 +527,9 @@ def main():
     forward_has_nan = (
         jp.isnan(mean).any() or jp.isnan(log_std).any() or jp.isnan(value).any()
     )
+    network_init_time = time.time() - t0
 
-    console.print(f"✓ 网络创建完成 (参数: {num_params:,})")
+    console.print(f"✓ 网络创建完成 (参数: {num_params:,}, 耗时: {network_init_time:.2f}s)")
     if params_has_nan or params_has_inf:
         console.print(f"[red]⚠️  警告：网络参数包含 NaN 或 Inf！[/red]")
     if forward_has_nan:
@@ -550,31 +557,38 @@ def main():
 
     # -------------------------------- 5. 初始化状态 --------------------------------
     console.print("\n[bold cyan]6. 初始化训练状态[/bold cyan]")
+    t0 = time.time()
     train_state = create_train_state(
         network=network,
         optimizer=optimizer,
         obs_shape=(env.observation_size,),
         rng=rng,
     )
-    console.print(f"✓ 训练状态初始化完成")
+    train_state_init_time = time.time() - t0
+    console.print(f"✓ 训练状态初始化完成 (耗时: {train_state_init_time:.2f}s)")
 
     console.print("\n[bold cyan]7. 初始化批量环境[/bold cyan]")
     rng, reset_rng = jax.random.split(rng)
+    t0 = time.time()
     env_state = env.batch_reset(reset_rng, config.num_envs)
+    env_reset_time = time.time() - t0
     obs_has_nan = jp.isnan(env_state.obs).any()
     obs_has_inf = jp.isinf(env_state.obs).any()
-    console.print(f"✓ 环境初始化完成 (Env: {config.num_envs})")
+    console.print(f"✓ 环境初始化完成 (Env: {config.num_envs}, 耗时: {env_reset_time:.2f}s)")
     if obs_has_nan or obs_has_inf:
         console.print(f"[red]⚠️  警告：环境重置后观测包含 NaN 或 Inf！[/red]")
 
     # -------------------------------- 6. 日志与工具 --------------------------------
     console.print("\n[bold cyan]8. 创建日志系统[/bold cyan]")
+    t0 = time.time()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_dir = f"logs/train/ppo_{timestamp}"
     logger = Logger(log_dir=log_dir, use_tensorboard=True, use_rich=True)
-    console.print(f"✓ 日志系统创建完成 ({log_dir})")
+    logger_init_time = time.time() - t0
+    console.print(f"✓ 日志系统创建完成 ({log_dir}, 耗时: {logger_init_time:.2f}s)")
 
     console.print("\n[bold cyan]9. 创建检查点管理器[/bold cyan]")
+    t0 = time.time()
     checkpoint_manager = create_checkpoint_manager(
         log_dir=log_dir,
         max_to_keep=5,
@@ -582,11 +596,14 @@ def main():
         metric_name="mean_reward",
         metric_mode="max",
     )
-    console.print(f"✓ 检查点管理器创建完成")
+    checkpoint_init_time = time.time() - t0
+    console.print(f"✓ 检查点管理器创建完成 (耗时: {checkpoint_init_time:.2f}s)")
 
     console.print("\n[bold cyan]10. 创建PPO训练器[/bold cyan]")
+    t0 = time.time()
     trainer = PPOTrainer(config=config, env=env, network=network, optimizer=optimizer)
-    console.print(f"✓ 训练器创建完成")
+    trainer_init_time = time.time() - t0
+    console.print(f"✓ 训练器创建完成 (耗时: {trainer_init_time:.2f}s)")
 
     video_recorder = None
     if args.enable_video:
@@ -594,6 +611,7 @@ def main():
         from rl.utils.renderer import VideoRecorder
 
         try:
+            t0 = time.time()
             video_recorder = VideoRecorder(
                 mujoco_model=env.mj_model,
                 output_dir=f"{log_dir}/videos",
@@ -602,7 +620,8 @@ def main():
                 fps=60,
                 camera_name=args.video_camera,
             )
-            console.print(f"✓ 视频录制器创建完成")
+            video_recorder_init_time = time.time() - t0
+            console.print(f"✓ 视频录制器创建完成 (耗时: {video_recorder_init_time:.2f}s)")
         except Exception as e:
             console.print(f"[yellow]警告: 视频录制器创建失败: {e}[/yellow]")
             video_recorder = None
@@ -610,9 +629,6 @@ def main():
     # -------------------------------- 7. JIT编译 --------------------------------
     step_number = "12" if args.enable_video else "11"
     console.print(f"\n[bold cyan]{step_number}. JIT编译[/bold cyan]")
-
-    from rich.progress import (Progress, SpinnerColumn, TextColumn,
-                               TimeElapsedColumn)
 
     train_step_fn = create_train_step_fn(
         config=config,
@@ -654,29 +670,20 @@ def main():
             if update == 1:
                 # 首次迭代显示
                 from rich.console import Console
-                from rich.progress import (Progress, SpinnerColumn, TextColumn,
-                                           TimeElapsedColumn)
 
                 _console = Console()
                 _console.print("\n[yellow]⚙️  首次循环迭代中...[/yellow]")
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[bold yellow]正在执行..."),
-                    TimeElapsedColumn(),
-                    console=_console,
-                    transient=False,
-                ) as p:
-                    p.add_task("First Iter", total=None)
-                    t0 = time.time()
-                    if curriculum is not None:
-                        curriculum.apply_to_env(env, update * config.batch_size)
-                    train_state, env_state, info = train_step_jit(
-                        train_state, env_state
-                    )
-                    jax.block_until_ready(train_state)
-                    _console.print(
-                        f"[green]✓ 首次迭代完成 ({time.time() - t0:.2f}s)[/green]\n"
-                    )
+                t0 = time.time()
+                if curriculum is not None:
+                    curriculum.apply_to_env(env, update * config.batch_size)
+                train_state, env_state, info = train_step_jit(
+                    train_state, env_state
+                )
+                jax.block_until_ready(train_state)
+                first_iter_time = time.time() - t0
+                _console.print(
+                    f"[green]✓ 首次迭代完成 (耗时: {first_iter_time:.2f}s)[/green]\n"
+                )
             else:
                 # 正常迭代
                 if curriculum is not None:
