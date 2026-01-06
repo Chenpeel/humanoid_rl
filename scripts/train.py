@@ -2,6 +2,7 @@
 PPO训练主脚本
 """
 
+import site
 import argparse
 import os
 import sys
@@ -33,17 +34,18 @@ os.environ["JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS"] = "0"
 
 # 最大化显存使用
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
+# os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.90"
 
 # 设置 CUDA 数据目录 (Triton)
-import site
 
 site_packages = site.getsitepackages()[0]
-triton_cuda_dir = os.path.join(site_packages, "triton", "backends", "nvidia", "lib")
+triton_cuda_dir = os.path.join(
+    site_packages, "triton", "backends", "nvidia", "lib")
 if os.path.exists(triton_cuda_dir):
     os.environ["XLA_FLAGS"] = (
-        os.environ.get("XLA_FLAGS", "") + f" --xla_gpu_cuda_data_dir={triton_cuda_dir}"
+        os.environ.get("XLA_FLAGS", "") +
+        f" --xla_gpu_cuda_data_dir={triton_cuda_dir}"
     )
 
 # 启用编译优化
@@ -192,7 +194,8 @@ def _record_training_video(
                 if "command" in info_dict:
                     cmd = info_dict["command"]
                     if hasattr(cmd, "__getitem__") and hasattr(cmd, "shape"):
-                        cmd_single = cmd[env_idx] if len(cmd.shape) > 1 else cmd
+                        cmd_single = cmd[env_idx] if len(
+                            cmd.shape) > 1 else cmd
                         metrics.update(
                             {
                                 "cmd_vx": float(cmd_single[0]),
@@ -203,7 +206,8 @@ def _record_training_video(
                 if "actual_velocity" in info_dict:
                     vel = info_dict["actual_velocity"]
                     if hasattr(vel, "__getitem__") and hasattr(vel, "shape"):
-                        vel_single = vel[env_idx] if len(vel.shape) > 1 else vel
+                        vel_single = vel[env_idx] if len(
+                            vel.shape) > 1 else vel
                         metrics.update(
                             {
                                 "actual_vx": float(vel_single[0]),
@@ -214,11 +218,12 @@ def _record_training_video(
 
             video_recorder.add_frame_from_mjx(single_mjx_data, metrics)
 
-            obs = current_full_state.obs[env_idx : env_idx + 1]
+            obs = current_full_state.obs[env_idx: env_idx + 1]
             mean, log_std, value = network.apply(train_state.params, obs)
             action = mean[0]
 
-            single_state = jax.tree_map(lambda x: x[env_idx], current_full_state)
+            single_state = jax.tree_map(
+                lambda x: x[env_idx], current_full_state)
             new_single_state = env.step(single_state, action)
 
             if new_single_state.done:
@@ -319,7 +324,8 @@ def main():
     parser.add_argument(
         "--num-minibatches", type=int, default=yaml_config.get("num_minibatches", 4)
     )
-    parser.add_argument("--gamma", type=float, default=yaml_config.get("gamma", 0.99))
+    parser.add_argument("--gamma", type=float,
+                        default=yaml_config.get("gamma", 0.99))
     parser.add_argument(
         "--gae-lambda", type=float, default=yaml_config.get("gae_lambda", 0.95)
     )
@@ -448,7 +454,8 @@ def main():
     else:
         env = create_velocity_tracking_env(xml_path=scene_path)
         env_create_time = time.time() - t0
-        console.print(f"✓ VelocityTrackingEnv 创建完成 (耗时: {env_create_time:.2f}s)")
+        console.print(
+            f"✓ VelocityTrackingEnv 创建完成 (耗时: {env_create_time:.2f}s)")
 
     console.print(f"  观测维度: {env.observation_size}")
     console.print(f"  动作维度: {env.action_size}")
@@ -473,10 +480,12 @@ def main():
                     env_config=env_config,
                     default_stage_name="CustomStage",
                 )
-                console.print(f"[yellow]使用自定义课程学习 (源: {curriculum_file})[/yellow]")
+                console.print(
+                    f"[yellow]使用自定义课程学习 (源: {curriculum_file})[/yellow]")
 
                 if "stages" in config_content:
-                    console.print(f"  检测到多阶段定义 ({len(config_content['stages'])} 个阶段)")
+                    console.print(
+                        f"  检测到多阶段定义 ({len(config_content['stages'])} 个阶段)")
                 elif env_config:
                     console.print(f"  环境配置: {env_config}")
             else:
@@ -525,11 +534,13 @@ def main():
     params_has_inf = any(jp.isinf(p).any() for p in params_flat)
     mean, log_std, value = network.apply(params, dummy_obs)
     forward_has_nan = (
-        jp.isnan(mean).any() or jp.isnan(log_std).any() or jp.isnan(value).any()
+        jp.isnan(mean).any() or jp.isnan(
+            log_std).any() or jp.isnan(value).any()
     )
     network_init_time = time.time() - t0
 
-    console.print(f"✓ 网络创建完成 (参数: {num_params:,}, 耗时: {network_init_time:.2f}s)")
+    console.print(
+        f"✓ 网络创建完成 (参数: {num_params:,}, 耗时: {network_init_time:.2f}s)")
     if params_has_nan or params_has_inf:
         console.print(f"[red]⚠️  警告：网络参数包含 NaN 或 Inf！[/red]")
     if forward_has_nan:
@@ -574,7 +585,8 @@ def main():
     env_reset_time = time.time() - t0
     obs_has_nan = jp.isnan(env_state.obs).any()
     obs_has_inf = jp.isinf(env_state.obs).any()
-    console.print(f"✓ 环境初始化完成 (Env: {config.num_envs}, 耗时: {env_reset_time:.2f}s)")
+    console.print(
+        f"✓ 环境初始化完成 (Env: {config.num_envs}, 耗时: {env_reset_time:.2f}s)")
     if obs_has_nan or obs_has_inf:
         console.print(f"[red]⚠️  警告：环境重置后观测包含 NaN 或 Inf！[/red]")
 
@@ -601,7 +613,8 @@ def main():
 
     console.print("\n[bold cyan]10. 创建PPO训练器[/bold cyan]")
     t0 = time.time()
-    trainer = PPOTrainer(config=config, env=env, network=network, optimizer=optimizer)
+    trainer = PPOTrainer(config=config, env=env,
+                         network=network, optimizer=optimizer)
     trainer_init_time = time.time() - t0
     console.print(f"✓ 训练器创建完成 (耗时: {trainer_init_time:.2f}s)")
 
@@ -658,7 +671,8 @@ def main():
                 live.update(get_compile_timer_text())
                 time.sleep(0.1)
 
-        timer_thread = threading.Thread(target=update_compile_timer, daemon=True)
+        timer_thread = threading.Thread(
+            target=update_compile_timer, daemon=True)
         timer_thread.start()
 
         train_state, env_state, info = train_step_jit(train_state, env_state)
@@ -669,7 +683,6 @@ def main():
 
     compile_time = time.time() - t0
     console.print(f"✓ 编译完成 (耗时: {compile_time:.2f}s)")
-
 
     # -------------------------------- 8. 训练循环 --------------------------------
     console.print("\n[bold cyan]开始训练[/bold cyan]")
@@ -716,11 +729,13 @@ def main():
                             live.update(get_timer_text())
                             time.sleep(0.1)
 
-                    timer_thread = threading.Thread(target=update_timer, daemon=True)
+                    timer_thread = threading.Thread(
+                        target=update_timer, daemon=True)
                     timer_thread.start()
 
                     if curriculum is not None:
-                        curriculum.apply_to_env(env, update * config.batch_size)
+                        curriculum.apply_to_env(
+                            env, update * config.batch_size)
                     train_state, env_state, info = train_step_jit(
                         train_state, env_state
                     )
@@ -737,7 +752,8 @@ def main():
                 # 正常迭代
                 if curriculum is not None:
                     curriculum.apply_to_env(env, update * config.batch_size)
-                train_state, env_state, info = train_step_jit(train_state, env_state)
+                train_state, env_state, info = train_step_jit(
+                    train_state, env_state)
                 jax.block_until_ready(train_state)
 
             # 记录指标
@@ -747,18 +763,21 @@ def main():
             # 计算学习率
             current_step = update
             if current_step < warmup_steps:
-                current_lr = args.learning_rate * (current_step / max(1, warmup_steps))
+                current_lr = args.learning_rate * \
+                    (current_step / max(1, warmup_steps))
             else:
                 denominator = max(1, total_updates - warmup_steps)
                 progress_ratio = (current_step - warmup_steps) / denominator
                 current_lr = (
-                    0.5 * args.learning_rate * (1 + jp.cos(jp.pi * progress_ratio))
+                    0.5 * args.learning_rate *
+                    (1 + jp.cos(jp.pi * progress_ratio))
                 )
             info["learning_rate"] = float(current_lr)
 
             # 课程学习信息
             if curriculum is not None:
-                stage_info = curriculum.get_stage_info(update * config.batch_size)
+                stage_info = curriculum.get_stage_info(
+                    update * config.batch_size)
                 info["curriculum_stage"] = stage_info["stage_name"]
                 info["curriculum_stage_index"] = stage_info["stage_index"]
                 if stage_info["progress"] is not None:

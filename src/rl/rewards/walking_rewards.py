@@ -478,6 +478,83 @@ def compute_feet_slide_penalty(
     )
 
 
+# ---------------------------------------------------------------------------------------------
+
+
+def compute_feet_contact_forces_reward(
+    contact_sensors: jax.Array, target_force: float = 50.0, tolerance: float = 20.0
+) -> jax.Array:
+    """脚部接触力奖励 (鼓励合理接触力)"""
+    contact_forces = contact_sensors
+    force_error = jp.abs(contact_forces - target_force)
+    reward = jp.exp(-force_error / tolerance) * (contact_sensors > 1.0)
+    return jp.mean(reward, axis=-1)
+
+
+# ---------------------------------------------------------------------------------------------
+
+
+def compute_joint_symmetry_reward(
+    joint_pos: jax.Array, tolerance: float = 0.1
+) -> jax.Array:
+    """关节对称性奖励 (左右腿对称)"""
+    num_joints_per_leg = joint_pos.shape[-1] // 2
+    right_leg = joint_pos[..., :num_joints_per_leg]
+    left_leg = joint_pos[..., num_joints_per_leg:]
+    symmetry_error = jp.mean(jp.abs(right_leg - left_leg), axis=-1)
+    return jp.exp(-symmetry_error / tolerance)
+
+
+# ---------------------------------------------------------------------------------------------
+
+
+def compute_stumbling_penalty(
+    feet_positions: jax.Array,
+    feet_velocities: jax.Array,
+    contacts: jax.Array,
+    threshold: float = 0.05,
+) -> jax.Array:
+    """绊倒惩罚 (脚部高度低且速度大)"""
+    feet_heights = feet_positions[..., 2]
+    feet_horizontal_vel = jp.linalg.norm(feet_velocities[..., :2], axis=-1)
+    is_stumbling = (
+        (feet_heights < threshold)
+        * (feet_horizontal_vel > 0.5)
+        * (1.0 - contacts.astype(jp.float32))
+    )
+    return jp.sum(is_stumbling, axis=-1)
+
+
+# ---------------------------------------------------------------------------------------------
+
+
+def compute_landing_impact_reward(
+    contact_sensors: jax.Array, prev_contact_sensors: jax.Array, threshold: float = 100.0
+) -> jax.Array:
+    """着陆冲击奖励 (惩罚过大冲击力)"""
+    contact_change = contact_sensors - prev_contact_sensors
+    new_contacts = contact_change > 1.0
+    impact_force = contact_sensors * new_contacts
+    return -jp.sum(jp.clip(impact_force - threshold, min=0.0), axis=-1)
+
+
+# ---------------------------------------------------------------------------------------------
+
+
+def compute_stability_reward(
+    torso_z: jax.Array,
+    base_quat: jax.Array,
+    base_linvel: jax.Array,
+    base_angvel: jax.Array,
+    target_height: float = 0.78,
+    height_tolerance: float = 0.05,
+) -> jax.Array:
+    """综合稳定性奖励"""
+    height_reward = jp.exp(-jp.abs(torso_z - target_height) / height_tolerance)
+    ang_vel_reward = jp.exp(-jp.linalg.norm(base_angvel, axis=-1))
+    return (height_reward + ang_vel_reward) / 2.0
+
+
 # =============================================================================================
 # ===================================== END: 约束与惩罚项 =======================================
 # =============================================================================================
@@ -629,6 +706,70 @@ def compute_walking_reward(
         val = weights["trunk_lin_vel_z"] * vertical_vel_penalty
         reward += val
         reward_info["reward/trunk_lin_vel_z"] = val
+
+    # 6. 新增奖励项 (课程学习阶段2/3)
+    if "feet_contact_forces" in weights:
+        if contact_sensors is not None:
+            val = weights["feet_contact_forces"] * compute_feet_contact_forces_reward(
+                contact_sensors
+            )
+        else:
+            val = jp.array(0.0)
+        reward += val
+        reward_info["reward/feet_contact_forces"] = val
+
+    if "feet_slide" in weights:
+        if feet_velocities is not None and contact_sensors is not None:
+            contacts_bool = get_feet_contacts(contact_sensors)
+            val = weights["feet_slide"] * compute_feet_slide_penalty(
+                feet_velocities, contacts_bool
+            )
+        else:
+            val = jp.array(0.0)
+        reward += val
+        reward_info["reward/feet_slide"] = val
+
+    if "joint_symmetry" in weights:
+        if joint_pos is not None:
+            val = weights["joint_symmetry"] * compute_joint_symmetry_reward(joint_pos)
+        else:
+            val = jp.array(0.0)
+        reward += val
+        reward_info["reward/joint_symmetry"] = val
+
+    if "stumbling" in weights:
+        if feet_positions is not None and feet_velocities is not None:
+            contacts_bool = get_feet_contacts(contact_sensors)
+            val = weights["stumbling"] * compute_stumbling_penalty(
+                feet_positions, feet_velocities, contacts_bool
+            )
+        else:
+            val = jp.array(0.0)
+        reward += val
+        reward_info["reward/stumbling"] = val
+
+    if "landing_impact" in weights:
+        # 需要上一步的接触传感器数据，暂时返回0.0
+        val = jp.array(0.0)
+        reward += val
+        reward_info["reward/landing_impact"] = val
+
+    if "stability" in weights:
+        val = weights["stability"] * compute_stability_reward(
+            torso_z, base_quat, base_linvel, base_angvel, target_height
+        )
+        reward += val
+        reward_info["reward/stability"] = val
+
+    if "energy_efficiency" in weights:
+        if torques is not None and joint_vel is not None:
+            val = weights["energy_efficiency"] * compute_energy_efficiency_reward(
+                torques, joint_vel
+            )
+        else:
+            val = jp.array(0.0)
+        reward += val
+        reward_info["reward/energy_efficiency"] = val
 
     # 最终保护
     reward = jp.clip(reward, -10.0, 10.0)
