@@ -481,18 +481,39 @@ class VelocityTrackingEnv(MJXBaseEnv):
     # --------------------------------------------------------------------------------------------
 
     def reset(self, rng: jax.Array) -> EnvState:
-        """重置环境（带命令采样）"""
+        """重置环境，初始化完整的info字典以保持pytree结构一致
+
+        关键修复：确保reset返回的info字典结构与step返回的完全一致，
+        避免在jax.lax.scan中出现pytree结构不匹配错误。
+        """
         state = super().reset(rng)
         rng, cmd_rng = jax.random.split(state.rng)
         command = self._sample_command(cmd_rng)
 
-        info = state.info.copy()
-        info["command"] = command
-        info["actual_velocity"] = jp.zeros(3)
+        # 初始化环境信息
+        info = {
+            "command": command,
+            "actual_velocity": jp.zeros(3),
+        }
+
+        # 动态初始化所有reward_weights中定义的奖励键为0.0
+        # 这确保了无论配置文件中定义了哪些奖励项，pytree结构都保持一致
+        for weight_key in self.reward_weights.keys():
+            reward_key = f"reward/{weight_key}"
+            info[reward_key] = jp.array(0.0)
 
         obs = state.obs.at[-3:].set(command)
-        state = state.replace(rng=rng, obs=obs, info=info)
-        return state
+
+        return EnvState(
+            pipeline_state=state.pipeline_state,
+            obs=obs,
+            reward=state.reward,
+            done=state.done,
+            step=state.step,
+            rng=rng,
+            last_action=state.last_action,
+            info=info,
+        )
 
     # --------------------------------------------------------------------------------------------
 
@@ -614,6 +635,38 @@ class StandingEnv(MJXBaseEnv):
     @property
     def observation_size(self) -> int:
         return self._observation_size
+
+    # --------------------------------------------------------------------------------------------
+
+    def reset(self, rng: jax.Array) -> EnvState:
+        """重置环境，初始化完整的info字典以保持pytree结构一致
+
+        关键修复：确保reset返回的info字典结构与step返回的完全一致，
+        避免在jax.lax.scan中出现pytree结构不匹配错误。
+        """
+        # 调用基类reset方法
+        state = super().reset(rng)
+
+        # 初始化info字典（StandingEnv的_get_info返回空字典，所以这里也初始化为空）
+        info = {}
+
+        # 动态初始化所有reward_weights中定义的奖励键为0.0
+        # 这确保了无论配置文件中定义了哪些奖励项，pytree结构都保持一致
+        for weight_key in self.reward_weights.keys():
+            reward_key = f"reward/{weight_key}"
+            info[reward_key] = jp.array(0.0)
+
+        # 返回新的EnvState
+        return EnvState(
+            pipeline_state=state.pipeline_state,
+            obs=state.obs,
+            reward=state.reward,
+            done=state.done,
+            step=state.step,
+            rng=state.rng,
+            last_action=state.last_action,
+            info=info,
+        )
 
     # --------------------------------------------------------------------------------------------
 
@@ -954,6 +1007,48 @@ class WalkingEnv(MJXBaseEnv):
 
     # --------------------------------------------------------------------------------------------
 
+    def reset(self, rng: jax.Array) -> EnvState:
+        """重置环境,初始化完整的info字典以保持pytree结构一致
+
+        """
+        # 调用基类reset方法
+        state = super().reset(rng)
+
+        # 采样速度命令
+        rng, cmd_rng = jax.random.split(state.rng)
+        command = self._sample_command(cmd_rng)
+
+        # 初始化info字典,包含环境信息
+        info = {
+            "command": command,
+            "actual_velocity": jp.zeros(3),
+            "contact_history": jp.zeros((10, 4)),
+        }
+
+        # 确保pytree结构保持一致
+        for weight_key in self.reward_weights.keys():
+            reward_key = f"reward/{weight_key}"
+            info[reward_key] = jp.array(0.0)
+
+        # 更新观测中的命令部分
+        obs = state.obs.at[
+            -3 - len(self.contact_sensor_indices): -len(self.contact_sensor_indices)
+        ].set(command)
+
+        # 返回新的EnvState
+        return EnvState(
+            pipeline_state=state.pipeline_state,
+            obs=obs,
+            reward=state.reward,
+            done=state.done,
+            step=state.step,
+            rng=rng,
+            last_action=state.last_action,
+            info=info,
+        )
+
+    # --------------------------------------------------------------------------------------------
+
     def _reset_pipeline(self, rng: jax.Array) -> Any:
         """重置物理状态"""
         data = mjx.make_data(self.mjx_model)
@@ -1266,7 +1361,8 @@ class WalkingEnv(MJXBaseEnv):
         termination_penalty = self.reward_weights.get("termination", 0.0)
 
         # 记录终止惩罚（仅在摔倒时应用）
-        reward_info["reward/termination"] = jp.where(done, termination_penalty, 0.0)
+        reward_info["reward/termination"] = jp.where(
+            done, termination_penalty, 0.0)
 
         reward = jp.where(
             done,
@@ -1294,36 +1390,6 @@ class WalkingEnv(MJXBaseEnv):
         )
 
     # --------------------------------------------------------------------------------------------
-
-    def reset(self, rng: jax.Array) -> EnvState:
-        """重置环境"""
-        state = super().reset(rng)
-        rng, cmd_rng = jax.random.split(state.rng)
-        command = self._sample_command(cmd_rng)
-
-        # 初始化所有可能的 info 键(包括 reward 相关键)
-        # 确保 pytree 结构在 reset 和 step 中保持一致
-        info = {
-            "command": command,
-            "actual_velocity": jp.zeros(3),
-            "contact_history": jp.zeros((10, 4)),
-            # 预初始化所有可能的 reward 键(step() 中会更新)
-            "reward/alive": jp.float32(0.0),
-            "reward/forward_velocity": jp.float32(0.0),
-            "reward/gait_symmetry": jp.float32(0.0),
-            "reward/trunk_height": jp.float32(0.0),
-            "reward/orientation": jp.float32(0.0),
-            "reward/drag": jp.float32(0.0),
-            "reward/torques": jp.float32(0.0),
-            "reward/upright_bonus": jp.float32(0.0),
-        }
-
-        obs = state.obs.at[
-            -3 - len(self.contact_sensor_indices): -len(self.contact_sensor_indices)
-        ].set(command)
-
-        state = state.replace(rng=rng, obs=obs, info=info)
-        return state
 
 
 def create_walking_env(
