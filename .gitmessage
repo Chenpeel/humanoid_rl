@@ -1,0 +1,49 @@
+# <type>(<scope>): <subject>
+#
+# <body>
+#
+# <footer>
+#
+# ==================== Commit Message 规范 ====================
+# Type（类型）:
+#   feat:     新功能
+#   fix:      Bug 修复
+#   docs:     文档更新
+#   style:    代码格式（不影响功能）
+#   refactor: 重构（既非新功能也非修复）
+#   perf:     性能优化
+#   test:     测试相关
+#   chore:    构建/工具链更新
+#   revert:   回退
+#
+# Scope（范围）- 可选:
+#   env:      环境/配置
+#   rewards:  奖励函数
+#   training: 训练逻辑
+#   model:    模型/网络
+#   config:   配置文件
+#   urdf:     URDF/MJCF/XMLs/USD
+#   utils:    工具函数
+#   docs:     文档
+#
+# Subject（主题）:
+#   - 使用祈使句，现在时态（"add" 不是 "added"）
+#   - 首字母小写
+#   - 不要句号结尾
+#   - 20字以内
+#
+# Body（正文）- 可选:
+#   - 72字换行
+#   - 说明 "为什么" 而不是 "怎么做"
+#   - 可以包含多段
+#
+# Footer（页脚）- 可选:
+#   - Breaking Changes: 不兼容变更
+#   - Closes: 关闭的 Issue
+#   - Refs: 相关 Issue
+
+
+# ==========================================================
+
+# Author : Chenpeel
+# mailto : chenpeel@foxmail.com

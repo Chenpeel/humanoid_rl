@@ -193,10 +193,17 @@ clean-all:
 # ==================== 开发相关 ====================
 
 format:
-	@echo "=== 格式化代码 ==="
-	black src/ scripts/ tests/ 2>/dev/null || true
-	isort src/ scripts/ tests/ 2>/dev/null || true
+	@echo "=== 格式化代码（与 VSCode 保持一致）==="
+	@echo "  使用 black (line-length=100) + isort (profile=black)"
+	@which black > /dev/null 2>&1 || (echo "❌ black 未安装，请运行: pip install black"; exit 1)
+	@which isort > /dev/null 2>&1 || (echo "❌ isort 未安装，请运行: pip install isort"; exit 1)
+	black --line-length=100 src/ scripts/ tests/ utils/ 2>/dev/null || true
+	isort --profile=black --line-length=100 src/ scripts/ tests/ utils/ 2>/dev/null || true
 	@echo "✓ 格式化完成"
+	@echo ""
+	@echo "格式化配置来源: pyproject.toml"
+	@echo "VSCode 配置: .vscode/settings.json"
+	@echo "EditorConfig: .editorconfig"
 
 test:
 	@echo "=== 运行测试 ==="
