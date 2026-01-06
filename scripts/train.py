@@ -570,7 +570,7 @@ def main():
     # -------------------------------- 6. 日志与工具 --------------------------------
     console.print("\n[bold cyan]8. 创建日志系统[/bold cyan]")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_dir = f"logs/ppo_{timestamp}"
+    log_dir = f"logs/train/ppo_{timestamp}"
     logger = Logger(log_dir=log_dir, use_tensorboard=True, use_rich=True)
     console.print(f"✓ 日志系统创建完成 ({log_dir})")
 
@@ -622,8 +622,6 @@ def main():
     )
     train_step_jit = jax.jit(train_step_fn)
 
-    # ==================== 11. JIT编译 ====================
-    console.print("\n[bold cyan]11. JIT编译[/bold cyan]")
     console.print("[dim]正在编译 JAX 计算图...[/dim]")
     t0 = time.time()
     train_state, env_state, info = train_step_jit(train_state, env_state)
