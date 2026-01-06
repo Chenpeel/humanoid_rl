@@ -7,13 +7,13 @@ stages:
     start_step: 0
     end_step: 50000
     description: "学习保持直立姿态、抵抗扰动、建立基本平衡控制能力"
-    
+
     # 环境参数：严格限制移动，高姿态要求
     env_config:
       cmd_x_range: [0.0, 0.0]
       cmd_y_range: [0.0, 0.0]
       cmd_yaw_range: [0.0, 0.0]
-      target_height: 0.45
+      target_height: 0.78
 
     # 奖励权重：存活 > 姿态 > 能量
     reward_weights:
@@ -43,7 +43,7 @@ stages:
       cmd_x_range: [0.1, 0.3]
       cmd_y_range: [-0.1, 0.1]
       cmd_yaw_range: [-0.3, 0.3]
-      target_height: 0.40
+      target_height: 0.78
 
     # 奖励权重：步态 > 速度 > 稳定
     reward_weights:
@@ -76,7 +76,7 @@ stages:
       cmd_x_range: [-0.2, 0.8]
       cmd_y_range: [-0.3, 0.3]
       cmd_yaw_range: [-1.0, 1.0]
-      target_height: 0.35
+      target_height: 0.78
 
     # 奖励权重：性能 > 质量 > 效率
     reward_weights:

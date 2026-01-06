@@ -17,12 +17,12 @@ env_config:
   cmd_y_range: [0.0, 0.0]
   cmd_yaw_range: [0.0, 0.0]
   # 目标高度稍高（匹配初始化高度）
-  target_height: 0.45
+  target_height: 0.78
 
 # ==================== 环境配置（快速测试优化）====================
-num_envs: 256           # 快速测试环境数（平衡速度和样本多样性）
-num_steps: 64           # Rollout步数（保证GAE估计质量）
-max_episode_steps: 500  # Episode长度（给机器人足够时间学习）
+num_envs: 256 # 快速测试环境数（平衡速度和样本多样性）
+num_steps: 64 # Rollout步数（保证GAE估计质量）
+max_episode_steps: 500 # Episode长度（给机器人足够时间学习）
 
 # ==================== PPO超参数 ====================
 num_epochs: 2
@@ -35,14 +35,14 @@ entropy_coef: 0.02
 max_grad_norm: 0.5
 
 # ==================== 训练配置（快速测试）====================
-total_timesteps: 2000000  # 2M steps（约 1 小时，足够完成三阶段训练）
+total_timesteps: 2000000 # 2M steps（约 1 小时，足够完成三阶段训练）
 log_interval: 5
 eval_interval: 10
 save_interval: 50
 
 # ==================== 优化器配置 ====================
 learning_rate: 5.0e-4
-final_lr_fraction: 0.1      # 从 0.02 提高到 0.1，防止过早衰减（关键修复）
+final_lr_fraction: 0.1 # 从 0.02 提高到 0.1，防止过早衰减（关键修复）
 
 # ==================== 网络配置（小网络）====================
 hidden_dims: [256, 256]
