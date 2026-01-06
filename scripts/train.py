@@ -639,9 +639,34 @@ def main():
     train_step_jit = jax.jit(train_step_fn)
 
     console.print("[dim]正在编译 JAX 计算图...[/dim]")
+
+    # 使用 Live 显示实时更新的编译计时
+    from rich.live import Live
+    from rich.text import Text
+    import threading
+
     t0 = time.time()
-    train_state, env_state, info = train_step_jit(train_state, env_state)
-    jax.block_until_ready(train_state)
+    stop_timer = threading.Event()
+
+    def get_compile_timer_text():
+        elapsed = time.time() - t0
+        return Text(f"编译中... 已用时: {elapsed:.1f}s", style="bold cyan")
+
+    with Live(get_compile_timer_text(), console=console, refresh_per_second=10) as live:
+        def update_compile_timer():
+            while not stop_timer.is_set():
+                live.update(get_compile_timer_text())
+                time.sleep(0.1)
+
+        timer_thread = threading.Thread(target=update_compile_timer, daemon=True)
+        timer_thread.start()
+
+        train_state, env_state, info = train_step_jit(train_state, env_state)
+        jax.block_until_ready(train_state)
+
+        stop_timer.set()
+        timer_thread.join(timeout=0.5)
+
     compile_time = time.time() - t0
     console.print(f"✓ 编译完成 (耗时: {compile_time:.2f}s)")
 
@@ -670,16 +695,40 @@ def main():
             if update == 1:
                 # 首次迭代显示
                 from rich.console import Console
+                from rich.live import Live
+                from rich.text import Text
+                import threading
 
                 _console = Console()
                 _console.print("\n[yellow]⚙️  首次循环迭代中...[/yellow]")
+
+                # 使用 Live 显示实时更新的计时
                 t0 = time.time()
-                if curriculum is not None:
-                    curriculum.apply_to_env(env, update * config.batch_size)
-                train_state, env_state, info = train_step_jit(
-                    train_state, env_state
-                )
-                jax.block_until_ready(train_state)
+                stop_timer = threading.Event()
+
+                def get_timer_text():
+                    elapsed = time.time() - t0
+                    return Text(f"正在执行... 已用时: {elapsed:.1f}s", style="bold yellow")
+
+                with Live(get_timer_text(), console=_console, refresh_per_second=10) as live:
+                    def update_timer():
+                        while not stop_timer.is_set():
+                            live.update(get_timer_text())
+                            time.sleep(0.1)
+
+                    timer_thread = threading.Thread(target=update_timer, daemon=True)
+                    timer_thread.start()
+
+                    if curriculum is not None:
+                        curriculum.apply_to_env(env, update * config.batch_size)
+                    train_state, env_state, info = train_step_jit(
+                        train_state, env_state
+                    )
+                    jax.block_until_ready(train_state)
+
+                    stop_timer.set()
+                    timer_thread.join(timeout=0.5)
+
                 first_iter_time = time.time() - t0
                 _console.print(
                     f"[green]✓ 首次迭代完成 (耗时: {first_iter_time:.2f}s)[/green]\n"
