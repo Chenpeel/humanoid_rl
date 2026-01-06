@@ -1265,6 +1265,9 @@ class WalkingEnv(MJXBaseEnv):
         done = self._is_done(state, pipeline_state)
         termination_penalty = self.reward_weights.get("termination", 0.0)
 
+        # 记录终止惩罚（仅在摔倒时应用）
+        reward_info["reward/termination"] = jp.where(done, termination_penalty, 0.0)
+
         reward = jp.where(
             done,
             termination_penalty,
