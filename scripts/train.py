@@ -73,7 +73,7 @@ if True:
     from rich.console import Console
     from rich.panel import Panel
 
-    from rl.curriculum import WalkingCurriculum
+    from rl.curriculum import WalkingCurriculum, QuickTestCurriculum
     from rl.envs import (VelocityTrackingEnv, WalkingEnv,
                          create_velocity_tracking_env, create_walking_env)
     from rl.models.networks import ActorCriticNetwork, count_parameters
@@ -416,7 +416,15 @@ def main():
     curriculum = None
     if args.env_type == "walking":
         console.print("\n[bold cyan]3.5. 初始化课程学习[/bold cyan]")
-        curriculum = WalkingCurriculum()
+
+        # 根据配置文件选择课程学习模块
+        if "quick_test" in args.config:
+            curriculum = QuickTestCurriculum()
+            console.print("[yellow]使用快速测试课程学习（延长 Stage 1）[/yellow]")
+        else:
+            curriculum = WalkingCurriculum()
+            console.print("使用标准课程学习")
+
         console.print(f"✓ 课程学习模块创建完成")
         console.print(f"  阶段数: {len(curriculum.stages)}")
         for i, stage in enumerate(curriculum.stages):
