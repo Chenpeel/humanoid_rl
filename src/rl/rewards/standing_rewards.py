@@ -179,55 +179,64 @@ def compute_standing_reward(
     target_height: float,
     reward_weights: Dict[str, float],
 ) -> Tuple[jax.Array, Dict[str, jax.Array]]:
-    """计算完整的站立平衡奖励"""
+    """计算完整的站立平衡奖励
 
-    # 计算分量
-    reward_height = compute_height_reward(torso_z, target_height)
-    reward_orientation = compute_orientation_reward(base_quat)
-    vel_penalties = compute_velocity_penalties(base_linvel, base_angvel)
-
-    # 惩罚项
-    action_rate_penalty = jp.sum(jp.square(action - last_action), axis=-1)
-    torque_penalty = jp.sum(jp.square(torques), axis=-1)
+    采用动态奖励组合模式：只计算reward_weights中配置的奖励项，
+    提供良好的扩展性和课程学习支持。
+    """
 
     # 初始化
     reward = jp.array(0.0)
     reward_info = {}
 
     # 1. 高度奖励
-    weighted = reward_weights["height"] * reward_height
-    reward += weighted
-    reward_info["reward/height"] = weighted
+    if "height" in reward_weights:
+        reward_height = compute_height_reward(torso_z, target_height)
+        weighted = reward_weights["height"] * reward_height
+        reward += weighted
+        reward_info["reward/height"] = weighted
 
     # 2. 姿态奖励
-    weighted = reward_weights["orientation"] * reward_orientation
-    reward += weighted
-    reward_info["reward/orientation"] = weighted
+    if "orientation" in reward_weights:
+        reward_orientation = compute_orientation_reward(base_quat)
+        weighted = reward_weights["orientation"] * reward_orientation
+        reward += weighted
+        reward_info["reward/orientation"] = weighted
 
     # 3. 线速度惩罚
-    weighted = reward_weights["lin_vel"] * vel_penalties["lin_vel_penalty"]
-    reward += weighted
-    reward_info["reward/lin_vel"] = weighted
+    if "lin_vel" in reward_weights:
+        vel_penalties = compute_velocity_penalties(base_linvel, base_angvel)
+        weighted = reward_weights["lin_vel"] * vel_penalties["lin_vel_penalty"]
+        reward += weighted
+        reward_info["reward/lin_vel"] = weighted
 
     # 4. 角速度惩罚
-    weighted = reward_weights["ang_vel"] * vel_penalties["ang_vel_penalty"]
-    reward += weighted
-    reward_info["reward/ang_vel"] = weighted
+    if "ang_vel" in reward_weights:
+        if "lin_vel" not in reward_weights:  # 避免重复计算
+            vel_penalties = compute_velocity_penalties(base_linvel, base_angvel)
+        weighted = reward_weights["ang_vel"] * vel_penalties["ang_vel_penalty"]
+        reward += weighted
+        reward_info["reward/ang_vel"] = weighted
 
     # 5. 存活奖励
-    weighted = reward_weights["alive"] * 1.0
-    reward += weighted
-    reward_info["reward/alive"] = weighted
+    if "alive" in reward_weights:
+        weighted = reward_weights["alive"] * 1.0
+        reward += weighted
+        reward_info["reward/alive"] = weighted
 
     # 6. 动作平滑
-    weighted = reward_weights["action_rate"] * action_rate_penalty
-    reward += weighted
-    reward_info["reward/action_rate"] = weighted
+    if "action_rate" in reward_weights:
+        action_rate_penalty = jp.sum(jp.square(action - last_action), axis=-1)
+        weighted = reward_weights["action_rate"] * action_rate_penalty
+        reward += weighted
+        reward_info["reward/action_rate"] = weighted
 
     # 7. 扭矩惩罚
-    weighted = reward_weights["torques"] * torque_penalty
-    reward += weighted
-    reward_info["reward/torques"] = weighted
+    if "torques" in reward_weights:
+        torque_penalty = jp.sum(jp.square(torques), axis=-1)
+        weighted = reward_weights["torques"] * torque_penalty
+        reward += weighted
+        reward_info["reward/torques"] = weighted
 
     return reward, reward_info
 
