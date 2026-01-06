@@ -57,7 +57,7 @@ make tensorboard
 ### 评估模型
 
 ```bash
-make eval CKPT=logs/ppo_*/checkpoints/best_model
+make eval CKPT=logs/train/ppo_*/checkpoints/best_model
 ```
 
 ## 目录结构
@@ -78,11 +78,26 @@ jrl/
 ├── scripts/                    # 训练脚本
 │   ├── train.py                # 主训练脚本（集成课程学习）
 │   └── eval.py                 # 评估脚本
+├── logs/                       # 日志目录
+│   ├── train/                  # 训练日志（TensorBoard、检查点、视频等）
+│   └── makelog/                # Make命令执行日志
 ├── assets/                     # 机器人资源
 ├── docs/                       # 项目文档
 └── Makefile                    # 命令管理
 
 ```
+
+## 日志结构
+
+- **训练日志**: `logs/train/ppo_[时间戳]/`
+  - `events.out.tfevents.*` - TensorBoard事件文件
+  - `checkpoints/` - 模型检查点
+  - `videos/` - 训练过程视频
+  - `config.yaml` - 训练配置快照
+
+- **Make执行日志**: `logs/makelog/[命令]_[时间戳].log`
+  - 完整记录所有make命令的执行过程
+  - 与终端输出完全一致（使用tee实现）
 
 ## 配置说明
 
