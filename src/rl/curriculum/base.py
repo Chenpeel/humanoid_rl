@@ -112,13 +112,27 @@ class BaseCurriculum(ABC):
 
     # --------------------------------------------------------------------------------------------
 
-    def apply_to_env(self, env, current_step: int):
-        """将当前阶段配置应用到环境"""
+    def apply_to_env(self, env, current_step: int, env_state=None):
+        """将当前阶段配置应用到环境
+
+        Args:
+            env: 环境实例
+            current_step: 当前训练步数
+            env_state: 可选的环境状态,如果提供则返回更新后的状态
+
+        Returns:
+            如果提供了env_state,返回更新后的EnvState;否则返回None
+        """
         stage = self.get_stage(current_step)
         env.reward_weights = stage.reward_weights.copy()
         for key, value in stage.env_config.items():
             if hasattr(env, key):
                 setattr(env, key, value)
+
+        # 如果提供了env_state,返回更新后的状态
+        if env_state is not None:
+            return env_state.replace(reward_weights=stage.reward_weights.copy())
+        return None
 
     # --------------------------------------------------------------------------------------------
 

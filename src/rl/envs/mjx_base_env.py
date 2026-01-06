@@ -52,6 +52,9 @@ class EnvState:
     # 额外信息字典 (可选)
     info: Dict[str, jax.Array] = struct.field(default_factory=dict)
 
+    # 奖励权重 (用于课程学习动态调整)
+    reward_weights: Dict[str, float] = struct.field(default_factory=dict)
+
 
 # ============================================================================================
 # ===================================== END: 数据结构定义 ======================================
@@ -247,6 +250,7 @@ class MJXBaseEnv:
             rng=rng,
             last_action=jp.zeros(self.nu),
             info={},
+            reward_weights={},  # 默认空字典，子类可以覆盖
         )
 
         return state

@@ -734,8 +734,10 @@ def main():
                     timer_thread.start()
 
                     if curriculum is not None:
-                        curriculum.apply_to_env(
-                            env, update * config.batch_size)
+                        updated_state = curriculum.apply_to_env(
+                            env, update * config.batch_size, env_state)
+                        if updated_state is not None:
+                            env_state = updated_state
                     train_state, env_state, info = train_step_jit(
                         train_state, env_state
                     )
@@ -751,7 +753,10 @@ def main():
             else:
                 # 正常迭代
                 if curriculum is not None:
-                    curriculum.apply_to_env(env, update * config.batch_size)
+                    updated_state = curriculum.apply_to_env(
+                        env, update * config.batch_size, env_state)
+                    if updated_state is not None:
+                        env_state = updated_state
                 train_state, env_state, info = train_step_jit(
                     train_state, env_state)
                 jax.block_until_ready(train_state)
