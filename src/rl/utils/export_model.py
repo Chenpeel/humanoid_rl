@@ -18,10 +18,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from rl.models.networks import ActorCriticNetwork
 from rl.utils.checkpoint import CheckpointManager
 
-
 # ============================================================================================
 # ======================================= 导出逻辑 ============================================
 # ============================================================================================
+
 
 def export_to_onnx(
     params,
@@ -33,8 +33,8 @@ def export_to_onnx(
     try:
         # 方法1: 使用JAX2ONNX (推荐)
         try:
-            from jax.experimental import jax2onnx
             import onnx
+            from jax.experimental import jax2onnx
 
             dummy_obs = jp.zeros((1, observation_size))
 
@@ -93,10 +93,13 @@ def export_to_onnx(
     except Exception as e:
         print(f"ONNX导出失败: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
+
 # --------------------------------------------------------------------------------------------
+
 
 def export_to_tensorflow(
     params,
@@ -149,10 +152,13 @@ def export_to_tensorflow(
     except Exception as e:
         print(f"TensorFlow导出失败: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
+
 # --------------------------------------------------------------------------------------------
+
 
 def export_to_msgpack(
     params,
@@ -161,6 +167,7 @@ def export_to_msgpack(
     """导出为MessagePack格式（JAX原生参数）"""
     try:
         from flax import serialization
+
         params_bytes = serialization.to_bytes(params)
 
         with open(output_path, "wb") as f:
@@ -174,6 +181,7 @@ def export_to_msgpack(
         print(f"MessagePack导出失败: {e}")
         return False
 
+
 # ============================================================================================
 # ===================================== END: 导出逻辑 ==========================================
 # ============================================================================================
@@ -182,6 +190,7 @@ def export_to_msgpack(
 # ============================================================================================
 # ======================================= 主函数 ==============================================
 # ============================================================================================
+
 
 def main():
     parser = argparse.ArgumentParser(description="导出训练好的模型")
@@ -241,6 +250,7 @@ def main():
             checkpoint_data = ckpt_manager.load_checkpoint()
     else:
         from flax import serialization
+
         with open(checkpoint_path, "rb") as f:
             checkpoint_data = serialization.from_bytes(None, f.read())
 

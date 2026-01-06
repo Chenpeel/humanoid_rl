@@ -15,23 +15,16 @@ from rich.console import Console, Group
 from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    Progress,
-    ProgressColumn,
-    SpinnerColumn,
-    Task,
-    TextColumn,
-    TimeElapsedColumn,
-    TimeRemainingColumn,
-)
+from rich.progress import (BarColumn, Progress, ProgressColumn, SpinnerColumn,
+                           Task, TextColumn, TimeElapsedColumn,
+                           TimeRemainingColumn)
 from rich.table import Table
 from rich.text import Text
-
 
 # ============================================================================================
 # ======================================= Rich组件 ============================================
 # ============================================================================================
+
 
 class MetricsColumn(ProgressColumn):
     """显示自定义指标"""
@@ -47,6 +40,7 @@ class MetricsColumn(ProgressColumn):
             return Text(f"{value:{self.format_spec}}", style="cyan")
         return Text("")
 
+
 # ============================================================================================
 # ===================================== END: Rich组件 ==========================================
 # ============================================================================================
@@ -55,6 +49,7 @@ class MetricsColumn(ProgressColumn):
 # ============================================================================================
 # ======================================= 日志记录器 ==========================================
 # ============================================================================================
+
 
 class Logger:
     """TensorBoard日志记录器"""
@@ -73,6 +68,7 @@ class Logger:
         if use_tensorboard:
             try:
                 from torch.utils.tensorboard import SummaryWriter
+
                 self.writer = SummaryWriter(log_dir=str(self.log_dir), flush_secs=10)
                 self.disabled = False
             except ImportError:
@@ -111,6 +107,7 @@ class Logger:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
+
 # ============================================================================================
 # ===================================== END: 日志记录器 =======================================
 # ============================================================================================
@@ -119,6 +116,7 @@ class Logger:
 # ============================================================================================
 # ======================================= 指标统计器 ==========================================
 # ============================================================================================
+
 
 class MetricsLogger:
     """指标统计器（带Episode统计）"""
@@ -153,6 +151,7 @@ class MetricsLogger:
         self.metrics.clear()
         self.counts.clear()
 
+
 # ============================================================================================
 # ===================================== END: 指标统计器 =======================================
 # ============================================================================================
@@ -161,6 +160,7 @@ class MetricsLogger:
 # ============================================================================================
 # ======================================= 训练显示 ============================================
 # ============================================================================================
+
 
 class TrainingDisplay:
     """训练进度显示（参考 rsl_rl 格式）"""
@@ -211,9 +211,12 @@ class TrainingDisplay:
 
         if self.start_time:
             import time
+
             elapsed = time.time() - self.start_time
             if self.current_epoch > self.warmup_steps and self.total > 0:
-                time_per_epoch = elapsed / max(1, self.current_epoch - self.warmup_steps)
+                time_per_epoch = elapsed / max(
+                    1, self.current_epoch - self.warmup_steps
+                )
                 remaining = time_per_epoch * (self.total - self.current_epoch)
             else:
                 remaining = None
@@ -227,7 +230,9 @@ class TrainingDisplay:
                 lines.append(f"\n{ 'Status:':<30}正在初始化训练...")
             else:
                 lines.append(f"\n{ 'Status:':<30}正在训练中...")
-            lines.append(f"{ 'Current iteration:':<30}{self.current_epoch}/{self.total}")
+            lines.append(
+                f"{ 'Current iteration:':<30}{self.current_epoch}/{self.total}"
+            )
             return "\n".join(lines)
 
         env_steps = self._get_value("env_steps", "perf/total_env_steps")
@@ -239,9 +244,13 @@ class TrainingDisplay:
             lines.append(f"{ 'Steps per second:':<30}{int(sps)}")
 
         if "collection_time" in self.current_metrics:
-            lines.append(f"{ 'Collection time:':<30}{self.current_metrics['collection_time']:.3f}s")
+            lines.append(
+                f"{ 'Collection time:':<30}{self.current_metrics['collection_time']:.3f}s"
+            )
         if "learning_time" in self.current_metrics:
-            lines.append(f"{ 'Learning time:':<30}{self.current_metrics['learning_time']:.3f}s")
+            lines.append(
+                f"{ 'Learning time:':<30}{self.current_metrics['learning_time']:.3f}s"
+            )
 
         lines.append("")
 
@@ -249,7 +258,9 @@ class TrainingDisplay:
         if value_loss is not None:
             lines.append(f"{ 'Mean value loss:':<30}{value_loss:.4f}")
 
-        policy_loss = self._get_value("surrogate_loss", "policy_loss", "train/surrogate_loss")
+        policy_loss = self._get_value(
+            "surrogate_loss", "policy_loss", "train/surrogate_loss"
+        )
         if policy_loss is not None:
             lines.append(f"{ 'Mean policy loss:':<30}{policy_loss:.4f}")
 
@@ -267,7 +278,9 @@ class TrainingDisplay:
 
         lines.append("")
 
-        episode_reward = self._get_value("episode_reward", "train/episode_reward", "mean_reward")
+        episode_reward = self._get_value(
+            "episode_reward", "train/episode_reward", "mean_reward"
+        )
         if episode_reward is not None:
             lines.append(f"{ 'Mean reward:':<30}{episode_reward:.2f}")
 
@@ -281,13 +294,41 @@ class TrainingDisplay:
 
         detail_lines = []
         for key in sorted(self.current_metrics.keys()):
-            if any(key.startswith(prefix) for prefix in ["Episode_Reward/", "Metrics/", "Curriculum/", "Episode_Termination/", "reward/", "train/Episode_Reward/", "train/Metrics/", "train/Curriculum/", "train/Episode_Termination/", "train/reward/"]):
-                if not any(x in key for x in ["episode_reward", "episode_length", "action_noise_std"]):
+            if any(
+                key.startswith(prefix)
+                for prefix in [
+                    "Episode_Reward/",
+                    "Metrics/",
+                    "Curriculum/",
+                    "Episode_Termination/",
+                    "reward/",
+                    "train/Episode_Reward/",
+                    "train/Metrics/",
+                    "train/Curriculum/",
+                    "train/Episode_Termination/",
+                    "train/reward/",
+                ]
+            ):
+                if not any(
+                    x in key
+                    for x in ["episode_reward", "episode_length", "action_noise_std"]
+                ):
                     value = self.current_metrics[key]
                     display_key = key
-                    for prefix in ["train/Episode_Reward/", "train/Metrics/", "train/Curriculum/", "train/Episode_Termination/", "train/reward/", "Episode_Reward/", "Metrics/", "Curriculum/", "Episode_Termination/", "reward/"]:
+                    for prefix in [
+                        "train/Episode_Reward/",
+                        "train/Metrics/",
+                        "train/Curriculum/",
+                        "train/Episode_Termination/",
+                        "train/reward/",
+                        "Episode_Reward/",
+                        "Metrics/",
+                        "Curriculum/",
+                        "Episode_Termination/",
+                        "reward/",
+                    ]:
                         if key.startswith(prefix):
-                            display_key = key[len(prefix):]
+                            display_key = key[len(prefix) :]
                     display_key = display_key.replace("_", " ")
                     detail_lines.append(f"{display_key:<30}{float(value):.4f}")
 
@@ -317,6 +358,7 @@ class TrainingDisplay:
             self.progress_task_id = self.progress_bar.add_task("", total=self.total)
             self.started = True
             import time
+
             self.start_time = time.time()
 
     def update(
@@ -347,6 +389,7 @@ class TrainingDisplay:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
 
+
 # ============================================================================================
 # ===================================== END: 训练显示 =========================================
 # ============================================================================================
@@ -356,11 +399,14 @@ class TrainingDisplay:
 # ======================================= 便捷函数 ============================================
 # ============================================================================================
 
+
 def create_logger(log_dir: str = "logs") -> Logger:
     """创建日志记录器"""
     return Logger(log_dir=log_dir)
 
+
 # --------------------------------------------------------------------------------------------
+
 
 def create_training_display(
     console: Console,
@@ -376,13 +422,16 @@ def create_training_display(
         description=description,
     )
 
+
 # --------------------------------------------------------------------------------------------
+
 
 def print_summary(message: str, style: str = "cyan", console: Optional[Console] = None):
     """打印总结信息"""
     if console is None:
         console = Console()
     console.print(f"[{style}]{message}[/{style}]")
+
 
 # ============================================================================================
 # ===================================== END: 便捷函数 ==========================================

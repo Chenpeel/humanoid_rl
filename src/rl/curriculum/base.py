@@ -12,10 +12,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
-
 # ============================================================================================
 # ======================================= 数据结构 ============================================
 # ============================================================================================
+
 
 @dataclass
 class CurriculumStage:
@@ -35,6 +35,7 @@ class CurriculumStage:
     env_config: Dict[str, Any]
     description: Optional[str] = None
 
+
 # ============================================================================================
 # ===================================== END: 数据结构 ==========================================
 # ============================================================================================
@@ -43,6 +44,7 @@ class CurriculumStage:
 # ============================================================================================
 # ======================================= 课程学习基类 =========================================
 # ============================================================================================
+
 
 class BaseCurriculum(ABC):
     """课程学习基类"""
@@ -137,6 +139,7 @@ class BaseCurriculum(ABC):
             "description": stage.description,
         }
 
+
 # ============================================================================================
 # ===================================== END: 课程学习基类 ======================================
 # ============================================================================================
@@ -145,6 +148,7 @@ class BaseCurriculum(ABC):
 # ============================================================================================
 # ======================================= 可配置课程学习 ========================================
 # ============================================================================================
+
 
 class ConfigurableCurriculum(BaseCurriculum):
     """可配置的课程学习通用实现
@@ -169,20 +173,22 @@ class ConfigurableCurriculum(BaseCurriculum):
 
     def _define_stages(self) -> List[CurriculumStage]:
         # 模式 1: 高级模式（多阶段）
-        if "stages" in self._raw_config and isinstance(self._raw_config["stages"], list):
+        if "stages" in self._raw_config and isinstance(
+            self._raw_config["stages"], list
+        ):
             stages = []
             raw_stages = self._raw_config["stages"]
-            
+
             for i, stage_def in enumerate(raw_stages):
                 start_step = stage_def.get("start_step", 0)
                 # 自动推断 start_step
                 if i > 0 and "start_step" not in stage_def:
                     start_step = stages[-1].step_range[1]
-                
+
                 end_step = stage_def.get("end_step", float("inf"))
                 if isinstance(end_step, str) and end_step.lower() == "inf":
                     end_step = float("inf")
-                
+
                 # 合并环境配置 (阶段配置 > 全局配置)
                 current_env_config = self._global_env_config.copy()
                 current_env_config.update(stage_def.get("env_config", {}))
@@ -209,6 +215,7 @@ class ConfigurableCurriculum(BaseCurriculum):
                     description="从简单配置文件加载的单阶段训练",
                 ),
             ]
+
 
 # ============================================================================================
 # ===================================== END: 可配置课程学习 =====================================

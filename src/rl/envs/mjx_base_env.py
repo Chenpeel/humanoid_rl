@@ -15,13 +15,8 @@ from flax import struct
 from mujoco import mjx
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-)
+from rich.progress import (BarColumn, Progress, SpinnerColumn,
+                           TaskProgressColumn, TextColumn)
 from rich.table import Table
 
 console = Console()
@@ -30,6 +25,7 @@ console = Console()
 # ============================================================================================
 # ======================================= 数据结构定义 =========================================
 # ============================================================================================
+
 
 @struct.dataclass
 class EnvState:
@@ -56,6 +52,7 @@ class EnvState:
     # 额外信息字典 (可选)
     info: Dict[str, jax.Array] = struct.field(default_factory=dict)
 
+
 # ============================================================================================
 # ===================================== END: 数据结构定义 ======================================
 # ============================================================================================
@@ -64,6 +61,7 @@ class EnvState:
 # ============================================================================================
 # ======================================= MJX环境基类 ==========================================
 # ============================================================================================
+
 
 class MJXBaseEnv:
     """MJX环境基类
@@ -420,6 +418,7 @@ class MJXBaseEnv:
             "qpos": state.pipeline_state.qpos,
             "qvel": state.pipeline_state.qvel,
         }
+
 
 # ============================================================================================
 # ===================================== END: MJX环境基类 =======================================

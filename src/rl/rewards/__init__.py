@@ -16,9 +16,11 @@ from .walking_rewards import (DEFAULT_WALKING_REWARD_WEIGHTS,
 from .walking_rewards import \
     compute_action_rate_penalty as compute_walking_action_rate_penalty
 from .walking_rewards import (compute_drag_penalty,
+                              compute_energy_efficiency_reward,
                               compute_foot_clearance_reward,
                               compute_forward_velocity_reward,
-                              compute_gait_symmetry_reward)
+                              compute_gait_symmetry_reward,
+                              compute_normalized_torque_penalty)
 from .walking_rewards import \
     compute_torque_penalty as compute_walking_torque_penalty
 from .walking_rewards import (compute_trunk_height_reward,
@@ -46,6 +48,8 @@ __all__ = [
     "compute_trunk_orientation_penalty",
     "compute_trunk_lin_vel_z_penalty",
     "compute_drag_penalty",
+    "compute_normalized_torque_penalty",
+    "compute_energy_efficiency_reward",
     "check_walking_termination",
     "DEFAULT_WALKING_REWARD_WEIGHTS",
     # 工具函数

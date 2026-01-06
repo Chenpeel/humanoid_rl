@@ -9,7 +9,7 @@
 - WalkingCurriculum: 标准行走课程学习
 """
 
-from .base import BaseCurriculum, CurriculumStage, ConfigurableCurriculum
+from .base import BaseCurriculum, ConfigurableCurriculum, CurriculumStage
 from .walking import WalkingCurriculum
 
 __all__ = [

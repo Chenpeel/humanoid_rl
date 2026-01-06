@@ -79,18 +79,15 @@ if True:
     from rich.console import Console
     from rich.panel import Panel
 
-    from rl.curriculum import WalkingCurriculum, ConfigurableCurriculum
-    from rl.envs import (
-        VelocityTrackingEnv, WalkingEnv,
-        create_velocity_tracking_env, create_walking_env)
+    from rl.curriculum import ConfigurableCurriculum, WalkingCurriculum
+    from rl.envs import (VelocityTrackingEnv, WalkingEnv,
+                         create_velocity_tracking_env, create_walking_env)
     from rl.models.networks import ActorCriticNetwork, count_parameters
     from rl.models.optimizer import create_ppo_optimizer_cosine
-    from rl.training.logger import (
-        Logger, MetricsLogger,
-        create_training_display, print_summary)
-    from rl.training.ppo_trainer import (
-        PPOConfig, PPOTrainer,
-        create_train_step_fn)
+    from rl.training.logger import (Logger, MetricsLogger,
+                                    create_training_display, print_summary)
+    from rl.training.ppo_trainer import (PPOConfig, PPOTrainer,
+                                         create_train_step_fn)
     from rl.training.train_state import create_train_state
     from rl.utils.checkpoint import create_checkpoint_manager
     from rl.utils.performance_monitor import PerformanceMonitor
@@ -105,6 +102,7 @@ console = Console()
 # ============================================================================================
 # ======================================= 辅助函数 ============================================
 # ============================================================================================
+
 
 def print_config(config: PPOConfig):
     """打印训练配置"""
@@ -134,7 +132,9 @@ def print_config(config: PPOConfig):
 
     console.print(table)
 
+
 # --------------------------------------------------------------------------------------------
+
 
 def load_config_from_yaml(config_path: str) -> dict:
     """从YAML文件加载配置"""
@@ -151,7 +151,9 @@ def load_config_from_yaml(config_path: str) -> dict:
     console.print(f"[green]✓ 从 {config_path} 加载配置[/green]")
     return config
 
+
 # --------------------------------------------------------------------------------------------
+
 
 def _record_training_video(
     video_recorder,
@@ -241,7 +243,9 @@ def _record_training_video(
         console.print(f" [red]✗ 失败[/red]")
         console.print(f"   错误: {e}")
         import traceback
+
         traceback.print_exc()
+
 
 # ============================================================================================
 # ===================================== END: 辅助函数 ==========================================
@@ -251,6 +255,7 @@ def _record_training_video(
 # ============================================================================================
 # ======================================= 主训练逻辑 ==========================================
 # ============================================================================================
+
 
 def main():
     """主训练函数"""
@@ -308,33 +313,84 @@ def main():
     )
 
     # PPO参数
-    parser.add_argument("--num-epochs", type=int, default=yaml_config.get("num-epochs", 4))
-    parser.add_argument("--num-minibatches", type=int, default=yaml_config.get("num_minibatches", 4))
+    parser.add_argument(
+        "--num-epochs", type=int, default=yaml_config.get("num-epochs", 4)
+    )
+    parser.add_argument(
+        "--num-minibatches", type=int, default=yaml_config.get("num_minibatches", 4)
+    )
     parser.add_argument("--gamma", type=float, default=yaml_config.get("gamma", 0.99))
-    parser.add_argument("--gae-lambda", type=float, default=yaml_config.get("gae_lambda", 0.95))
-    parser.add_argument("--clip-epsilon", type=float, default=yaml_config.get("clip_epsilon", 0.2))
-    parser.add_argument("--value-coef", type=float, default=yaml_config.get("value_coef", 0.5))
-    parser.add_argument("--entropy-coef", type=float, default=yaml_config.get("entropy_coef", 0.01))
-    parser.add_argument("--max-grad-norm", type=float, default=yaml_config.get("max_grad_norm", 0.5))
+    parser.add_argument(
+        "--gae-lambda", type=float, default=yaml_config.get("gae_lambda", 0.95)
+    )
+    parser.add_argument(
+        "--clip-epsilon", type=float, default=yaml_config.get("clip_epsilon", 0.2)
+    )
+    parser.add_argument(
+        "--value-coef", type=float, default=yaml_config.get("value_coef", 0.5)
+    )
+    parser.add_argument(
+        "--entropy-coef", type=float, default=yaml_config.get("entropy_coef", 0.01)
+    )
+    parser.add_argument(
+        "--max-grad-norm", type=float, default=yaml_config.get("max_grad_norm", 0.5)
+    )
 
     # 训练流程参数
-    parser.add_argument("--total-timesteps", type=int, default=yaml_config.get("total_timesteps", 200_000_000))
-    parser.add_argument("--log-interval", type=int, default=yaml_config.get("log_interval", 100))
-    parser.add_argument("--eval-interval", type=int, default=yaml_config.get("eval_interval", 500))
-    parser.add_argument("--save-interval", type=int, default=yaml_config.get("save_interval", 100))
+    parser.add_argument(
+        "--total-timesteps",
+        type=int,
+        default=yaml_config.get("total_timesteps", 200_000_000),
+    )
+    parser.add_argument(
+        "--log-interval", type=int, default=yaml_config.get("log_interval", 100)
+    )
+    parser.add_argument(
+        "--eval-interval", type=int, default=yaml_config.get("eval_interval", 500)
+    )
+    parser.add_argument(
+        "--save-interval", type=int, default=yaml_config.get("save_interval", 100)
+    )
 
     # 优化器与网络
-    parser.add_argument("--learning-rate", type=float, default=yaml_config.get("learning_rate", 1e-3))
-    parser.add_argument("--final-lr-fraction", type=float, default=yaml_config.get("final_lr_fraction", 0.02))
-    parser.add_argument("--hidden-dims", type=int, nargs="+", default=yaml_config.get("hidden_dims", [512, 512, 256]))
-    parser.add_argument("--shared-backbone", action="store_true", default=yaml_config.get("shared_backbone", True))
-    parser.add_argument("--no-shared-backbone", dest="shared_backbone", action="store_false")
+    parser.add_argument(
+        "--learning-rate", type=float, default=yaml_config.get("learning_rate", 1e-3)
+    )
+    parser.add_argument(
+        "--final-lr-fraction",
+        type=float,
+        default=yaml_config.get("final_lr_fraction", 0.02),
+    )
+    parser.add_argument(
+        "--hidden-dims",
+        type=int,
+        nargs="+",
+        default=yaml_config.get("hidden_dims", [512, 512, 256]),
+    )
+    parser.add_argument(
+        "--shared-backbone",
+        action="store_true",
+        default=yaml_config.get("shared_backbone", True),
+    )
+    parser.add_argument(
+        "--no-shared-backbone", dest="shared_backbone", action="store_false"
+    )
 
     # 视频录制
-    parser.add_argument("--enable-video", action="store_true", default=yaml_config.get("enable_video", False))
-    parser.add_argument("--video-interval", type=int, default=yaml_config.get("video_interval", 200))
-    parser.add_argument("--video-frames", type=int, default=yaml_config.get("video_frames", 180))
-    parser.add_argument("--video-camera", type=str, default=yaml_config.get("video_camera", "track"))
+    parser.add_argument(
+        "--enable-video",
+        action="store_true",
+        default=yaml_config.get("enable_video", False),
+    )
+    parser.add_argument(
+        "--video-interval", type=int, default=yaml_config.get("video_interval", 200)
+    )
+    parser.add_argument(
+        "--video-frames", type=int, default=yaml_config.get("video_frames", 180)
+    )
+    parser.add_argument(
+        "--video-camera", type=str, default=yaml_config.get("video_camera", "track")
+    )
 
     args = parser.parse_args()
 
@@ -398,27 +454,31 @@ def main():
     curriculum = None
     if args.env_type == "walking":
         console.print("\n[bold cyan]3.5. 初始化课程学习[/bold cyan]")
-        curriculum_file = yaml_config.get("curriculum_file") or yaml_config.get("weights_file")
-        
+        curriculum_file = yaml_config.get("curriculum_file") or yaml_config.get(
+            "weights_file"
+        )
+
         if curriculum_file:
             file_path = os.path.join(os.getcwd(), curriculum_file)
             if os.path.exists(file_path):
                 config_content = load_config_from_yaml(file_path)
                 env_config = yaml_config.get("env_config", {})
-                
+
                 curriculum = ConfigurableCurriculum(
                     config=config_content,
                     env_config=env_config,
-                    default_stage_name="CustomStage"
+                    default_stage_name="CustomStage",
                 )
                 console.print(f"[yellow]使用自定义课程学习 (源: {curriculum_file})[/yellow]")
-                
+
                 if "stages" in config_content:
                     console.print(f"  检测到多阶段定义 ({len(config_content['stages'])} 个阶段)")
                 elif env_config:
                     console.print(f"  环境配置: {env_config}")
             else:
-                console.print(f"[red]错误: 找不到课程文件 {file_path}，回退到标准 WalkingCurriculum[/red]")
+                console.print(
+                    f"[red]错误: 找不到课程文件 {file_path}，回退到标准 WalkingCurriculum[/red]"
+                )
                 curriculum = WalkingCurriculum()
         else:
             try:
@@ -426,7 +486,9 @@ def main():
                 console.print("使用标准行走课程学习 (WalkingCurriculum)")
             except FileNotFoundError as e:
                 console.print(f"[red]错误: {e}[/red]")
-                console.print("[red]无法加载标准课程配置，请检查 configs/train/curriculum.yaml 是否存在[/red]")
+                console.print(
+                    "[red]无法加载标准课程配置，请检查 configs/train/curriculum.yaml 是否存在[/red]"
+                )
                 sys.exit(1)
 
         console.print(f"✓ 课程学习模块创建完成")
@@ -456,7 +518,9 @@ def main():
     params_has_nan = any(jp.isnan(p).any() for p in params_flat)
     params_has_inf = any(jp.isinf(p).any() for p in params_flat)
     mean, log_std, value = network.apply(params, dummy_obs)
-    forward_has_nan = jp.isnan(mean).any() or jp.isnan(log_std).any() or jp.isnan(value).any()
+    forward_has_nan = (
+        jp.isnan(mean).any() or jp.isnan(log_std).any() or jp.isnan(value).any()
+    )
 
     console.print(f"✓ 网络创建完成 (参数: {num_params:,})")
     if params_has_nan or params_has_inf:
@@ -468,7 +532,9 @@ def main():
     total_updates = config.num_updates
     if total_updates < 50:
         required_timesteps = config.batch_size * 100
-        console.print(f"[yellow]自动调整: 将total_timesteps增加到{required_timesteps:,}[/yellow]")
+        console.print(
+            f"[yellow]自动调整: 将total_timesteps增加到{required_timesteps:,}[/yellow]"
+        )
         config.total_timesteps = required_timesteps
         total_updates = config.num_updates
 
@@ -526,6 +592,7 @@ def main():
     if args.enable_video:
         console.print("\n[bold cyan]11. 创建视频录制器[/bold cyan]")
         from rl.utils.renderer import VideoRecorder
+
         try:
             video_recorder = VideoRecorder(
                 mujoco_model=env.mj_model,
@@ -543,8 +610,9 @@ def main():
     # -------------------------------- 7. JIT编译 --------------------------------
     step_number = "12" if args.enable_video else "11"
     console.print(f"\n[bold cyan]{step_number}. JIT编译[/bold cyan]")
-    
-    from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+
+    from rich.progress import (Progress, SpinnerColumn, TextColumn,
+                               TimeElapsedColumn)
 
     train_step_fn = create_train_step_fn(
         config=config,
@@ -592,18 +660,30 @@ def main():
         for update in range(1, config.num_updates):
             if update == 1:
                 # 首次迭代显示
-                from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
                 from rich.console import Console
+                from rich.progress import (Progress, SpinnerColumn, TextColumn,
+                                           TimeElapsedColumn)
+
                 _console = Console()
                 _console.print("\n[yellow]⚙️  首次循环迭代中...[/yellow]")
-                with Progress(SpinnerColumn(), TextColumn("[bold yellow]正在执行..."), TimeElapsedColumn(), console=_console, transient=False) as p:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[bold yellow]正在执行..."),
+                    TimeElapsedColumn(),
+                    console=_console,
+                    transient=False,
+                ) as p:
                     p.add_task("First Iter", total=None)
                     t0 = time.time()
                     if curriculum is not None:
                         curriculum.apply_to_env(env, update * config.batch_size)
-                    train_state, env_state, info = train_step_jit(train_state, env_state)
+                    train_state, env_state, info = train_step_jit(
+                        train_state, env_state
+                    )
                     jax.block_until_ready(train_state)
-                    _console.print(f"[green]✓ 首次迭代完成 ({time.time() - t0:.2f}s)[/green]\n")
+                    _console.print(
+                        f"[green]✓ 首次迭代完成 ({time.time() - t0:.2f}s)[/green]\n"
+                    )
             else:
                 # 正常迭代
                 if curriculum is not None:
@@ -622,7 +702,9 @@ def main():
             else:
                 denominator = max(1, total_updates - warmup_steps)
                 progress_ratio = (current_step - warmup_steps) / denominator
-                current_lr = 0.5 * args.learning_rate * (1 + jp.cos(jp.pi * progress_ratio))
+                current_lr = (
+                    0.5 * args.learning_rate * (1 + jp.cos(jp.pi * progress_ratio))
+                )
             info["learning_rate"] = float(current_lr)
 
             # 课程学习信息
@@ -654,7 +736,9 @@ def main():
             if (update + 1) % config.log_interval == 0:
                 avg_metrics = metrics_logger.get_averages()
                 avg_metrics["steps_since_last_log"] = config.log_interval
-                logger.log_scalars(metrics=avg_metrics, step=train_state.step, prefix="train")
+                logger.log_scalars(
+                    metrics=avg_metrics, step=train_state.step, prefix="train"
+                )
                 metrics_logger.reset()
 
             # 保存检查点
@@ -679,12 +763,16 @@ def main():
 
     try:
         with training_display:
+
             def on_update(update, info):
                 training_display.update(epoch=update, step=1, metrics=info)
 
             video_config = None
             if video_recorder:
-                video_config = {"interval": args.video_interval, "frames": args.video_frames}
+                video_config = {
+                    "interval": args.video_interval,
+                    "frames": args.video_frames,
+                }
 
             train_state, env_state, info = pure_train_loop(
                 train_state,
@@ -723,6 +811,7 @@ def main():
     except Exception as e:
         print_summary(f"训练出错: {e}", style="red", console=console)
         import traceback
+
         console.print(traceback.format_exc())
     finally:
         logger.close()

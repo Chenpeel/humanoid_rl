@@ -10,10 +10,10 @@
 - ANYmal/Go1 机器人实现
 """
 
-from typing import Dict, Optional, Tuple, List
+from typing import Dict, List, Optional, Tuple
+
 import jax
 import jax.numpy as jp
-
 
 # ============================================================================================
 # ======================================= 默认奖励权重 =========================================
@@ -110,6 +110,7 @@ STAGE3_WEIGHTS = {
 # ========================================= 数学工具函数 ========================================
 # =============================================================================================
 
+
 def quat_to_euler(quat: jax.Array) -> jax.Array:
     """四元数转欧拉角 [roll, pitch, yaw]"""
     w, x, y, z = quat[..., 0], quat[..., 1], quat[..., 2], quat[..., 3]
@@ -123,18 +124,23 @@ def quat_to_euler(quat: jax.Array) -> jax.Array:
     yaw = jp.arctan2(siny_cosp, cosy_cosp)
     return jp.stack([roll, pitch, yaw], axis=-1)
 
+
 # ---------------------------------------------------------------------------------------------
+
 
 def normalize_quaternion(quat: jax.Array) -> jax.Array:
     """归一化四元数"""
     norm = jp.linalg.norm(quat, axis=-1, keepdims=True)
     return jp.where(norm > 1e-8, quat / norm, jp.array([1.0, 0.0, 0.0, 0.0]))
 
+
 # ---------------------------------------------------------------------------------------------
+
 
 def wrap_to_pi(angles: jax.Array) -> jax.Array:
     """角度包装到 [-π, π]"""
     return jp.arctan2(jp.sin(angles), jp.cos(angles))
+
 
 # =============================================================================================
 # ======================================= END: 数学工具函数  ===================================
@@ -145,6 +151,7 @@ def wrap_to_pi(angles: jax.Array) -> jax.Array:
 # ======================================= 接触检测辅助函数 ======================================
 # ============================================================================================
 
+
 def get_feet_contacts(contact_sensors: jax.Array, threshold: float = 1.0) -> jax.Array:
     """提取脚部接触状态 [right_foot, left_foot]"""
     contact_sensors = jp.asarray(contact_sensors)
@@ -153,6 +160,7 @@ def get_feet_contacts(contact_sensors: jax.Array, threshold: float = 1.0) -> jax
         left_contact = jp.maximum(contact_sensors[..., 2], contact_sensors[..., 3])
         return jp.stack([right_contact > threshold, left_contact > threshold], axis=-1)
     return contact_sensors > threshold
+
 
 # ============================================================================================
 # ===================================== END: 接触检测辅助函数 =====================================
@@ -163,6 +171,7 @@ def get_feet_contacts(contact_sensors: jax.Array, threshold: float = 1.0) -> jax
 # ======================================= 核心运动奖励 ===========================================
 # ==============================================================================================
 
+
 def compute_forward_velocity_reward(
     base_linvel: jax.Array, target_velocity: float, tolerance: float = 0.5
 ) -> jax.Array:
@@ -171,7 +180,9 @@ def compute_forward_velocity_reward(
     vel_error = jp.abs(forward_vel - target_velocity)
     return jp.exp(-vel_error / tolerance)
 
+
 # ---------------------------------------------------------------------------------------------
+
 
 def compute_velocity_tracking_reward(
     actual_velocity: jax.Array,
@@ -187,6 +198,7 @@ def compute_velocity_tracking_reward(
     wx, wy, wyaw = tracking_weights
     return (wx * reward_x + wy * reward_y + wyaw * reward_yaw) / (wx + wy + wyaw)
 
+
 # ==============================================================================================
 # ===================================== END: 核心运动奖励 =========================================
 # ==============================================================================================
@@ -196,13 +208,16 @@ def compute_velocity_tracking_reward(
 # ======================================= 步态质量奖励 ==========================================
 # =============================================================================================
 
+
 def compute_gait_symmetry_reward(contacts: jax.Array) -> jax.Array:
     """步态对称性奖励 (XOR 模式)"""
     right_contact = contacts[..., 0].astype(jp.float32)
     left_contact = contacts[..., 1].astype(jp.float32)
     return jp.abs(right_contact - left_contact)
 
+
 # ---------------------------------------------------------------------------------------------
+
 
 def compute_foot_clearance_reward(
     feet_positions: jax.Array,
@@ -217,7 +232,9 @@ def compute_foot_clearance_reward(
     clearance_reward = jp.exp(-height_error / tolerance) * swing_phase
     return jp.sum(clearance_reward, axis=-1)
 
+
 # ---------------------------------------------------------------------------------------------
+
 
 def compute_feet_air_time_reward(
     contact_history: jax.Array, target_duty_cycle: float = 0.5
@@ -226,6 +243,7 @@ def compute_feet_air_time_reward(
     actual_duty_cycle = jp.mean(contact_history, axis=0)
     duty_error = jp.mean(jp.abs(actual_duty_cycle - target_duty_cycle))
     return jp.exp(-duty_error / 0.2)
+
 
 # =============================================================================================
 # ===================================== END: 步态质量奖励 =======================================
@@ -236,6 +254,7 @@ def compute_feet_air_time_reward(
 # ======================================= 稳定性与姿态 ==========================================
 # =============================================================================================
 
+
 def compute_trunk_height_reward(
     torso_z: jax.Array, target_height: float = 0.35, tolerance: float = 0.08
 ) -> jax.Array:
@@ -243,15 +262,24 @@ def compute_trunk_height_reward(
     height_error = jp.abs(torso_z - target_height)
     return jp.exp(-height_error / tolerance)
 
+
 # ---------------------------------------------------------------------------------------------
+
 
 def compute_upright_bonus(base_quat: jax.Array, threshold: float = 0.93) -> jax.Array:
     """直立姿态奖励"""
-    qw, qx, qy, qz = base_quat[..., 0], base_quat[..., 1], base_quat[..., 2], base_quat[..., 3]
+    qw, qx, qy, qz = (
+        base_quat[..., 0],
+        base_quat[..., 1],
+        base_quat[..., 2],
+        base_quat[..., 3],
+    )
     z_z = 1.0 - 2.0 * (qx**2 + qy**2)
     return jp.where(z_z > threshold, 1.0, 0.0)
 
+
 # ---------------------------------------------------------------------------------------------
+
 
 def compute_stability_reward(
     torso_z: jax.Array,
@@ -266,8 +294,102 @@ def compute_stability_reward(
     ang_vel_reward = jp.exp(-jp.linalg.norm(base_angvel, axis=-1))
     return (height_reward + ang_vel_reward) / 2.0
 
+
 # =============================================================================================
 # ===================================== END: 稳定性与姿态 =======================================
+# =============================================================================================
+
+
+# =============================================================================================
+# ======================================= 能量与扭矩惩罚 =========================================
+# =============================================================================================
+
+
+def compute_normalized_torque_penalty(
+    torques: jax.Array,
+    joint_names: Optional[List[str]] = None,
+) -> jax.Array:
+    """
+    计算归一化扭矩惩罚
+
+    根据不同关节的实际扭矩限制进行归一化，确保惩罚的公平性。
+
+    扭矩限制 (Nm):
+    - Hip pitch: 2.5 Nm (索引 0, 8)
+    - Hip yaw: 8 Nm (索引 1, 9)
+    - Hip roll: 8 Nm (索引 2, 10)
+    - Knee: 8 Nm (索引 3, 11)
+    - Ankle 1-3: 2.5 Nm (索引 4, 5, 6, 12, 13, 14)
+    - Toe: 8 Nm (索引 7, 15)
+
+    Args:
+        torques: 关节扭矩 [batch, 16] 或 [16]
+        joint_names: 可选的关节名称列表（用于未来扩展）
+
+    Returns:
+        归一化扭矩惩罚 [batch] 或标量
+    """
+    # 定义每个关节的扭矩限制 (Nm)
+    # 假设关节顺序：右腿8个 + 左腿8个
+    # 右腿: hip_pitch, hip_yaw, hip_roll, knee, ankle1, ankle2, ankle3, toe
+    # 左腿: hip_pitch, hip_yaw, hip_roll, knee, ankle1, ankle2, ankle3, toe
+    torque_limits = jp.array(
+        [
+            # 右腿
+            2.5,  # right_hip_pitch
+            8.0,  # right_hip_yaw
+            8.0,  # right_hip_roll
+            8.0,  # right_knee
+            2.5,  # right_ankle_1
+            2.5,  # right_ankle_2
+            2.5,  # right_ankle_3
+            8.0,  # right_toe
+            # 左腿
+            2.5,  # left_hip_pitch
+            8.0,  # left_hip_yaw
+            8.0,  # left_hip_roll
+            8.0,  # left_knee
+            2.5,  # left_ankle_1
+            2.5,  # left_ankle_2
+            2.5,  # left_ankle_3
+            8.0,  # left_toe
+        ]
+    )
+
+    # 归一化扭矩: torque / limit，使得所有关节在 [-1, 1] 范围内
+    normalized_torques = torques / torque_limits
+
+    # 计算平方惩罚（归一化后）
+    penalty = jp.sum(jp.square(normalized_torques), axis=-1)
+
+    return penalty
+
+
+# ---------------------------------------------------------------------------------------------
+
+
+def compute_energy_efficiency_reward(
+    torques: jax.Array,
+    joint_vel: jax.Array,
+) -> jax.Array:
+    """
+    计算能量效率奖励（负功率惩罚）
+
+    功率 = 扭矩 × 角速度
+
+    Args:
+        torques: 关节扭矩 [batch, n_joints]
+        joint_vel: 关节速度 [batch, n_joints]
+
+    Returns:
+        能量效率惩罚 [batch]
+    """
+    power = jp.abs(torques * joint_vel)
+    return jp.sum(power, axis=-1)
+
+
+# =============================================================================================
+# ===================================== END: 能量与扭矩惩罚 ======================================
 # =============================================================================================
 
 
@@ -275,23 +397,32 @@ def compute_stability_reward(
 # ======================================= 约束与惩罚项 ==========================================
 # =============================================================================================
 
-def compute_trunk_orientation_penalty(quat: jax.Array, max_tilt: float = 0.3) -> jax.Array:
+
+def compute_trunk_orientation_penalty(
+    quat: jax.Array, max_tilt: float = 0.3
+) -> jax.Array:
     """躯干过度倾斜惩罚"""
     euler = quat_to_euler(normalize_quaternion(quat))
     roll_penalty = jp.clip(jp.abs(euler[..., 0]) - max_tilt, min=0.0)
     pitch_penalty = jp.clip(jp.abs(euler[..., 1]) - max_tilt, min=0.0)
     return roll_penalty + pitch_penalty
 
+
 # ---------------------------------------------------------------------------------------------
+
 
 def compute_drag_penalty(
     feet_positions: jax.Array, contacts: jax.Array, threshold: float = 0.02
 ) -> jax.Array:
     """拖地惩罚"""
-    is_dragging = (feet_positions[..., 2] < threshold) * (1.0 - contacts.astype(jp.float32))
+    is_dragging = (feet_positions[..., 2] < threshold) * (
+        1.0 - contacts.astype(jp.float32)
+    )
     return jp.sum(is_dragging, axis=-1)
 
+
 # ---------------------------------------------------------------------------------------------
+
 
 def compute_feet_slide_penalty(
     feet_linvel: jax.Array, contacts: jax.Array, threshold: float = 0.1
@@ -299,7 +430,10 @@ def compute_feet_slide_penalty(
     """脚部滑动惩罚"""
     slide_vel = jp.linalg.norm(feet_linvel[..., :2], axis=-1)
     is_sliding = (slide_vel > threshold) * (contacts > 0.1)
-    return jp.sum(is_sliding.astype(jp.float32) * slide_vel) / jp.maximum(feet_linvel.shape[-2], 1)
+    return jp.sum(is_sliding.astype(jp.float32) * slide_vel) / jp.maximum(
+        feet_linvel.shape[-2], 1
+    )
+
 
 # =============================================================================================
 # ===================================== END: 约束与惩罚项 =======================================
@@ -309,6 +443,7 @@ def compute_feet_slide_penalty(
 # =============================================================================================
 # ======================================= 完整奖励函数 ==========================================
 # =============================================================================================
+
 
 def compute_walking_reward(
     torso_z: jax.Array,
@@ -332,7 +467,7 @@ def compute_walking_reward(
     reward_weights: Dict[str, float] = None,
 ) -> Tuple[jax.Array, Dict[str, jax.Array]]:
     """计算完整的行走任务奖励"""
-    
+
     # 初始化
     base_quat = normalize_quaternion(base_quat)
     contacts = get_feet_contacts(contact_sensors)
@@ -342,20 +477,26 @@ def compute_walking_reward(
 
     # 1. 速度跟踪
     if "velocity_tracking" in weights and command is not None:
-        val = weights["velocity_tracking"] * compute_velocity_tracking_reward(actual_velocity, command)
+        val = weights["velocity_tracking"] * compute_velocity_tracking_reward(
+            actual_velocity, command
+        )
         reward += val
         reward_info["reward/velocity_tracking"] = val
     elif "forward_velocity" in weights:
-        val = weights["forward_velocity"] * compute_forward_velocity_reward(base_linvel, target_velocity)
+        val = weights["forward_velocity"] * compute_forward_velocity_reward(
+            base_linvel, target_velocity
+        )
         reward += val
         reward_info["reward/forward_velocity"] = val
 
     # 2. 姿态与稳定性
     if "trunk_height" in weights:
-        val = weights["trunk_height"] * compute_trunk_height_reward(torso_z, target_height)
+        val = weights["trunk_height"] * compute_trunk_height_reward(
+            torso_z, target_height
+        )
         reward += val
         reward_info["reward/trunk_height"] = val
-    
+
     if "orientation" in weights:
         val = weights["orientation"] * compute_trunk_orientation_penalty(base_quat)
         reward += val
@@ -398,6 +539,7 @@ def compute_walking_reward(
     reward = jp.nan_to_num(reward, nan=0.0, posinf=10.0, neginf=-10.0)
 
     return reward, reward_info
+
 
 # =============================================================================================
 # ===================================== END: 完整奖励函数 =======================================

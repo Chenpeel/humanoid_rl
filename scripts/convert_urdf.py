@@ -24,10 +24,10 @@ sys.path.insert(0, str(project_root))
 from utils.urdf2mjcf import convert_urdf, fix_mesh_paths, mirror_mjcf
 from utils.xml_tools import MJCFModularSplitter
 
-
 # ============================================================================================
 # ======================================= 管道逻辑 ============================================
 # ============================================================================================
+
 
 def run_pipeline(input_urdf: Path):
     """Execute complete conversion pipeline"""
@@ -106,8 +106,10 @@ def run_pipeline(input_urdf: Path):
     except Exception as e:
         print(f"\n❌ Pipeline failed with error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 # ============================================================================================
 # ===================================== END: 管道逻辑 ==========================================
@@ -117,6 +119,7 @@ def run_pipeline(input_urdf: Path):
 # ============================================================================================
 # ======================================= 主函数 ==============================================
 # ============================================================================================
+
 
 def main():
     parser = argparse.ArgumentParser(

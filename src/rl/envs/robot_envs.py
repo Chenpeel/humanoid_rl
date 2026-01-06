@@ -21,6 +21,7 @@ console = Console()
 # ======================================= 工具函数 ============================================
 # ============================================================================================
 
+
 def quaternion_multiply(q1, q2):
     """四元数乘法 (q1 * q2)"""
     w1, x1, y1, z1 = q1
@@ -34,6 +35,7 @@ def quaternion_multiply(q1, q2):
         ]
     )
 
+
 # ============================================================================================
 # ===================================== END: 工具函数 ==========================================
 # ============================================================================================
@@ -42,6 +44,7 @@ def quaternion_multiply(q1, q2):
 # ============================================================================================
 # ======================================= 速度跟踪环境 ==========================================
 # ============================================================================================
+
 
 class VelocityTrackingEnv(MJXBaseEnv):
     """速度跟踪控制环境
@@ -195,7 +198,9 @@ class VelocityTrackingEnv(MJXBaseEnv):
             home_key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
                 self.default_qpos = jp.array(
-                    model.key_qpos[home_key_id * model.nq : (home_key_id + 1) * model.nq]
+                    model.key_qpos[
+                        home_key_id * model.nq : (home_key_id + 1) * model.nq
+                    ]
                 )
         except:
             pass
@@ -395,7 +400,7 @@ class VelocityTrackingEnv(MJXBaseEnv):
 
         reward = jp.clip(reward, -10.0, 10.0)
         reward = jp.nan_to_num(reward, nan=0.0, posinf=10.0, neginf=-10.0)
-        
+
         reward_info = {
             "reward/tracking_lin_vel": weighted_lin_vel,
             "reward/tracking_ang_vel": weighted_ang_vel,
@@ -485,15 +490,24 @@ class VelocityTrackingEnv(MJXBaseEnv):
     def _sample_command(self, rng: jax.Array) -> jax.Array:
         """采样速度命令"""
         rng, key1, key2, key3 = jax.random.split(rng, 4)
-        cmd_x = jax.random.uniform(key1, minval=self.cmd_x_range[0], maxval=self.cmd_x_range[1])
-        cmd_y = jax.random.uniform(key2, minval=self.cmd_y_range[0], maxval=self.cmd_y_range[1])
-        cmd_yaw = jax.random.uniform(key3, minval=self.cmd_yaw_range[0], maxval=self.cmd_yaw_range[1])
+        cmd_x = jax.random.uniform(
+            key1, minval=self.cmd_x_range[0], maxval=self.cmd_x_range[1]
+        )
+        cmd_y = jax.random.uniform(
+            key2, minval=self.cmd_y_range[0], maxval=self.cmd_y_range[1]
+        )
+        cmd_yaw = jax.random.uniform(
+            key3, minval=self.cmd_yaw_range[0], maxval=self.cmd_yaw_range[1]
+        )
         return jp.array([cmd_x, cmd_y, cmd_yaw])
 
 
-def create_velocity_tracking_env(xml_path: str = "assets/xmls/scene.xml", **kwargs) -> VelocityTrackingEnv:
+def create_velocity_tracking_env(
+    xml_path: str = "assets/xmls/scene.xml", **kwargs
+) -> VelocityTrackingEnv:
     """创建速度跟踪环境（便捷函数）"""
     return VelocityTrackingEnv(xml_path=xml_path, **kwargs)
+
 
 # ============================================================================================
 # ===================================== END: 速度跟踪环境 ======================================
@@ -503,6 +517,7 @@ def create_velocity_tracking_env(xml_path: str = "assets/xmls/scene.xml", **kwar
 # ============================================================================================
 # ======================================= 站立环境 ============================================
 # ============================================================================================
+
 
 class StandingEnv(MJXBaseEnv):
     """站立保持环境
@@ -573,7 +588,9 @@ class StandingEnv(MJXBaseEnv):
             home_key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
                 self.default_qpos = jp.array(
-                    model.key_qpos[home_key_id * model.nq : (home_key_id + 1) * model.nq]
+                    model.key_qpos[
+                        home_key_id * model.nq : (home_key_id + 1) * model.nq
+                    ]
                 )
         except Exception:
             pass
@@ -621,7 +638,9 @@ class StandingEnv(MJXBaseEnv):
 
         rng, key3 = jax.random.split(rng)
         if self.nu > 0:
-            joint_noise = jax.random.uniform(key3, (self.nu,), minval=-0.05, maxval=0.05)
+            joint_noise = jax.random.uniform(
+                key3, (self.nu,), minval=-0.05, maxval=0.05
+            )
             indices = jp.array(self.actuator_qpos_indices)
             joint_pos = qpos[indices]
             qpos = qpos.at[indices].set(joint_pos + joint_noise)
@@ -754,6 +773,7 @@ class StandingEnv(MJXBaseEnv):
     def _is_done(self, state: EnvState, pipeline_state: Any) -> jax.Array:
         """检查是否摔倒"""
         from ..rewards.standing_rewards import check_standing_termination
+
         qpos = pipeline_state.qpos
         if self.floating_base_qpos_addr is not None:
             torso_z = qpos[self.floating_base_qpos_addr + 2]
@@ -767,13 +787,18 @@ class StandingEnv(MJXBaseEnv):
 
     # --------------------------------------------------------------------------------------------
 
-    def _get_info(self, state: EnvState, action: jax.Array, pipeline_state: Any) -> Dict[str, jax.Array]:
+    def _get_info(
+        self, state: EnvState, action: jax.Array, pipeline_state: Any
+    ) -> Dict[str, jax.Array]:
         return {}
 
 
-def create_standing_env(xml_path: str = "assets/xmls/scene.xml", **kwargs) -> StandingEnv:
+def create_standing_env(
+    xml_path: str = "assets/xmls/scene.xml", **kwargs
+) -> StandingEnv:
     """创建站立环境（便捷函数）"""
     return StandingEnv(xml_path=xml_path, **kwargs)
+
 
 # ============================================================================================
 # ===================================== END: 站立环境 =========================================
@@ -783,6 +808,7 @@ def create_standing_env(xml_path: str = "assets/xmls/scene.xml", **kwargs) -> St
 # ============================================================================================
 # ======================================= 行走环境 ============================================
 # ============================================================================================
+
 
 class WalkingEnv(MJXBaseEnv):
     """行走环境
@@ -876,15 +902,21 @@ class WalkingEnv(MJXBaseEnv):
         if not self.contact_sensor_indices and model.nsensor >= 4:
             self.contact_sensor_indices = [0, 1, 2, 3]
 
-        self.right_foot_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "right_foot_link")
-        self.left_foot_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_foot_link")
+        self.right_foot_body_id = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_BODY, "right_foot_link"
+        )
+        self.left_foot_body_id = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_BODY, "left_foot_link"
+        )
 
         self.default_qpos = jp.array(model.qpos0)
         try:
             home_key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
                 self.default_qpos = jp.array(
-                    model.key_qpos[home_key_id * model.nq : (home_key_id + 1) * model.nq]
+                    model.key_qpos[
+                        home_key_id * model.nq : (home_key_id + 1) * model.nq
+                    ]
                 )
         except Exception:
             pass
@@ -937,7 +969,9 @@ class WalkingEnv(MJXBaseEnv):
 
         rng, key3 = jax.random.split(rng)
         if self.nu > 0:
-            joint_noise = jax.random.uniform(key3, (self.nu,), minval=-0.05, maxval=0.05)
+            joint_noise = jax.random.uniform(
+                key3, (self.nu,), minval=-0.05, maxval=0.05
+            )
             indices = jp.array(self.actuator_qpos_indices)
             joint_pos = qpos[indices]
             qpos = qpos.at[indices].set(joint_pos + joint_noise)
@@ -994,7 +1028,16 @@ class WalkingEnv(MJXBaseEnv):
         command = jp.array([self.target_velocity, 0.0, 0.0])
 
         obs = jp.concatenate(
-            [base_quat, base_linvel, base_angvel, joint_pos, joint_vel, action, command, contact_data]
+            [
+                base_quat,
+                base_linvel,
+                base_angvel,
+                joint_pos,
+                joint_vel,
+                action,
+                command,
+                contact_data,
+            ]
         )
         obs = jp.nan_to_num(obs, nan=0.0, posinf=1e6, neginf=-1e6)
         return obs
@@ -1018,9 +1061,15 @@ class WalkingEnv(MJXBaseEnv):
     def _sample_command(self, rng: jax.Array) -> jax.Array:
         """采样速度命令"""
         rng, key1, key2, key3 = jax.random.split(rng, 4)
-        cmd_x = jax.random.uniform(key1, minval=self.cmd_x_range[0], maxval=self.cmd_x_range[1])
-        cmd_y = jax.random.uniform(key2, minval=self.cmd_y_range[0], maxval=self.cmd_y_range[1])
-        cmd_yaw = jax.random.uniform(key3, minval=self.cmd_yaw_range[0], maxval=self.cmd_yaw_range[1])
+        cmd_x = jax.random.uniform(
+            key1, minval=self.cmd_x_range[0], maxval=self.cmd_x_range[1]
+        )
+        cmd_y = jax.random.uniform(
+            key2, minval=self.cmd_y_range[0], maxval=self.cmd_y_range[1]
+        )
+        cmd_yaw = jax.random.uniform(
+            key3, minval=self.cmd_yaw_range[0], maxval=self.cmd_yaw_range[1]
+        )
         return jp.array([cmd_x, cmd_y, cmd_yaw])
 
     # --------------------------------------------------------------------------------------------
@@ -1084,8 +1133,18 @@ class WalkingEnv(MJXBaseEnv):
         try:
             if hasattr(self, "actuator_joint_ids"):
                 joint_limits = (
-                    jp.array([self.mj_model.jnt_range[jid, 0] for jid in self.actuator_joint_ids]),
-                    jp.array([self.mj_model.jnt_range[jid, 1] for jid in self.actuator_joint_ids]),
+                    jp.array(
+                        [
+                            self.mj_model.jnt_range[jid, 0]
+                            for jid in self.actuator_joint_ids
+                        ]
+                    ),
+                    jp.array(
+                        [
+                            self.mj_model.jnt_range[jid, 1]
+                            for jid in self.actuator_joint_ids
+                        ]
+                    ),
                 )
             else:
                 joint_limits = None
@@ -1094,7 +1153,9 @@ class WalkingEnv(MJXBaseEnv):
 
         contact_history = prev_state.info.get("contact_history", None)
         torques = pipeline_state.qfrc_actuator
-        command = prev_state.info.get("command", jp.array([self.target_velocity, 0.0, 0.0]))
+        command = prev_state.info.get(
+            "command", jp.array([self.target_velocity, 0.0, 0.0])
+        )
         target_vel = command[0]
 
         return compute_walking_reward(
@@ -1122,6 +1183,7 @@ class WalkingEnv(MJXBaseEnv):
     def _is_done(self, state: EnvState, pipeline_state: Any) -> jax.Array:
         """检查是否摔倒"""
         from ..rewards.walking_rewards import check_walking_termination
+
         qpos = pipeline_state.qpos
         if self.floating_base_qpos_addr is not None:
             torso_z = qpos[self.floating_base_qpos_addr + 2]
@@ -1135,7 +1197,9 @@ class WalkingEnv(MJXBaseEnv):
 
     # --------------------------------------------------------------------------------------------
 
-    def _get_info(self, state: EnvState, action: jax.Array, pipeline_state: Any) -> Dict[str, jax.Array]:
+    def _get_info(
+        self, state: EnvState, action: jax.Array, pipeline_state: Any
+    ) -> Dict[str, jax.Array]:
         """获取额外信息"""
         info = {
             "command": state.info.get("command", jp.zeros(3)),
@@ -1156,9 +1220,13 @@ class WalkingEnv(MJXBaseEnv):
 
         if self.contact_sensor_indices:
             contact_indices = jp.array(self.contact_sensor_indices)
-            current_contacts = (pipeline_state.sensordata[contact_indices] > 1.0).astype(jp.float32)
+            current_contacts = (
+                pipeline_state.sensordata[contact_indices] > 1.0
+            ).astype(jp.float32)
             prev_history = state.info.get("contact_history", jp.zeros((10, 4)))
-            new_history = jp.concatenate([prev_history[1:, :], current_contacts[jp.newaxis, :]], axis=0)
+            new_history = jp.concatenate(
+                [prev_history[1:, :], current_contacts[jp.newaxis, :]], axis=0
+            )
             info["contact_history"] = new_history
 
         return info
@@ -1223,9 +1291,12 @@ class WalkingEnv(MJXBaseEnv):
         return state
 
 
-def create_walking_env(xml_path: str = "assets/xmls/scenes/flat_terrain.xml", **kwargs) -> WalkingEnv:
+def create_walking_env(
+    xml_path: str = "assets/xmls/scenes/flat_terrain.xml", **kwargs
+) -> WalkingEnv:
     """创建行走环境（便捷函数）"""
     return WalkingEnv(xml_path=xml_path, **kwargs)
+
 
 # ============================================================================================
 # ===================================== END: 行走环境 =========================================

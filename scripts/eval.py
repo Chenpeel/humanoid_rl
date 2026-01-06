@@ -20,12 +20,8 @@ from rich.table import Table
 
 from rl.envs import create_velocity_tracking_env, create_walking_env
 from rl.models import ActorCriticNetwork
-from rl.utils import (
-    InteractiveViewer,
-    MujocoRenderer,
-    create_video_writer,
-    save_frame_to_video,
-)
+from rl.utils import (InteractiveViewer, MujocoRenderer, create_video_writer,
+                      save_frame_to_video)
 
 # 屏蔽 MuJoCo warp 警告
 _original_stderr = sys.stderr
@@ -39,6 +35,7 @@ console = Console()
 # ============================================================================================
 # ======================================= 检查点处理 ==========================================
 # ============================================================================================
+
 
 def infer_network_config_from_checkpoint(checkpoint_path: str):
     """从检查点推断网络配置"""
@@ -66,10 +63,8 @@ def infer_network_config_from_checkpoint(checkpoint_path: str):
     if "backbone" in params:
         shared_backbone = True
         backbone = params["backbone"]
-        console.print(
-            f"  [dim]调试: 共享backbone层 = {list(backbone.keys())}[/dim]")
-        layer_names = sorted(
-            [k for k in backbone.keys() if k.startswith("Dense_")])
+        console.print(f"  [dim]调试: 共享backbone层 = {list(backbone.keys())}[/dim]")
+        layer_names = sorted([k for k in backbone.keys() if k.startswith("Dense_")])
 
         for layer_name in layer_names:
             if "kernel" in backbone[layer_name]:
@@ -117,6 +112,7 @@ def infer_network_config_from_checkpoint(checkpoint_path: str):
         "step": data.get("step", data.get("params", {}).get("step", 0)),
     }
 
+
 # --------------------------------------------------------------------------------------------
 
 
@@ -133,6 +129,7 @@ def load_checkpoint(checkpoint_path: str, network, rng):
     console.print(f"[green]✓ 加载检查点: step={step}[/green]")
     return params, step
 
+
 # ============================================================================================
 # ===================================== END: 检查点处理 ========================================
 # ============================================================================================
@@ -141,6 +138,7 @@ def load_checkpoint(checkpoint_path: str, network, rng):
 # ============================================================================================
 # ======================================= 评估逻辑 ============================================
 # ============================================================================================
+
 
 def evaluate_policy(
     env,
@@ -173,6 +171,7 @@ def evaluate_policy(
         if save_video:
             console.print("[cyan]使用离线渲染器（保存视频）...[/cyan]")
             import mujoco
+
             mj_model = env.mj_model
             renderer = MujocoRenderer(
                 mj_model, width=1280, height=720, camera_name="track"
@@ -186,6 +185,7 @@ def evaluate_policy(
             try:
                 console.print("[cyan]启动交互式查看器...[/cyan]")
                 import mujoco
+
                 mj_model = env.mj_model
                 mj_data_for_viewer = mujoco.MjData(mj_model)
                 viewer = InteractiveViewer(mj_model, mj_data_for_viewer)
@@ -229,8 +229,7 @@ def evaluate_policy(
                 step_count = 0
 
                 while not done and step_count < max_steps:
-                    mean, log_std, _ = network.apply(
-                        params, env_state.obs[None, :])
+                    mean, log_std, _ = network.apply(params, env_state.obs[None, :])
                     action = mean[0]
 
                     if step_count < 10:
@@ -255,6 +254,7 @@ def evaluate_policy(
                     if render and step_count % render_interval == 0:
                         if viewer and viewer.is_alive():
                             import mujoco
+
                             qpos_np = np.array(env_state.pipeline_state.qpos)
                             qvel_np = np.array(env_state.pipeline_state.qvel)
                             mj_data_for_viewer.qpos[:] = qpos_np
@@ -265,6 +265,7 @@ def evaluate_policy(
 
                         elif renderer:
                             import mujoco
+
                             qpos_np = np.array(env_state.pipeline_state.qpos)
                             qvel_np = np.array(env_state.pipeline_state.qvel)
                             renderer.data.qpos[:] = qpos_np
@@ -312,6 +313,7 @@ def evaluate_policy(
         "episode_lengths": episode_lengths,
     }
 
+
 # ============================================================================================
 # ===================================== END: 评估逻辑 ==========================================
 # ============================================================================================
@@ -320,6 +322,7 @@ def evaluate_policy(
 # ============================================================================================
 # ======================================= 主函数 ==============================================
 # ============================================================================================
+
 
 def main():
     parser = argparse.ArgumentParser(description="评估强化学习策略")
@@ -333,8 +336,7 @@ def main():
     parser.add_argument(
         "--use-local-mjcf", action="store_true", help="使用本地assets/mjcf中的MJCF模型"
     )
-    parser.add_argument("--num-episodes", type=int,
-                        default=10, help="评估episode数")
+    parser.add_argument("--num-episodes", type=int, default=10, help="评估episode数")
     parser.add_argument(
         "--render",
         type=int,
@@ -350,8 +352,7 @@ def main():
     parser.add_argument(
         "--video-path", type=str, default="eval_video.mp4", help="视频保存路径"
     )
-    parser.add_argument("--max-steps", type=int,
-                        default=1000, help="每个episode最大步数")
+    parser.add_argument("--max-steps", type=int, default=1000, help="每个episode最大步数")
     parser.add_argument(
         "--hidden-dims",
         type=int,
@@ -372,14 +373,14 @@ def main():
         choices=["velocity", "walking"],
         help="环境类型: velocity=速度跟踪(61维), walking=行走任务(65维，默认)",
     )
-    parser.add_argument("--cpu", action="store_true",
-                        help="使用CPU运行（避免GPU冲突，速度较慢）")
+    parser.add_argument("--cpu", action="store_true", help="使用CPU运行（避免GPU冲突，速度较慢）")
     parser.add_argument("--seed", type=int, default=42, help="随机种子")
 
     args = parser.parse_args()
 
     if args.cpu:
         import os
+
         os.environ["JAX_PLATFORMS"] = "cpu"
         console.print("[yellow]使用 CPU 模式运行（速度较慢）[/yellow]")
 
