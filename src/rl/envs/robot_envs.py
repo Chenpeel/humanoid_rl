@@ -125,7 +125,8 @@ class VelocityTrackingEnv(MJXBaseEnv):
 
         # 找到传感器
         sensor_names = [
-            mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_SENSOR, i) or f"sensor_{i}"
+            mujoco.mj_id2name(
+                model, mujoco.mjtObj.mjOBJ_SENSOR, i) or f"sensor_{i}"
             for i in range(model.nsensor)
         ]
 
@@ -195,11 +196,12 @@ class VelocityTrackingEnv(MJXBaseEnv):
         # 默认关节位置
         self.default_qpos = jp.array(model.qpos0)
         try:
-            home_key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
+            home_key_id = mujoco.mj_name2id(
+                model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
                 self.default_qpos = jp.array(
                     model.key_qpos[
-                        home_key_id * model.nq : (home_key_id + 1) * model.nq
+                        home_key_id * model.nq: (home_key_id + 1) * model.nq
                     ]
                 )
         except:
@@ -237,19 +239,21 @@ class VelocityTrackingEnv(MJXBaseEnv):
             # 随机化xy位置: ±0.05m
             dxy = jax.random.uniform(key1, (2,), minval=-0.05, maxval=0.05)
             base_xy = qpos[
-                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
+                self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
             ]
             qpos = qpos.at[
-                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
+                self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
             ].set(base_xy + dxy)
 
             # 随机化yaw角度: ±π
             yaw = jax.random.uniform(key2, minval=-jp.pi, maxval=jp.pi)
-            quat_standard = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
+            quat_standard = jp.array(
+                [jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
 
             # Jiyuan 逆校正
             jiyuan_base_rotation = jp.array([0.70710678, 0.70710678, 0.0, 0.0])
-            quat_physical = quaternion_multiply(jiyuan_base_rotation, quat_standard)
+            quat_physical = quaternion_multiply(
+                jiyuan_base_rotation, quat_standard)
 
             quat_norm = jp.linalg.norm(quat_physical)
             quat_physical = jp.where(
@@ -258,13 +262,14 @@ class VelocityTrackingEnv(MJXBaseEnv):
                 jp.array([0.70710678, 0.70710678, 0.0, 0.0]),
             )
             qpos = qpos.at[
-                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ].set(quat_physical)
 
         # 随机化关节位置: ±0.1 rad
         rng, key4 = jax.random.split(rng)
         if self.nu > 0:
-            joint_noise = jax.random.uniform(key4, (self.nu,), minval=-0.1, maxval=0.1)
+            joint_noise = jax.random.uniform(
+                key4, (self.nu,), minval=-0.1, maxval=0.1)
             indices = jp.array(self.actuator_qpos_indices)
             joint_pos = qpos[indices]
             qpos = qpos.at[indices].set(joint_pos + joint_noise)
@@ -286,7 +291,7 @@ class VelocityTrackingEnv(MJXBaseEnv):
         # 1. 浮动基座姿态
         if self.floating_base_qpos_addr is not None:
             base_quat = qpos[
-                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
             quat_norm = jp.linalg.norm(base_quat)
             base_quat = jp.where(
@@ -301,10 +306,10 @@ class VelocityTrackingEnv(MJXBaseEnv):
 
         # 2. 浮动基座角速度
         if self.gyro_idx is not None:
-            base_angvel = sensordata[self.gyro_idx : self.gyro_idx + 3]
+            base_angvel = sensordata[self.gyro_idx: self.gyro_idx + 3]
         elif self.floating_base_qvel_addr is not None:
             base_angvel = qvel[
-                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
+                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
             ]
         else:
             base_angvel = jp.zeros(3)
@@ -312,7 +317,7 @@ class VelocityTrackingEnv(MJXBaseEnv):
         # 3. 浮动基座线速度
         if self.floating_base_qvel_addr is not None:
             base_linvel = qvel[
-                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
+                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
             ]
         else:
             base_linvel = jp.zeros(3)
@@ -354,10 +359,10 @@ class VelocityTrackingEnv(MJXBaseEnv):
 
         if self.floating_base_qvel_addr is not None:
             base_linvel = qvel[
-                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
+                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
             ]
             base_angvel = qvel[
-                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
+                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
             ]
         else:
             base_linvel = jp.zeros(3)
@@ -384,10 +389,13 @@ class VelocityTrackingEnv(MJXBaseEnv):
         cost_torques = jp.clip(torques_squared, 0.0, 1000.0)
 
         # 组合
-        weighted_lin_vel = self.reward_weights["tracking_lin_vel"] * reward_lin_vel
-        weighted_ang_vel = self.reward_weights["tracking_ang_vel"] * reward_ang_vel
+        weighted_lin_vel = self.reward_weights["tracking_lin_vel"] * \
+            reward_lin_vel
+        weighted_ang_vel = self.reward_weights["tracking_ang_vel"] * \
+            reward_ang_vel
         weighted_alive = self.reward_weights["alive"] * reward_alive
-        weighted_action_rate = self.reward_weights["action_rate"] * cost_action_rate
+        weighted_action_rate = self.reward_weights["action_rate"] * \
+            cost_action_rate
         weighted_torques = self.reward_weights["torques"] * cost_torques
 
         reward = (
@@ -420,7 +428,8 @@ class VelocityTrackingEnv(MJXBaseEnv):
             pipeline_state = self._step_pipeline(pipeline_state, action)
 
         obs = self._get_obs(pipeline_state, action)
-        reward, reward_info = self._compute_reward(state, action, pipeline_state)
+        reward, reward_info = self._compute_reward(
+            state, action, pipeline_state)
         done = self._is_done(state, pipeline_state)
         step = state.step + 1
         done = jp.logical_or(done, step >= self.max_steps)
@@ -585,11 +594,12 @@ class StandingEnv(MJXBaseEnv):
 
         self.default_qpos = jp.array(model.qpos0)
         try:
-            home_key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
+            home_key_id = mujoco.mj_name2id(
+                model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
                 self.default_qpos = jp.array(
                     model.key_qpos[
-                        home_key_id * model.nq : (home_key_id + 1) * model.nq
+                        home_key_id * model.nq: (home_key_id + 1) * model.nq
                     ]
                 )
         except Exception:
@@ -616,16 +626,18 @@ class StandingEnv(MJXBaseEnv):
             rng, key1, key2 = jax.random.split(rng, 3)
             dxy = jax.random.uniform(key1, (2,), minval=-0.02, maxval=0.02)
             base_xy = qpos[
-                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
+                self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
             ]
             qpos = qpos.at[
-                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
+                self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
             ].set(base_xy + dxy)
 
             yaw = jax.random.uniform(key2, minval=-0.1, maxval=0.1)
-            quat_standard = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
+            quat_standard = jp.array(
+                [jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
             jiyuan_base_rotation = jp.array([0.70710678, 0.70710678, 0.0, 0.0])
-            quat_physical = quaternion_multiply(jiyuan_base_rotation, quat_standard)
+            quat_physical = quaternion_multiply(
+                jiyuan_base_rotation, quat_standard)
             quat_norm = jp.linalg.norm(quat_physical)
             quat_physical = jp.where(
                 quat_norm > 1e-8,
@@ -633,7 +645,7 @@ class StandingEnv(MJXBaseEnv):
                 jp.array([0.70710678, 0.70710678, 0.0, 0.0]),
             )
             qpos = qpos.at[
-                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ].set(quat_physical)
 
         rng, key3 = jax.random.split(rng)
@@ -659,11 +671,12 @@ class StandingEnv(MJXBaseEnv):
 
         if self.floating_base_qpos_addr is not None:
             base_quat = qpos[
-                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
             quat_norm = jp.linalg.norm(base_quat)
             base_quat = jp.where(
-                quat_norm > 1e-8, base_quat / quat_norm, jp.array([1.0, 0.0, 0.0, 0.0])
+                quat_norm > 1e-8, base_quat /
+                quat_norm, jp.array([1.0, 0.0, 0.0, 0.0])
             )
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
@@ -672,10 +685,10 @@ class StandingEnv(MJXBaseEnv):
 
         if self.floating_base_qvel_addr is not None:
             base_linvel = qvel[
-                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
+                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
             ]
             base_angvel = qvel[
-                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
+                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
             ]
         else:
             base_linvel = jp.zeros(3)
@@ -707,7 +720,7 @@ class StandingEnv(MJXBaseEnv):
         if self.floating_base_qpos_addr is not None:
             torso_z = qpos[self.floating_base_qpos_addr + 2]
             base_quat = qpos[
-                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
         else:
             torso_z = self.target_height
@@ -715,10 +728,10 @@ class StandingEnv(MJXBaseEnv):
 
         if self.floating_base_qvel_addr is not None:
             base_linvel = qvel[
-                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
+                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
             ]
             base_angvel = qvel[
-                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
+                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
             ]
         else:
             base_linvel = jp.zeros(3)
@@ -749,7 +762,8 @@ class StandingEnv(MJXBaseEnv):
             pipeline_state = self._step_pipeline(pipeline_state, action)
 
         obs = self._get_obs(pipeline_state, action)
-        reward, reward_info = self._compute_reward(state, action, pipeline_state)
+        reward, reward_info = self._compute_reward(
+            state, action, pipeline_state)
         done = self._is_done(state, pipeline_state)
         step = state.step + 1
         done = jp.logical_or(done, step >= self.max_steps)
@@ -778,7 +792,7 @@ class StandingEnv(MJXBaseEnv):
         if self.floating_base_qpos_addr is not None:
             torso_z = qpos[self.floating_base_qpos_addr + 2]
             base_quat = qpos[
-                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
@@ -831,7 +845,7 @@ class WalkingEnv(MJXBaseEnv):
         cmd_x_range: tuple = (-0.2, 0.8),
         cmd_y_range: tuple = (-0.3, 0.3),
         cmd_yaw_range: tuple = (-1.0, 1.0),
-        target_height: float = 0.35,
+        target_height: float = 0.78,
         # 奖励权重
         reward_weights: Dict[str, float] = None,
     ):
@@ -888,7 +902,8 @@ class WalkingEnv(MJXBaseEnv):
                 self.actuator_qvel_indices.append(model.jnt_dofadr[joint_id])
 
         sensor_names = [
-            mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_SENSOR, i) or f"sensor_{i}"
+            mujoco.mj_id2name(
+                model, mujoco.mjtObj.mjOBJ_SENSOR, i) or f"sensor_{i}"
             for i in range(model.nsensor)
         ]
 
@@ -911,11 +926,12 @@ class WalkingEnv(MJXBaseEnv):
 
         self.default_qpos = jp.array(model.qpos0)
         try:
-            home_key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
+            home_key_id = mujoco.mj_name2id(
+                model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
                 self.default_qpos = jp.array(
                     model.key_qpos[
-                        home_key_id * model.nq : (home_key_id + 1) * model.nq
+                        home_key_id * model.nq: (home_key_id + 1) * model.nq
                     ]
                 )
         except Exception:
@@ -947,16 +963,18 @@ class WalkingEnv(MJXBaseEnv):
             rng, key1, key2 = jax.random.split(rng, 3)
             dxy = jax.random.uniform(key1, (2,), minval=-0.02, maxval=0.02)
             base_xy = qpos[
-                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
+                self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
             ]
             qpos = qpos.at[
-                self.floating_base_qpos_addr : self.floating_base_qpos_addr + 2
+                self.floating_base_qpos_addr: self.floating_base_qpos_addr + 2
             ].set(base_xy + dxy)
 
             yaw = jax.random.uniform(key2, minval=-0.1, maxval=0.1)
-            quat_standard = jp.array([jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
+            quat_standard = jp.array(
+                [jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
             jiyuan_base_rotation = jp.array([0.70710678, 0.70710678, 0.0, 0.0])
-            quat_physical = quaternion_multiply(jiyuan_base_rotation, quat_standard)
+            quat_physical = quaternion_multiply(
+                jiyuan_base_rotation, quat_standard)
             quat_norm = jp.linalg.norm(quat_physical)
             quat_physical = jp.where(
                 quat_norm > 1e-8,
@@ -964,7 +982,7 @@ class WalkingEnv(MJXBaseEnv):
                 jp.array([0.70710678, 0.70710678, 0.0, 0.0]),
             )
             qpos = qpos.at[
-                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ].set(quat_physical)
 
         rng, key3 = jax.random.split(rng)
@@ -991,11 +1009,12 @@ class WalkingEnv(MJXBaseEnv):
 
         if self.floating_base_qpos_addr is not None:
             base_quat = qpos[
-                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
             quat_norm = jp.linalg.norm(base_quat)
             base_quat = jp.where(
-                quat_norm > 1e-8, base_quat / quat_norm, jp.array([1.0, 0.0, 0.0, 0.0])
+                quat_norm > 1e-8, base_quat /
+                quat_norm, jp.array([1.0, 0.0, 0.0, 0.0])
             )
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
@@ -1004,10 +1023,10 @@ class WalkingEnv(MJXBaseEnv):
 
         if self.floating_base_qvel_addr is not None:
             base_linvel = qvel[
-                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
+                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
             ]
             base_angvel = qvel[
-                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
+                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
             ]
         else:
             base_linvel = jp.zeros(3)
@@ -1090,7 +1109,7 @@ class WalkingEnv(MJXBaseEnv):
         if self.floating_base_qpos_addr is not None:
             torso_z = qpos[self.floating_base_qpos_addr + 2]
             base_quat = qpos[
-                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
@@ -1100,10 +1119,10 @@ class WalkingEnv(MJXBaseEnv):
 
         if self.floating_base_qvel_addr is not None:
             base_linvel = qvel[
-                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
+                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
             ]
             base_angvel = qvel[
-                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
+                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
             ]
         else:
             base_linvel = jp.zeros(3)
@@ -1188,7 +1207,7 @@ class WalkingEnv(MJXBaseEnv):
         if self.floating_base_qpos_addr is not None:
             torso_z = qpos[self.floating_base_qpos_addr + 2]
             base_quat = qpos[
-                self.floating_base_qpos_addr + 3 : self.floating_base_qpos_addr + 7
+                self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
@@ -1209,10 +1228,10 @@ class WalkingEnv(MJXBaseEnv):
 
         if self.floating_base_qvel_addr is not None:
             base_lin_vel = pipeline_state.qvel[
-                self.floating_base_qvel_addr : self.floating_base_qvel_addr + 3
+                self.floating_base_qvel_addr: self.floating_base_qvel_addr + 3
             ]
             base_ang_vel = pipeline_state.qvel[
-                self.floating_base_qvel_addr + 3 : self.floating_base_qvel_addr + 6
+                self.floating_base_qvel_addr + 3: self.floating_base_qvel_addr + 6
             ]
             info["actual_velocity"] = jp.array(
                 [base_lin_vel[0], base_lin_vel[1], base_ang_vel[2]]
@@ -1241,7 +1260,8 @@ class WalkingEnv(MJXBaseEnv):
             pipeline_state = self._step_pipeline(pipeline_state, action)
 
         obs = self._get_obs(pipeline_state, action)
-        reward, reward_info = self._compute_reward(state, action, pipeline_state)
+        reward, reward_info = self._compute_reward(
+            state, action, pipeline_state)
         done = self._is_done(state, pipeline_state)
         termination_penalty = self.reward_weights.get("termination", 0.0)
 
@@ -1250,7 +1270,8 @@ class WalkingEnv(MJXBaseEnv):
             termination_penalty,
             jp.clip(reward, -10.0, 10.0),
         )
-        reward = jp.nan_to_num(reward, nan=0.0, posinf=10.0, neginf=termination_penalty)
+        reward = jp.nan_to_num(
+            reward, nan=0.0, posinf=10.0, neginf=termination_penalty)
 
         step = state.step + 1
         done = jp.logical_or(done, step >= self.max_steps)
@@ -1295,7 +1316,7 @@ class WalkingEnv(MJXBaseEnv):
         }
 
         obs = state.obs.at[
-            -3 - len(self.contact_sensor_indices) : -len(self.contact_sensor_indices)
+            -3 - len(self.contact_sensor_indices): -len(self.contact_sensor_indices)
         ].set(command)
 
         state = state.replace(rng=rng, obs=obs, info=info)

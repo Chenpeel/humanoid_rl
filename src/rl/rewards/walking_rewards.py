@@ -158,7 +158,8 @@ def quat_to_euler(quat: jax.Array) -> jax.Array:
     cosr_cosp = 1 - 2 * (x * x + y * y)
     roll = jp.arctan2(sinr_cosp, cosr_cosp)
     sinp = 2 * (w * y - z * x)
-    pitch = jp.where(jp.abs(sinp) >= 1, jp.sign(sinp) * jp.pi / 2, jp.arcsin(sinp))
+    pitch = jp.where(jp.abs(sinp) >= 1, jp.sign(sinp)
+                     * jp.pi / 2, jp.arcsin(sinp))
     siny_cosp = 2 * (w * z + x * y)
     cosy_cosp = 1 - 2 * (y * y + z * z)
     yaw = jp.arctan2(siny_cosp, cosy_cosp)
@@ -196,8 +197,10 @@ def get_feet_contacts(contact_sensors: jax.Array, threshold: float = 1.0) -> jax
     """提取脚部接触状态 [right_foot, left_foot]"""
     contact_sensors = jp.asarray(contact_sensors)
     if contact_sensors.shape[-1] == 4:
-        right_contact = jp.maximum(contact_sensors[..., 0], contact_sensors[..., 1])
-        left_contact = jp.maximum(contact_sensors[..., 2], contact_sensors[..., 3])
+        right_contact = jp.maximum(
+            contact_sensors[..., 0], contact_sensors[..., 1])
+        left_contact = jp.maximum(
+            contact_sensors[..., 2], contact_sensors[..., 3])
         return jp.stack([right_contact > threshold, left_contact > threshold], axis=-1)
     return contact_sensors > threshold
 
@@ -296,7 +299,7 @@ def compute_feet_air_time_reward(
 
 
 def compute_trunk_height_reward(
-    torso_z: jax.Array, target_height: float = 0.35, tolerance: float = 0.08
+    torso_z: jax.Array, target_height: float = 0.78, tolerance: float = 0.08
 ) -> jax.Array:
     """躯干高度保持奖励"""
     height_error = jp.abs(torso_z - target_height)
@@ -326,7 +329,7 @@ def compute_stability_reward(
     base_quat: jax.Array,
     base_linvel: jax.Array,
     base_angvel: jax.Array,
-    target_height: float = 0.35,
+    target_height: float = 0.78,
     height_tolerance: float = 0.05,
 ) -> jax.Array:
     """综合稳定性奖励"""
@@ -503,7 +506,7 @@ def compute_walking_reward(
     command: jax.Array = None,
     actual_velocity: jax.Array = None,
     target_velocity: float = 0.5,
-    target_height: float = 0.35,
+    target_height: float = 0.78,
     reward_weights: Dict[str, float] = None,
 ) -> Tuple[jax.Array, Dict[str, jax.Array]]:
     """计算完整的行走任务奖励"""
@@ -538,7 +541,8 @@ def compute_walking_reward(
         reward_info["reward/trunk_height"] = val
 
     if "orientation" in weights:
-        val = weights["orientation"] * compute_trunk_orientation_penalty(base_quat)
+        val = weights["orientation"] * \
+            compute_trunk_orientation_penalty(base_quat)
         reward += val
         reward_info["reward/orientation"] = val
 
@@ -554,7 +558,8 @@ def compute_walking_reward(
         reward_info["reward/gait_symmetry"] = val
 
     if "feet_air_time" in weights and contact_history is not None:
-        val = weights["feet_air_time"] * compute_feet_air_time_reward(contact_history)
+        val = weights["feet_air_time"] * \
+            compute_feet_air_time_reward(contact_history)
         reward += val
         reward_info["reward/feet_air_time"] = val
 
