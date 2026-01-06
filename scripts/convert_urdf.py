@@ -25,6 +25,10 @@ from utils.urdf2mjcf import convert_urdf, fix_mesh_paths, mirror_mjcf
 from utils.xml_tools import MJCFModularSplitter
 
 
+# ============================================================================================
+# ======================================= 管道逻辑 ============================================
+# ============================================================================================
+
 def run_pipeline(input_urdf: Path):
     """Execute complete conversion pipeline"""
 
@@ -37,12 +41,10 @@ def run_pipeline(input_urdf: Path):
         print(f"\n❌ Error: Input file not found: {input_urdf}")
         return False
 
-    # Define paths
     temp_mjcf = project_root / "assets" / "mjcf" / "temp_converted.xml"
     bilateral_mjcf = project_root / "assets" / "mjcf" / "mirrored.xml"
     output_dir = project_root / "assets" / "xmls" / "models" / "jiyuan"
 
-    # Ensure directories exist
     temp_mjcf.parent.mkdir(parents=True, exist_ok=True)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
 
@@ -67,7 +69,6 @@ def run_pipeline(input_urdf: Path):
             print(f"\n❌ Mirroring failed: {bilateral_mjcf} not created")
             return False
 
-        # Clean up temp file
         temp_mjcf.unlink()
         print(f"  ✓ Cleaned up temporary file")
 
@@ -78,13 +79,11 @@ def run_pipeline(input_urdf: Path):
         splitter = MJCFModularSplitter(bilateral_mjcf, output_dir)
         splitter.split()
 
-        # Verify output
         index_file = output_dir / "index.xml"
         if not index_file.exists():
             print(f"\n❌ Split failed: {index_file} not created")
             return False
 
-        # Success summary
         print("\n" + "=" * 60)
         print("✅ Pipeline Complete!")
         print("=" * 60)
@@ -107,10 +106,17 @@ def run_pipeline(input_urdf: Path):
     except Exception as e:
         print(f"\n❌ Pipeline failed with error: {e}")
         import traceback
-
         traceback.print_exc()
         return False
 
+# ============================================================================================
+# ===================================== END: 管道逻辑 ==========================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ======================================= 主函数 ==============================================
+# ============================================================================================
 
 def main():
     parser = argparse.ArgumentParser(
@@ -159,3 +165,7 @@ Output:
 
 if __name__ == "__main__":
     main()
+
+# ============================================================================================
+# ===================================== END: 主函数 ============================================
+# ============================================================================================

@@ -13,6 +13,10 @@ from rich.console import Console
 console = Console()
 
 
+# ============================================================================================
+# ======================================= 基础模块 ============================================
+# ============================================================================================
+
 class MLP(nn.Module):
     """多层感知机（MLP）基础网络
 
@@ -42,6 +46,14 @@ class MLP(nn.Module):
                 x = self.activation(x)
         return x
 
+# ============================================================================================
+# ===================================== END: 基础模块 ==========================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ======================================= Actor网络 ============================================
+# ============================================================================================
 
 class ActorNetwork(nn.Module):
     """Actor网络 - 策略网络
@@ -59,20 +71,12 @@ class ActorNetwork(nn.Module):
     action_dim: int
     hidden_dims: Sequence[int] = (256, 256)
     activation: Callable = nn.tanh
-    log_std_min: float = -5.0  # exp(-5) ≈ 0.0067，防止数值溢出
+    log_std_min: float = -5.0  # exp(-5) ≈ 0.0067
     log_std_max: float = 2.0
 
     @nn.compact
     def __call__(self, obs):
-        """前向传播
-
-        Args:
-            obs: 观测 (batch, obs_dim)
-
-        Returns:
-            mean: 动作均值 (batch, action_dim)
-            log_std: 动作对数标准差 (batch, action_dim)
-        """
+        """前向传播"""
         # Backbone网络
         x = MLP(features=self.hidden_dims, activation=self.activation)(obs)
 
@@ -87,18 +91,10 @@ class ActorNetwork(nn.Module):
 
         return mean, log_std
 
+    # --------------------------------------------------------------------------------------------
+
     def get_action(self, obs, rng_key):
-        """采样动作
-
-        Args:
-            obs: 观测 (batch, obs_dim)
-            rng_key: JAX随机数生成器
-
-        Returns:
-            action: 采样的动作 (batch, action_dim)
-            mean: 动作均值 (batch, action_dim)
-            log_std: 动作对数标准差 (batch, action_dim)
-        """
+        """采样动作"""
         mean, log_std = self(obs)
         std = jp.exp(log_std)
 
@@ -108,27 +104,28 @@ class ActorNetwork(nn.Module):
 
         return action, mean, log_std
 
+    # --------------------------------------------------------------------------------------------
+
     def get_log_prob(self, obs, action):
-        """计算动作的对数概率
-
-        Args:
-            obs: 观测 (batch, obs_dim)
-            action: 动作 (batch, action_dim)
-
-        Returns:
-            log_prob: 对数概率 (batch,)
-        """
+        """计算动作的对数概率"""
         mean, log_std = self(obs)
         std = jp.exp(log_std)
 
         # 计算对数概率（多维独立正态分布）
-        # log p(a|s) = sum_i log N(a_i | mean_i, std_i)
         log_prob = -0.5 * jp.sum(
             ((action - mean) / std) ** 2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
         )
 
         return log_prob
 
+# ============================================================================================
+# ===================================== END: Actor网络 =========================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ======================================= Critic网络 ===========================================
+# ============================================================================================
 
 class CriticNetwork(nn.Module):
     """Critic网络 - 价值网络
@@ -145,14 +142,7 @@ class CriticNetwork(nn.Module):
 
     @nn.compact
     def __call__(self, obs):
-        """前向传播
-
-        Args:
-            obs: 观测 (batch, obs_dim)
-
-        Returns:
-            value: 状态价值 (batch,)
-        """
+        """前向传播"""
         # Backbone网络
         x = MLP(features=self.hidden_dims, activation=self.activation)(obs)
 
@@ -164,6 +154,14 @@ class CriticNetwork(nn.Module):
 
         return value
 
+# ============================================================================================
+# ===================================== END: Critic网络 ========================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ======================================= Actor-Critic网络 =====================================
+# ============================================================================================
 
 class ActorCriticNetwork(nn.Module):
     """Actor-Critic联合网络
@@ -183,19 +181,17 @@ class ActorCriticNetwork(nn.Module):
     shared_backbone: bool = True
     hidden_dims: Sequence[int] = (256, 256)
     activation: Callable = nn.tanh
-    log_std_min: float = -5.0  # exp(-5) ≈ 0.0067，防止数值溢出
+    log_std_min: float = -5.0
     log_std_max: float = 2.0
 
     def setup(self):
         """初始化网络层"""
         if self.shared_backbone:
-            # 共享backbone
             self.backbone = MLP(features=self.hidden_dims, activation=self.activation)
             self.actor_head = nn.Dense(self.action_dim)
             self.actor_log_std_head = nn.Dense(self.action_dim)
             self.critic_head = nn.Dense(1)
         else:
-            # 分离backbone
             self.actor_backbone = MLP(
                 features=self.hidden_dims, activation=self.activation
             )
@@ -206,85 +202,60 @@ class ActorCriticNetwork(nn.Module):
             self.actor_log_std_head = nn.Dense(self.action_dim)
             self.critic_head = nn.Dense(1)
 
+    # --------------------------------------------------------------------------------------------
+
     def __call__(self, obs):
-        """前向传播
-
-        Args:
-            obs: 观测 (batch, obs_dim)
-
-        Returns:
-            mean: 动作均值 (batch, action_dim)
-            log_std: 动作对数标准差 (batch, action_dim)
-            value: 状态价值 (batch,)
-        """
+        """前向传播"""
         if self.shared_backbone:
-            # 共享backbone
             features = self.backbone(obs)
             mean = self.actor_head(features)
             log_std = self.actor_log_std_head(features)
             value = self.critic_head(features)
         else:
-            # 分离backbone
             actor_features = self.actor_backbone(obs)
             critic_features = self.critic_backbone(obs)
             mean = self.actor_head(actor_features)
             log_std = self.actor_log_std_head(actor_features)
             value = self.critic_head(critic_features)
 
-        # 裁剪log_std
         log_std = jp.clip(log_std, self.log_std_min, self.log_std_max)
-
-        # 压缩value的最后一维
         value = jp.squeeze(value, axis=-1)
 
         return mean, log_std, value
 
+    # --------------------------------------------------------------------------------------------
+
     def get_action_and_value(self, obs, rng_key):
-        """同时获取动作和价值
-
-        Args:
-            obs: 观测 (batch, obs_dim)
-            rng_key: JAX随机数生成器
-
-        Returns:
-            action: 采样的动作 (batch, action_dim)
-            mean: 动作均值 (batch, action_dim)
-            log_std: 动作对数标准差 (batch, action_dim)
-            value: 状态价值 (batch,)
-        """
+        """同时获取动作和价值"""
         mean, log_std, value = self(obs)
         std = jp.exp(log_std)
 
-        # 从正态分布采样
         eps = jax.random.normal(rng_key, shape=mean.shape)
         action = mean + eps * std
 
         return action, mean, log_std, value
 
+    # --------------------------------------------------------------------------------------------
+
     def get_log_prob_and_value(self, obs, action):
-        """计算动作的对数概率和状态价值
-
-        Args:
-            obs: 观测 (batch, obs_dim)
-            action: 动作 (batch, action_dim)
-
-        Returns:
-            log_prob: 对数概率 (batch,)
-            value: 状态价值 (batch,)
-        """
+        """计算动作的对数概率和状态价值"""
         mean, log_std, value = self(obs)
         std = jp.exp(log_std)
 
-        # 计算对数概率
         log_prob = -0.5 * jp.sum(
             ((action - mean) / std) ** 2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
         )
 
         return log_prob, value
 
+# ============================================================================================
+# ===================================== END: Actor-Critic网络 ==================================
+# ============================================================================================
 
-# ==================== 便捷的创建函数 ====================
 
+# ============================================================================================
+# ======================================= 工具函数 ============================================
+# ============================================================================================
 
 def create_actor_critic(
     obs_dim: int,
@@ -294,19 +265,7 @@ def create_actor_critic(
     activation: Callable = nn.tanh,
     verbose: bool = True,
 ) -> ActorCriticNetwork:
-    """创建Actor-Critic网络（便捷函数）
-
-    Args:
-        obs_dim: 观测空间维度
-        action_dim: 动作空间维度
-        hidden_dims: 隐藏层维度
-        shared_backbone: 是否共享backbone
-        activation: 激活函数
-        verbose: 是否显示信息
-
-    Returns:
-        ActorCriticNetwork实例
-    """
+    """创建Actor-Critic网络（便捷函数）"""
     network = ActorCriticNetwork(
         action_dim=action_dim,
         shared_backbone=shared_backbone,
@@ -323,14 +282,12 @@ def create_actor_critic(
 
     return network
 
+# --------------------------------------------------------------------------------------------
 
 def count_parameters(params) -> int:
-    """统计参数数量
-
-    Args:
-        params: Flax参数树
-
-    Returns:
-        参数总数
-    """
+    """统计参数数量"""
     return sum(x.size for x in jax.tree_util.tree_leaves(params))
+
+# ============================================================================================
+# ===================================== END: 工具函数 ==========================================
+# ============================================================================================

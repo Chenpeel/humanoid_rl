@@ -7,6 +7,10 @@ from typing import Callable, Optional
 import optax
 
 
+# ============================================================================================
+# ======================================= 优化器创建函数 ========================================
+# ============================================================================================
+
 def create_optimizer(
     learning_rate: float = 3e-4,
     max_grad_norm: float = 0.5,
@@ -37,7 +41,6 @@ def create_optimizer(
     # 学习率调度
     if use_lr_schedule and total_steps is not None:
         if schedule_type == "cosine":
-            # 余弦退火调度（带预热）
             schedule = optax.warmup_cosine_decay_schedule(
                 init_value=0.0,
                 peak_value=learning_rate,
@@ -46,7 +49,6 @@ def create_optimizer(
                 end_value=learning_rate * 0.1,
             )
         elif schedule_type == "linear":
-            # 线性衰减调度（带预热）
             schedule = optax.join_schedules(
                 schedules=[
                     optax.linear_schedule(
@@ -65,12 +67,11 @@ def create_optimizer(
         else:
             raise ValueError(f"未知的调度类型: {schedule_type}")
     else:
-        # 常量学习率
         schedule = learning_rate
 
     # 组合优化器
     optimizer = optax.chain(
-        optax.clip_by_global_norm(max_grad_norm),  # 梯度裁剪
+        optax.clip_by_global_norm(max_grad_norm),
         optax.adam(
             learning_rate=schedule,
             eps=adam_epsilon,
@@ -81,26 +82,27 @@ def create_optimizer(
 
     return optimizer
 
+# ============================================================================================
+# ===================================== END: 优化器创建函数 =====================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ======================================= 便捷包装函数 ==========================================
+# ============================================================================================
 
 def create_ppo_optimizer(
     learning_rate: float = 3e-4,
     max_grad_norm: float = 0.5,
 ) -> optax.GradientTransformation:
-    """创建PPO默认优化器（便捷函数）
-
-    Args:
-        learning_rate: 学习率（PPO通常使用3e-4）
-        max_grad_norm: 梯度裁剪阈值（PPO通常使用0.5）
-
-    Returns:
-        Optax优化器
-    """
+    """创建PPO默认优化器"""
     return create_optimizer(
         learning_rate=learning_rate,
         max_grad_norm=max_grad_norm,
         use_lr_schedule=False,
     )
 
+# --------------------------------------------------------------------------------------------
 
 def create_optimizer_with_schedule(
     learning_rate: float = 3e-4,
@@ -109,18 +111,7 @@ def create_optimizer_with_schedule(
     max_grad_norm: float = 0.5,
     schedule_type: str = "cosine",
 ) -> optax.GradientTransformation:
-    """创建带学习率调度的优化器（便捷函数）
-
-    Args:
-        learning_rate: 初始学习率
-        total_steps: 总训练步数
-        warmup_steps: 预热步数
-        max_grad_norm: 梯度裁剪阈值
-        schedule_type: 调度类型，可选 "cosine" 或 "linear"
-
-    Returns:
-        Optax优化器
-    """
+    """创建带学习率调度的优化器"""
     return create_optimizer(
         learning_rate=learning_rate,
         max_grad_norm=max_grad_norm,
@@ -130,6 +121,7 @@ def create_optimizer_with_schedule(
         schedule_type=schedule_type,
     )
 
+# --------------------------------------------------------------------------------------------
 
 def create_ppo_optimizer_cosine(
     learning_rate: float = 3e-4,
@@ -138,27 +130,12 @@ def create_ppo_optimizer_cosine(
     max_grad_norm: float = 0.5,
     final_lr_fraction: float = 0.1,
 ) -> optax.GradientTransformation:
-    """创建带余弦退火调度的PPO优化器
-
-    Args:
-        learning_rate: 峰值学习率
-        total_steps: 总训练步数
-        warmup_steps: 预热步数
-        max_grad_norm: 梯度裁剪阈值
-        final_lr_fraction: 最终学习率占初始学习率的比例
-
-    Returns:
-        Optax优化器
-    """
-    # 使用余弦退火调度
-    # 确保warmup_steps不超过total_steps
+    """创建带余弦退火调度的PPO优化器"""
     if warmup_steps >= total_steps:
         warmup_steps = max(1, total_steps // 2)
 
-    # 确保decay_steps为正数且大于0
     decay_steps = total_steps - warmup_steps
     if decay_steps <= 0:
-        # 如果decay_steps为0或负数，调整warmup_steps
         warmup_steps = max(1, total_steps - 1)
         decay_steps = total_steps - warmup_steps
 
@@ -170,7 +147,6 @@ def create_ppo_optimizer_cosine(
         end_value=learning_rate * final_lr_fraction,
     )
 
-    # 组合优化器
     optimizer = optax.chain(
         optax.clip_by_global_norm(max_grad_norm),
         optax.adam(learning_rate=schedule),
@@ -178,6 +154,7 @@ def create_ppo_optimizer_cosine(
 
     return optimizer
 
+# --------------------------------------------------------------------------------------------
 
 def create_ppo_optimizer_linear(
     learning_rate: float = 3e-4,
@@ -186,19 +163,7 @@ def create_ppo_optimizer_linear(
     max_grad_norm: float = 0.5,
     final_lr_fraction: float = 0.1,
 ) -> optax.GradientTransformation:
-    """创建带线性衰减调度的PPO优化器
-
-    Args:
-        learning_rate: 初始学习率
-        total_steps: 总训练步数
-        warmup_steps: 预热步数
-        max_grad_norm: 梯度裁剪阈值
-        final_lr_fraction: 最终学习率占初始学习率的比例
-
-    Returns:
-        Optax优化器
-    """
-    # 使用线性衰减调度
+    """创建带线性衰减调度的PPO优化器"""
     schedule = optax.join_schedules(
         schedules=[
             optax.linear_schedule(
@@ -215,10 +180,13 @@ def create_ppo_optimizer_linear(
         boundaries=[warmup_steps],
     )
 
-    # 组合优化器
     optimizer = optax.chain(
         optax.clip_by_global_norm(max_grad_norm),
         optax.adam(learning_rate=schedule),
     )
 
     return optimizer
+
+# ============================================================================================
+# ===================================== END: 便捷包装函数 =======================================
+# ============================================================================================

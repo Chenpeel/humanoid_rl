@@ -16,9 +16,9 @@ TRAIN_SCRIPT := scripts/train.py
 EVAL_SCRIPT := scripts/eval.py
 
 # 配置文件路径
-CONFIG_TRAIN := configs/train/train_default.yaml
-CONFIG_LONG := configs/train-10h/train_long.yaml
-CONFIG_QUICK := configs/quick_test/quick_test.yaml
+CONFIG_TRAIN := configs/train/train.yaml
+CONFIG_LONG := configs/train-10h/train.yaml
+CONFIG_QUICK := configs/quick_test/train.yaml
 
 # ==================== 帮助信息 ====================
 

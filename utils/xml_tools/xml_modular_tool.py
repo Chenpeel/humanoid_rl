@@ -18,6 +18,10 @@ import argparse
 import sys
 
 
+# ============================================================================================
+# ======================================= 拆分器 ==============================================
+# ============================================================================================
+
 class MJCFModularSplitter:
     """Splits MJCF into parameter and geometry modules"""
 
@@ -58,6 +62,8 @@ class MJCFModularSplitter:
 
         print(f"\n✓ Complete: {self.output_dir / 'index.xml'}")
 
+    # --------------------------------------------------------------------------------------------
+
     def _extract_default_classes(self):
         elem = self.root.find('default')
         if elem is not None:
@@ -93,19 +99,16 @@ class MJCFModularSplitter:
             print("  ✓ tendons.xml")
 
     def _extract_friction(self):
-        """Extract ground plane geometry (if exists)"""
         wb = self.root.find('worldbody')
         if wb is None:
             return
 
-        # Find ground plane geometry
         ground_geom = None
         for geom in wb.findall('geom'):
             if geom.get('type') == 'plane':
                 ground_geom = geom
                 break
 
-        # Only create file if ground exists
         if ground_geom is not None:
             root = ET.Element('mujoco')
             root.append(ET.Comment(' Ground plane '))
@@ -114,6 +117,7 @@ class MJCFModularSplitter:
             self._write('params/ground.xml', root)
             print("  ✓ ground.xml")
 
+    # --------------------------------------------------------------------------------------------
 
     def _extract_assets(self):
         asset = self.root.find('asset')
@@ -126,14 +130,9 @@ class MJCFModularSplitter:
 
         for mesh in asset.findall('mesh'):
             mesh_copy = self._copy(mesh)
-            # Fix mesh paths: geometry/meshes.xml → assets/meshes/
-            # Path from assets/xmls/models/jiyuan/geometry/meshes.xml to assets/meshes/
-            # is ../../../../meshes/
             file_path = mesh_copy.get('file')
             if file_path:
-                # Extract just the filename from the path
                 filename = Path(file_path).name
-                # Set unified path: from geometry/meshes.xml to assets/meshes/
                 mesh_copy.set('file', f"../../../../meshes/{filename}")
             asset_new.append(mesh_copy)
 
@@ -169,7 +168,6 @@ class MJCFModularSplitter:
         if base is None:
             return
 
-        # Base content - extract direct children (not body elements)
         root = ET.Element('mujoco')
         for child in base:
             if child.tag != 'body':
@@ -177,11 +175,9 @@ class MJCFModularSplitter:
         self._write('geometry/base.xml', root)
         print("  ✓ base.xml")
 
-        # Legs
         for side in ['right', 'left']:
             self._extract_leg(base, side)
 
-        # Robot assembly
         root = ET.Element('mujoco')
         wb_new = ET.SubElement(root, 'worldbody')
         robot = ET.SubElement(wb_new, 'body')
@@ -190,7 +186,6 @@ class MJCFModularSplitter:
         robot.set('quat', base.get('quat', '0.70710678 0.70710678 0 0'))
         robot.set('childclass', base.get('childclass', 'robot'))
 
-        # IMPORTANT: Include paths are relative to index.xml, not robot.xml
         for name, file in [('Base', 'geometry/base.xml'), ('Right leg', 'geometry/right_leg.xml'), ('Left leg', 'geometry/left_leg.xml')]:
             robot.append(ET.Comment(f' {name} '))
             inc = ET.SubElement(robot, 'include')
@@ -201,14 +196,14 @@ class MJCFModularSplitter:
 
     def _extract_leg(self, base, side: str):
         root = ET.Element('mujoco')
-
         for name in [f'{side}_hip_pitch_engine_link', f'{side}_hip_yaw_engine_link', f'{side}_hip_roll_link']:
             body = base.find(f"./body[@name='{name}']")
             if body is not None:
                 root.append(self._copy(body))
-
         self._write(f'geometry/{side}_leg.xml', root)
         print(f"  ✓ {side}_leg.xml")
+
+    # --------------------------------------------------------------------------------------------
 
     def _extract_constraints(self):
         elem = self.root.find('equality')
@@ -246,30 +241,28 @@ class MJCFModularSplitter:
             self._write('contact_exclude.xml', root)
             print("  ✓ contact_exclude.xml")
 
+    # --------------------------------------------------------------------------------------------
+
     def _generate_index(self):
         root = ET.Element('mujoco')
         root.set('model', self.root.get('model', 'robot'))
 
-        # Visual and compiler
         for tag in ['visual', 'compiler']:
             elem = self.root.find(tag)
             if elem is not None:
                 root.append(self._copy(elem))
 
-        # Parameters
         root.append(ET.Comment(' === Parameters === '))
         for f in ['default_classes.xml', 'materials.xml', 'ground.xml', 'tendons.xml']:
             if (self.output_dir / 'params' / f).exists():
                 inc = ET.SubElement(root, 'include')
                 inc.set('file', f'params/{f}')
 
-        # Geometry
         root.append(ET.Comment(' === Geometry === '))
         for f in ['meshes.xml', 'world.xml', 'robot.xml']:
             inc = ET.SubElement(root, 'include')
             inc.set('file', f'geometry/{f}')
 
-        # Modules
         root.append(ET.Comment(' === Modules === '))
         for f in ['constraints.xml', 'actuators.xml', 'sensors.xml', 'contact_exclude.xml']:
             if (self.output_dir / f).exists():
@@ -306,31 +299,10 @@ class MJCFModularSplitter:
 import mujoco as mj
 model = mj.MjModel.from_xml_path('index.xml')
 ```
-
-## Common Modifications
-
-### Friction
-Edit `params/friction.xml`:
-```xml
-<ground_params friction="1.0 0.005 0.0001" />
-```
-
-### Tendons
-Edit `params/tendons.xml`:
-```xml
-<spatial ... stiffness="8000" damping="100" />
-```
-
-### Materials
-Edit `params/materials.xml`:
-```xml
-<material name="..." rgba="R G B A" />
-```
 """
         (self.output_dir / 'README.md').write_text(content, encoding='utf-8')
 
     def _copy(self, elem):
-        """Deep copy element"""
         new = ET.Element(elem.tag, elem.attrib)
         new.text = elem.text
         new.tail = elem.tail
@@ -339,13 +311,11 @@ Edit `params/materials.xml`:
         return new
 
     def _write(self, filename: str, root: ET.Element):
-        """Write formatted XML"""
         self._indent(root)
         tree = ET.ElementTree(root)
         tree.write(self.output_dir / filename, encoding='utf-8', xml_declaration=True)
 
     def _indent(self, elem, level=0):
-        """Format indentation"""
         i = "\n" + "  " * level
         if len(elem):
             if not elem.text or not elem.text.strip():
@@ -360,6 +330,14 @@ Edit `params/materials.xml`:
             if level and (not elem.tail or not elem.tail.strip()):
                 elem.tail = i
 
+# ============================================================================================
+# ===================================== END: 拆分器 ===========================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ======================================= 合并器 ==============================================
+# ============================================================================================
 
 class MJCFModularMerger:
     """Merges modular MJCF back to single file"""
@@ -370,7 +348,6 @@ class MJCFModularMerger:
         self.cache = {}
 
     def merge(self):
-        """Execute merge"""
         print(f"[Merge] {self.module_dir}/ → {self.output_file}")
 
         index = self.module_dir / 'index.xml'
@@ -389,7 +366,6 @@ class MJCFModularMerger:
         print(f"✓ Complete: {self.output_file}")
 
     def _process_includes(self, elem, current_dir: Path = None):
-        """Recursively process includes"""
         if current_dir is None:
             current_dir = self.module_dir
 
@@ -398,7 +374,6 @@ class MJCFModularMerger:
             if not file_attr:
                 continue
 
-            # Try relative to current dir, then module root
             inc_path = current_dir / file_attr
             if not inc_path.exists():
                 inc_path = self.module_dir / file_attr
@@ -408,30 +383,25 @@ class MJCFModularMerger:
                 elem.remove(inc)
                 continue
 
-            # Load and extract content
             inc_tree = self._load(inc_path)
             inc_root = inc_tree.getroot()
 
             children = list(inc_root) if inc_root.tag == 'mujoco' else [inc_root]
 
-            # Replace include
             idx = list(elem).index(inc)
             elem.remove(inc)
             for i, child in enumerate(children):
                 elem.insert(idx + i, child)
 
-            # Process children recursively
             for child in children:
                 self._process_includes(child, inc_path.parent)
 
     def _load(self, path: Path):
-        """Load module with cache"""
         if path not in self.cache:
             self.cache[path] = ET.parse(path)
         return self.cache[path]
 
     def _indent(self, elem, level=0):
-        """Format indentation"""
         i = "\n" + "  " * level
         if len(elem):
             if not elem.text or not elem.text.strip():
@@ -446,18 +416,17 @@ class MJCFModularMerger:
             if level and (not elem.tail or not elem.tail.strip()):
                 elem.tail = i
 
+# ============================================================================================
+# ===================================== END: 合并器 ===========================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ======================================= 主函数 ==============================================
+# ============================================================================================
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='MJCF Modular Tool',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python xml_modular_tool.py split model.xml -o model_dir
-  python xml_modular_tool.py merge model_dir -o model.xml
-        """
-    )
-
+    parser = argparse.ArgumentParser(description='MJCF Modular Tool')
     subparsers = parser.add_subparsers(dest='command', help='Command')
 
     split = subparsers.add_parser('split', help='Split XML into modules')
@@ -495,3 +464,7 @@ Examples:
 
 if __name__ == '__main__':
     main()
+
+# ============================================================================================
+# ===================================== END: 主函数 ============================================
+# ============================================================================================

@@ -15,12 +15,21 @@ from flax import struct
 from mujoco import mjx
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import (BarColumn, Progress, SpinnerColumn,
-                           TaskProgressColumn, TextColumn)
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+)
 from rich.table import Table
 
 console = Console()
 
+
+# ============================================================================================
+# ======================================= 数据结构定义 =========================================
+# ============================================================================================
 
 @struct.dataclass
 class EnvState:
@@ -47,6 +56,14 @@ class EnvState:
     # 额外信息字典 (可选)
     info: Dict[str, jax.Array] = struct.field(default_factory=dict)
 
+# ============================================================================================
+# ===================================== END: 数据结构定义 ======================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ======================================= MJX环境基类 ==========================================
+# ============================================================================================
 
 class MJXBaseEnv:
     """MJX环境基类
@@ -112,6 +129,8 @@ class MJXBaseEnv:
         if self.verbose:
             self._display_model_info()
 
+    # --------------------------------------------------------------------------------------------
+
     def _resolve_xml_path(self, xml_path: str) -> Path:
         """解析XML路径，支持相对路径和绝对路径"""
         path = Path(xml_path)
@@ -141,12 +160,16 @@ class MJXBaseEnv:
 
         return path.resolve()
 
+    # --------------------------------------------------------------------------------------------
+
     def _load_mujoco_model(self, xml_path: Path) -> mujoco.MjModel:
         """加载MuJoCo模型
 
         子类可以重写此方法以添加自定义资源加载逻辑
         """
         return mujoco.MjModel.from_xml_path(str(xml_path))
+
+    # --------------------------------------------------------------------------------------------
 
     def _extract_model_info(self):
         """提取模型关键信息"""
@@ -175,6 +198,8 @@ class MJXBaseEnv:
         self.control_dt = self.dt * self.frame_skip
         self.control_freq = 1.0 / self.control_dt
 
+    # --------------------------------------------------------------------------------------------
+
     def _display_model_info(self):
         """显示模型信息表格"""
         table = Table(title="MuJoCo模型信息", show_header=True, header_style="bold magenta")
@@ -195,6 +220,8 @@ class MJXBaseEnv:
         console.print(
             f"[dim]执行器: {', '.join(self.actuator_names[:5])}{'...' if len(self.actuator_names) > 5 else ''}[/dim]"
         )
+
+    # --------------------------------------------------------------------------------------------
 
     def reset(self, rng: jax.Array) -> EnvState:
         """重置环境 (纯函数)
@@ -226,6 +253,8 @@ class MJXBaseEnv:
 
         return state
 
+    # --------------------------------------------------------------------------------------------
+
     def step(self, state: EnvState, action: jax.Array) -> EnvState:
         """执行一步 (纯函数)
 
@@ -247,8 +276,13 @@ class MJXBaseEnv:
         # 计算观测
         obs = self._get_obs(pipeline_state, action)
 
-        # 计算奖励
-        reward = self._compute_reward(state, action, pipeline_state)
+        # 计算奖励 (支持标量或 (reward, reward_info) 元组)
+        reward_result = self._compute_reward(state, action, pipeline_state)
+        if isinstance(reward_result, tuple):
+            reward, reward_info = reward_result
+        else:
+            reward = reward_result
+            reward_info = {}
 
         # 检查终止条件
         done = self._is_done(state, pipeline_state)
@@ -256,6 +290,11 @@ class MJXBaseEnv:
         # 更新步数
         step = state.step + 1
         done = jp.logical_or(done, step >= self.max_steps)
+
+        # 获取额外信息并合并奖励详情
+        info = self._get_info(state, action, pipeline_state)
+        if reward_info:
+            info.update(reward_info)
 
         # 创建新状态
         new_state = EnvState(
@@ -266,12 +305,14 @@ class MJXBaseEnv:
             step=step,
             rng=state.rng,
             last_action=action,
-            info=self._get_info(state, action, pipeline_state),
+            info=info,
         )
 
         return new_state
 
-    # ==================== 子类需要实现的方法 ====================
+    # --------------------------------------------------------------------------------------------
+    # 子类需要实现的方法
+    # --------------------------------------------------------------------------------------------
 
     def _reset_pipeline(self, rng: jax.Array) -> Any:
         """重置物理仿真状态
@@ -301,15 +342,7 @@ class MJXBaseEnv:
         return data
 
     def _get_obs(self, pipeline_state: Any, action: jax.Array) -> jax.Array:
-        """计算观测 (子类必须实现)
-
-        Args:
-            pipeline_state: 当前mjx.Data
-            action: 当前动作
-
-        Returns:
-            观测向量
-        """
+        """计算观测 (子类必须实现)"""
         raise NotImplementedError("子类必须实现_get_obs方法")
 
     def _compute_reward(
@@ -317,25 +350,12 @@ class MJXBaseEnv:
         prev_state: EnvState,
         action: jax.Array,
         pipeline_state: Any,
-    ) -> jax.Array:
-        """计算奖励 (子类必须实现)
-
-        Args:
-            prev_state: 上一个EnvState
-            action: 当前动作
-            pipeline_state: 当前mjx.Data
-
-        Returns:
-            标量奖励
-        """
+    ) -> Tuple[jax.Array, Dict[str, jax.Array]]:
+        """计算奖励 (子类必须实现)"""
         raise NotImplementedError("子类必须实现_compute_reward方法")
 
     def _is_done(self, state: EnvState, pipeline_state: Any) -> jax.Array:
-        """检查是否终止
-
-        默认实现：永不提前终止
-        子类可以重写以添加终止条件（如摔倒检测）
-        """
+        """检查是否终止"""
         return jp.array(False)
 
     def _get_info(
@@ -344,14 +364,12 @@ class MJXBaseEnv:
         action: jax.Array,
         pipeline_state: Any,
     ) -> Dict[str, jax.Array]:
-        """获取额外信息
-
-        默认实现：空字典
-        子类可以重写以添加调试信息
-        """
+        """获取额外信息"""
         return {}
 
-    # ==================== 批量操作支持 ====================
+    # --------------------------------------------------------------------------------------------
+    # 批量操作支持
+    # --------------------------------------------------------------------------------------------
 
     def batch_reset(self, rng: jax.Array, batch_size: int) -> EnvState:
         """批量重置环境 (使用vmap)
@@ -378,7 +396,9 @@ class MJXBaseEnv:
         """
         return jax.vmap(self.step)(states, actions)
 
-    # ==================== 工具方法 ====================
+    # --------------------------------------------------------------------------------------------
+    # 工具方法
+    # --------------------------------------------------------------------------------------------
 
     @property
     def observation_size(self) -> int:
@@ -400,3 +420,7 @@ class MJXBaseEnv:
             "qpos": state.pipeline_state.qpos,
             "qvel": state.pipeline_state.qvel,
         }
+
+# ============================================================================================
+# ===================================== END: MJX环境基类 =======================================
+# ============================================================================================

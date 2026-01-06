@@ -8,64 +8,68 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
+# ============================================================================================
+# ======================================= 镜像工具函数 =========================================
+# ============================================================================================
+
 def mirror_pos(pos_str):
+    """镜像位置坐标 (x -> -x)"""
     vals = [float(x) for x in pos_str.strip().split()]
     if len(vals) == 3:
         vals[0] = -vals[0]
     return " ".join(f"{v:.8f}" for v in vals)
 
-
 def mirror_axis(axis_str):
+    """镜像轴向量 (x -> -x)"""
     vals = [float(x) for x in axis_str.strip().split()]
     if len(vals) == 3:
         vals[0] = -vals[0]
     return " ".join(f"{v:.8f}" for v in vals)
 
-
 def mirror_quat(quat_str):
+    """镜像四元数 (y -> -y, z -> -z)"""
     vals = [float(x) for x in quat_str.strip().split()]
     if len(vals) == 4:
         vals[2] = -vals[2]
         vals[3] = -vals[3]
     return " ".join(f"{v:.8f}" for v in vals)
 
-
 def mirror_name(name):
+    """镜像名称 (right_ -> left_)"""
     return name.replace("right_", "left_")
 
+# ============================================================================================
+# ===================================== END: 镜像工具函数 ======================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ======================================= 元素镜像逻辑 =========================================
+# ============================================================================================
 
 def mirror_body(body, is_root=False):
-    """递归镜像body及其子元素
-    Args:
-        body: 要镜像的body元素
-        is_root: 是否是根部body（直接连在base_link下）
-    """
+    """递归镜像body及其子元素"""
     body_copy = copy.deepcopy(body)
     if "name" in body_copy.attrib:
         body_copy.attrib["name"] = mirror_name(body_copy.attrib["name"])
 
-    # 镜像pos和quat
     if "pos" in body_copy.attrib:
         body_copy.attrib["pos"] = mirror_pos(body_copy.attrib["pos"])
     if "quat" in body_copy.attrib:
         body_copy.attrib["quat"] = mirror_quat(body_copy.attrib["quat"])
 
-    # 先收集所有子body元素
     child_bodies = []
-    for elem in list(body_copy):  # 使用list()创建副本进行遍历
+    for elem in list(body_copy):
         if elem.tag == "body":
             child_bodies.append(elem)
 
-    # 处理所有子body
     for child_body in child_bodies:
         new_elem = mirror_body(child_body, is_root=False)
-        # 找到并替换子body
         for i, elem in enumerate(body_copy):
             if elem == child_body:
                 body_copy[i] = new_elem
                 break
 
-    # 处理其他元素
     for elem in body_copy:
         if elem.tag == "joint":
             if "name" in elem.attrib:
@@ -104,8 +108,10 @@ def mirror_body(body, is_root=False):
                 elem.attrib["quat"] = mirror_quat(elem.attrib["quat"])
     return body_copy
 
+# --------------------------------------------------------------------------------------------
 
 def mirror_actuator(actuator):
+    """镜像执行器"""
     actuator_copy = copy.deepcopy(actuator)
     for elem in actuator_copy:
         if "name" in elem.attrib:
@@ -114,8 +120,10 @@ def mirror_actuator(actuator):
             elem.attrib["joint"] = mirror_name(elem.attrib["joint"])
     return actuator_copy
 
+# --------------------------------------------------------------------------------------------
 
 def mirror_contact(contact):
+    """镜像接触排除"""
     contact_copy = copy.deepcopy(contact)
     for elem in contact_copy:
         if "body1" in elem.attrib:
@@ -124,24 +132,29 @@ def mirror_contact(contact):
             elem.attrib["body2"] = mirror_name(elem.attrib["body2"])
     return contact_copy
 
+# --------------------------------------------------------------------------------------------
 
 def mirror_sensor(sensor):
+    """镜像传感器"""
     sensor_copy = copy.deepcopy(sensor)
     for elem in sensor_copy:
-        # 镜像所有属性中包含'name', 'site', 'objname'的值
         for k in list(elem.attrib.keys()):
             if "name" in k or "site" in k or "objname" in k:
                 elem.attrib[k] = mirror_name(elem.attrib[k])
     return sensor_copy
 
+# ============================================================================================
+# ===================================== END: 元素镜像逻辑 ======================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ======================================= 主处理逻辑 ==========================================
+# ============================================================================================
 
 def mirror_mjcf(mjcf_path, output_path=None, left_leg_config=None):
     """
     读取右腿MJCF，镜像生成左腿，输出双腿MJCF
-    :param mjcf_path: 输入右腿MJCF路径
-    :param output_path: 输出双腿MJCF路径，若为None则覆盖输入
-    :param left_leg_config: 左腿配置字典，包含左腿根部body的pos和quat信息
-                           格式: {'left_hip_yaw_link': {'pos': '0.08 0 0', 'quat': '...'}, ...}
     """
     mjcf_path = Path(mjcf_path)
     if output_path is None:
@@ -168,7 +181,6 @@ def mirror_mjcf(mjcf_path, output_path=None, left_leg_config=None):
         if child.attrib.get("name", "").startswith("right_")
     ]
 
-    # 收集已存在的左腿body名称，避免重复添加
     existing_left_body_names = set()
     for child in base_link.findall("body"):
         body_name = child.attrib.get("name", "")
@@ -177,15 +189,12 @@ def mirror_mjcf(mjcf_path, output_path=None, left_leg_config=None):
 
     left_leg_bodies = [mirror_body(b, is_root=True) for b in right_leg_bodies]
 
-    # 不使用虚拟骨盆，直接添加左右腿到base_link
-    # 左腿采用X镜像位置（X反向，YZ保持不变）
     for left_body in left_leg_bodies:
         body_name = left_body.attrib.get("name", "")
         if body_name and body_name not in existing_left_body_names:
             base_link.append(left_body)
             existing_left_body_names.add(body_name)
 
-    # 收集模型中所有body、joint和site的名称
     all_body_names = set()
     all_joint_names = set()
     all_site_names = set()
@@ -202,16 +211,14 @@ def mirror_mjcf(mjcf_path, output_path=None, left_leg_config=None):
 
     collect_element_names(worldbody)
 
+    # 处理 Actuators
     actuator = root.find("actuator")
     left_actuator = mirror_actuator(actuator)
-
-    # 收集已存在的actuator名称，避免重复添加
     existing_actuator_names = set()
     for elem in actuator:
         if "name" in elem.attrib:
             existing_actuator_names.add(elem.attrib["name"])
 
-    # 只添加不存在的左腿actuator，并且对应的joint必须存在
     for elem in left_actuator:
         elem_name = elem.attrib.get("name", "")
         joint_name = elem.attrib.get("joint", "")
@@ -224,10 +231,9 @@ def mirror_mjcf(mjcf_path, output_path=None, left_leg_config=None):
             actuator.append(elem)
             existing_actuator_names.add(elem_name)
 
+    # 处理 Contact
     contact = root.find("contact")
     left_contact = mirror_contact(contact)
-
-    # 收集已存在的contact排除对，避免重复添加
     existing_contacts = set()
     for elem in contact:
         body1 = elem.attrib.get("body1", "")
@@ -235,7 +241,6 @@ def mirror_mjcf(mjcf_path, output_path=None, left_leg_config=None):
         if body1 and body2:
             existing_contacts.add((body1, body2))
 
-    # 只添加不存在的左腿contact排除对，并且两个body都必须存在
     for elem in left_contact:
         body1 = elem.attrib.get("body1", "")
         body2 = elem.attrib.get("body2", "")
@@ -249,23 +254,20 @@ def mirror_mjcf(mjcf_path, output_path=None, left_leg_config=None):
             contact.append(elem)
             existing_contacts.add((body1, body2))
 
+    # 处理 Sensor
     sensor = root.find("sensor")
     if sensor is not None:
         left_sensor = mirror_sensor(sensor)
-
-        # 收集已存在的sensor名称，避免重复添加
         existing_sensor_names = set()
         for elem in sensor:
             if "name" in elem.attrib:
                 existing_sensor_names.add(elem.attrib["name"])
 
-        # 只添加不存在的左腿sensor，并且对应的site或objname必须存在
         for elem in left_sensor:
             elem_name = elem.attrib.get("name", "")
             site_name = elem.attrib.get("site", "")
             objname = elem.attrib.get("objname", "")
 
-            # 检查sensor是否有效：要么有site引用，要么有objname引用
             has_valid_reference = False
             if site_name and site_name in all_site_names:
                 has_valid_reference = True
@@ -280,9 +282,8 @@ def mirror_mjcf(mjcf_path, output_path=None, left_leg_config=None):
                 sensor.append(elem)
                 existing_sensor_names.add(elem_name)
 
+    # 处理 Assets
     asset = root.find("asset")
-
-    # 收集已存在的mesh名称，避免重复添加
     existing_mesh_names = set()
     for m in asset.findall("mesh"):
         if "name" in m.attrib:
@@ -298,18 +299,19 @@ def mirror_mjcf(mjcf_path, output_path=None, left_leg_config=None):
         mesh_copy = copy.deepcopy(mesh)
         left_mesh_name = mirror_name(mesh_copy.attrib["name"])
 
-        # 只添加不存在的左腿mesh
         if left_mesh_name not in existing_mesh_names:
             mesh_copy.attrib["name"] = left_mesh_name
-
             scale = [1.0, 1.0, 1.0]
             if "scale" in mesh_copy.attrib:
                 scale = [float(x) for x in mesh_copy.attrib["scale"].split()]
             scale[0] = -scale[0]
             mesh_copy.attrib["scale"] = f"{scale[0]} {scale[1]} {scale[2]}"
-
             asset.append(mesh_copy)
             existing_mesh_names.add(left_mesh_name)
 
     tree.write(output_path, encoding="utf-8", xml_declaration=True)
     print(f"✓ 已生成双腿MJCF: {output_path}")
+
+# ============================================================================================
+# ===================================== END: 主处理逻辑 ========================================
+# ============================================================================================

@@ -6,6 +6,19 @@
 scene: flat_terrain
 env_type: walking
 
+# ==================== 自定义课程学习配置 ====================
+# 指定课程配置文件路径（可以是简单的权重字典，也可以是多阶段配置）
+curriculum_file: configs/quick_test/curriculum.yaml
+
+# 自定义环境配置（覆盖默认课程学习设置）
+env_config:
+  # 零速度命令（站立不动）
+  cmd_x_range: [0.0, 0.0]
+  cmd_y_range: [0.0, 0.0]
+  cmd_yaw_range: [0.0, 0.0]
+  # 目标高度稍高（匹配初始化高度）
+  target_height: 0.45
+
 # ==================== 环境配置（快速测试优化）====================
 num_envs: 256           # 快速测试环境数（平衡速度和样本多样性）
 num_steps: 64           # Rollout步数（保证GAE估计质量）

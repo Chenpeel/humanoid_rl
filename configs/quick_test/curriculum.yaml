@@ -1,0 +1,27 @@
+# ==================== 奖励权重配置 ====================
+# 对应 STAGE1_WEIGHTS (站立平衡)
+# 训练目标：学习保持直立不摔倒，建立基本的平衡控制能力
+# 优先级：存活 > 姿态 > 能量
+
+# 核心目标：不摔倒
+termination: -200.0  # 强力终止惩罚
+alive: 5.0           # 高存活奖励
+
+# 姿态控制
+upright_bonus: 2.0   # 直立奖励
+trunk_height: 2.0    # 保持目标高度
+orientation: -1.5    # 严格姿态约束
+
+# 抑制移动
+trunk_lin_vel_z: -1.0 # 防止跳跃
+
+# 能量约束
+action_rate: -0.02   # 鼓励平滑动作
+torques: -0.0002     # 限制扭矩
+joint_limits: -0.2   # 防止关节超限
+
+# 暂时禁用的项（设为0.0）
+forward_velocity: 0.0
+gait_symmetry: 0.0
+foot_clearance: 0.0
+drag: 0.0

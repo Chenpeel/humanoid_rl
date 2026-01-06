@@ -1,4 +1,5 @@
-"""简化机器人碰撞几何体
+"""
+简化机器人碰撞几何体
 
 将复杂的STL网格替换为简单几何形状，大幅降低内存占用和计算开销。
 """
@@ -7,6 +8,10 @@ import xml.etree.ElementTree as ET
 import sys
 from pathlib import Path
 
+
+# ============================================================================================
+# ======================================= 简化逻辑 ============================================
+# ============================================================================================
 
 def simplify_leg_collision(xml_path: str, leg_side: str = "right"):
     """简化腿部碰撞几何体
@@ -18,13 +23,12 @@ def simplify_leg_collision(xml_path: str, leg_side: str = "right"):
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
-    # 需要简化的部件及其几何形状
     simplify_rules = {
-        # 禁用小部件碰撞（设置contype="0"）
-        f"{leg_side}_hip_pitch_engine_link_collision": None,  # 禁用
-        f"{leg_side}_hip_yaw_engine_link_collision": None,    # 禁用
-        f"{leg_side}_hip_roll_link_collision": None,          # 禁用
-        f"{leg_side}_hip_cube_link_collision": None,          # 禁用
+        # 禁用小部件碰撞
+        f"{leg_side}_hip_pitch_engine_link_collision": None,
+        f"{leg_side}_hip_yaw_engine_link_collision": None,
+        f"{leg_side}_hip_roll_link_collision": None,
+        f"{leg_side}_hip_cube_link_collision": None,
 
         # 禁用所有ankle小部件
         f"{leg_side}_ankle_1_3_link_collision": None,
@@ -42,62 +46,61 @@ def simplify_leg_collision(xml_path: str, leg_side: str = "right"):
         # 简化主要部件
         f"{leg_side}_thigh_link_collision": {
             "type": "capsule",
-            "size": "0.045 0.215",  # 半径45mm，半长215mm（大腿长度约430mm）
-            "pos": "-0.035 -0.215 0",  # 中心位置
-            "quat": "0.7071 0 0.7071 0",  # 沿y轴旋转90度
+            "size": "0.045 0.215",
+            "pos": "-0.035 -0.215 0",
+            "quat": "0.7071 0 0.7071 0",
         },
         f"{leg_side}_shin_link_collision": {
             "type": "capsule",
-            "size": "0.035 0.218",  # 半径35mm，半长218mm（小腿长度约436mm）
-            "pos": "0.005 -0.218 0.007",  # 中心位置
-            "quat": "0.7071 0 0.7071 0",  # 沿y轴旋转90度
+            "size": "0.035 0.218",
+            "pos": "0.005 -0.218 0.007",
+            "quat": "0.7071 0 0.7071 0",
         },
         f"{leg_side}_foot_link_collision": {
             "type": "box",
-            "size": "0.04 0.055 0.018",  # 脚掌：80mm x 110mm x 36mm
+            "size": "0.04 0.055 0.018",
             "pos": "0 -0.055 0",
         },
         f"{leg_side}_toe_link_collision": {
             "type": "box",
-            "size": "0.035 0.025 0.025",  # 脚趾：70mm x 50mm x 50mm
+            "size": "0.035 0.025 0.025",
             "pos": "0 0.015 0.025",
         },
     }
 
-    # 遍历所有geom元素
     for geom in root.iter('geom'):
         name = geom.get('name')
         if name in simplify_rules:
             rule = simplify_rules[name]
 
             if rule is None:
-                # 禁用碰撞：移除mesh属性，设置contype="0"
                 if 'mesh' in geom.attrib:
                     del geom.attrib['mesh']
                 geom.set('type', 'sphere')
-                geom.set('size', '0.001')  # 极小的球体
+                geom.set('size', '0.001')
                 geom.set('contype', '0')
                 geom.set('conaffinity', '0')
                 print(f"  禁用碰撞: {name}")
             else:
-                # 简化为基本形状
-                # 移除mesh属性
                 if 'mesh' in geom.attrib:
                     del geom.attrib['mesh']
-
-                # 设置新的几何形状
                 for key, value in rule.items():
                     geom.set(key, value)
-
                 print(f"  简化为{rule['type']}: {name}")
 
-    # 保存修改后的文件
     tree.write(xml_path, encoding='utf-8', xml_declaration=True)
     print(f"✓ 已保存: {xml_path}")
 
+# ============================================================================================
+# ===================================== END: 简化逻辑 ==========================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ======================================= 主函数 ==============================================
+# ============================================================================================
 
 def main():
-    # 获取脚本所在目录
     script_dir = Path(__file__).parent.parent
     geometry_dir = script_dir / "assets/xmls/models/jiyuan/geometry"
 
@@ -105,12 +108,10 @@ def main():
     print("简化碰撞几何体")
     print("=" * 60)
 
-    # 处理右腿
     print("\n处理右腿...")
     right_leg_path = geometry_dir / "right_leg.xml"
     simplify_leg_collision(str(right_leg_path), "right")
 
-    # 处理左腿
     print("\n处理左腿...")
     left_leg_path = geometry_dir / "left_leg.xml"
     simplify_leg_collision(str(left_leg_path), "left")
@@ -132,3 +133,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# ============================================================================================
+# ===================================== END: 主函数 ============================================
+# ============================================================================================

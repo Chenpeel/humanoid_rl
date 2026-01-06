@@ -14,6 +14,10 @@ from rich.console import Console
 console = Console()
 
 
+# ============================================================================================
+# ======================================= 检测函数 ============================================
+# ============================================================================================
+
 def check_for_nans(
     info: Dict[str, Any],
     update_idx: int,
@@ -39,7 +43,6 @@ def check_for_nans(
     inf_detected = False
 
     for key, value in info.items():
-        # 检查是否为数值类型
         if isinstance(value, (int, float)):
             if jp.isnan(value):
                 console.print(
@@ -51,7 +54,7 @@ def check_for_nans(
                     f"[yellow]⚠️  Inf detected at update {update_idx}, key={key}, value={value}[/yellow]"
                 )
                 inf_detected = True
-        elif hasattr(value, "shape"):  # JAX数组
+        elif hasattr(value, "shape"):
             if jp.isnan(value).any():
                 console.print(
                     f"[red]❌ NaN detected in array at update {update_idx}, key={key}[/red]"
@@ -71,7 +74,6 @@ def check_for_nans(
 
     if nan_detected or inf_detected:
         if save_state:
-            # 保存状态用于事后分析
             save_path = Path(save_dir)
             save_path.mkdir(exist_ok=True)
             state_file = save_path / f"nan_state_update_{update_idx}.pkl"
@@ -93,20 +95,22 @@ def check_for_nans(
 
     return nan_detected or inf_detected
 
+# ============================================================================================
+# ===================================== END: 检测函数 ==========================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ===================================== 统计日志函数 ==========================================
+# ============================================================================================
 
 def log_rollout_stats(
     batch: Any,
     prefix: str = "Rollout",
 ) -> None:
-    """记录rollout统计信息（用于监控数值范围）
-
-    Args:
-        batch: PPOBatch对象
-        prefix: 日志前缀
-    """
+    """记录rollout统计信息（用于监控数值范围）"""
     console.print(f"\n[cyan]{prefix} Statistics:[/cyan]")
 
-    # 观测统计
     obs_min = float(batch.obs.min())
     obs_max = float(batch.obs.max())
     obs_mean = float(batch.obs.mean())
@@ -114,7 +118,6 @@ def log_rollout_stats(
         f"  Observations: min={obs_min:.3f}, max={obs_max:.3f}, mean={obs_mean:.3f}"
     )
 
-    # 动作统计
     action_min = float(batch.actions.min())
     action_max = float(batch.actions.max())
     action_mean = float(batch.actions.mean())
@@ -122,7 +125,6 @@ def log_rollout_stats(
         f"  Actions: min={action_min:.3f}, max={action_max:.3f}, mean={action_mean:.3f}"
     )
 
-    # 奖励统计（如果批次包含奖励）
     if hasattr(batch, "rewards"):
         reward_min = float(batch.rewards.min())
         reward_max = float(batch.rewards.max())
@@ -131,7 +133,6 @@ def log_rollout_stats(
             f"  Rewards: min={reward_min:.3f}, max={reward_max:.3f}, mean={reward_mean:.3f}"
         )
 
-    # 优势统计
     adv_min = float(batch.advantages.min())
     adv_max = float(batch.advantages.max())
     adv_mean = float(batch.advantages.mean())
@@ -141,7 +142,6 @@ def log_rollout_stats(
         f"mean={adv_mean:.3f}, std={adv_std:.3f}"
     )
 
-    # 回报统计
     ret_min = float(batch.returns.min())
     ret_max = float(batch.returns.max())
     ret_mean = float(batch.returns.mean())
@@ -149,7 +149,6 @@ def log_rollout_stats(
         f"  Returns: min={ret_min:.3f}, max={ret_max:.3f}, mean={ret_mean:.3f}"
     )
 
-    # 对数概率统计
     logp_min = float(batch.old_log_probs.min())
     logp_max = float(batch.old_log_probs.max())
     logp_mean = float(batch.old_log_probs.mean())
@@ -157,7 +156,6 @@ def log_rollout_stats(
         f"  Old log_probs: min={logp_min:.3f}, max={logp_max:.3f}, mean={logp_mean:.3f}"
     )
 
-    # 检查异常值
     warnings = []
     if abs(obs_max) > 100 or abs(obs_min) > 100:
         warnings.append("Observations range异常（绝对值 > 100）")
@@ -175,6 +173,14 @@ def log_rollout_stats(
         for warning in warnings:
             console.print(f"  - {warning}")
 
+# ============================================================================================
+# ===================================== END: 统计日志函数 ======================================
+# ============================================================================================
+
+
+# ============================================================================================
+# ======================================= 验证函数 ============================================
+# ============================================================================================
 
 def validate_ppo_loss_inputs(
     mean: jax.Array,
@@ -185,20 +191,7 @@ def validate_ppo_loss_inputs(
     advantages: jax.Array,
     returns: jax.Array,
 ) -> bool:
-    """验证PPO损失函数的输入是否有效
-
-    Args:
-        mean: 动作均值
-        log_std: 动作对数标准差
-        values: 价值估计
-        actions: 动作
-        old_log_probs: 旧对数概率
-        advantages: 优势函数
-        returns: 回报
-
-    Returns:
-        是否所有输入都有效（无NaN/Inf）
-    """
+    """验证PPO损失函数的输入是否有效"""
     checks = {
         "mean": mean,
         "log_std": log_std,
@@ -220,25 +213,16 @@ def validate_ppo_loss_inputs(
 
     return all_valid
 
+# --------------------------------------------------------------------------------------------
 
 def safe_clip_rewards(
     rewards: jax.Array,
     min_val: float = -10.0,
     max_val: float = 10.0,
 ) -> jax.Array:
-    """安全裁剪奖励值
-
-    Args:
-        rewards: 奖励数组
-        min_val: 最小值
-        max_val: 最大值
-
-    Returns:
-        裁剪后的奖励
-    """
+    """安全裁剪奖励值"""
     clipped = jp.clip(rewards, min_val, max_val)
 
-    # 检查是否有裁剪发生
     clipped_count = jp.sum((rewards < min_val) | (rewards > max_val))
     if clipped_count > 0:
         console.print(
@@ -250,19 +234,14 @@ def safe_clip_rewards(
 
     return clipped
 
+# --------------------------------------------------------------------------------------------
 
 def monitor_training_health(
     info: Dict[str, Any],
     update_idx: int,
     thresholds: Optional[Dict[str, tuple]] = None,
 ) -> None:
-    """监控训练健康度（检测异常指标）
-
-    Args:
-        info: 训练指标字典
-        update_idx: 当前更新索引
-        thresholds: 指标阈值字典 {metric: (min, max)}
-    """
+    """监控训练健康度（检测异常指标）"""
     if thresholds is None:
         thresholds = {
             "policy_loss": (-10.0, 10.0),
@@ -288,3 +267,7 @@ def monitor_training_health(
         )
         for warning in warnings:
             console.print(f"  - {warning}")
+
+# ============================================================================================
+# ===================================== END: 验证函数 ==========================================
+# ============================================================================================

@@ -5,17 +5,16 @@
 
 主要组件:
 - BaseCurriculum: 课程学习基类
-- WalkingCurriculum: 行走任务的三阶段课程学习（标准）
-- QuickTestCurriculum: 快速测试的三阶段课程学习（延长 Stage 1）
+- ConfigurableCurriculum: 可配置的课程学习（支持单阶段和多阶段）
+- WalkingCurriculum: 标准行走课程学习
 """
 
-from .base import BaseCurriculum, CurriculumStage
-from .quick_test import QuickTestCurriculum
+from .base import BaseCurriculum, CurriculumStage, ConfigurableCurriculum
 from .walking import WalkingCurriculum
 
 __all__ = [
     "BaseCurriculum",
     "CurriculumStage",
+    "ConfigurableCurriculum",
     "WalkingCurriculum",
-    "QuickTestCurriculum",
 ]

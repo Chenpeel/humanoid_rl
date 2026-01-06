@@ -16,17 +16,20 @@ num_steps: 64           # 每次rollout的步数
 max_episode_steps: 2000 # episode最大步数
 
 # ==================== PPO超参数 ====================
-num_epochs: 4
-num_minibatches: 8
+num_epochs: 5
+num_minibatches: 4
 gamma: 0.99
 gae_lambda: 0.95
-clip_epsilon: 0.3       # 从 0.2 提高到 0.3，允许策略更大幅度更新（解决停滞）
-value_coef: 1.0         # 从 0.5 提高到 1.0，加速 Value 网络校准到 -200 范围
-entropy_coef: 0.02      # 从 0.01 提高到 0.02，强制策略保持探索性（防止过早收敛）
-max_grad_norm: 0.5
+clip_epsilon: 0.2
+value_coef: 1.0
+entropy_coef: 0.005  # 略微降低熵系数，因为课程学习提供了足够的探索
+max_grad_norm: 1.0
+
+# ==================== 课程学习配置 ====================
+curriculum_file: configs/train/curriculum.yaml
 
 # ==================== 训练配置 ====================
-total_timesteps: 500000000  # 500M steps（确保收敛）
+total_timesteps: 200000000  # 200M steps
 log_interval: 10
 eval_interval: 25
 save_interval: 500
