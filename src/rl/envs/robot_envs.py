@@ -1,9 +1,11 @@
 """
 机器人MJX环境实现
+
+支持多机器人模型的动态加载和配置。
 """
 
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import jax
 import jax.numpy as jp
@@ -13,6 +15,7 @@ from mujoco import mjx
 from rich.console import Console
 
 from .mjx_base_env import EnvState, MJXBaseEnv
+from ..utils.robot_config import get_robot_config, resolve_scene_path
 
 console = Console()
 
@@ -56,7 +59,8 @@ class VelocityTrackingEnv(MJXBaseEnv):
 
     def __init__(
         self,
-        xml_path: str = "../assets/xmls/scene.xml",
+        xml_path: Optional[str] = None,
+        robot_name: Optional[str] = None,
         max_steps: int = 1000,
         dt: float = 0.002,
         frame_skip: int = 10,
@@ -68,7 +72,27 @@ class VelocityTrackingEnv(MJXBaseEnv):
         # 奖励权重
         reward_weights: Dict[str, float] = None,
     ):
-        """初始化机器人环境"""
+        """初始化机器人环境
+
+        Args:
+            xml_path: 场景XML路径（优先级最高，向后兼容）
+            robot_name: 机器人名称（如 'gaoda_jiyuan', 'unitree_h1'）
+            max_steps: episode最大步数
+            dt: 仿真时间步长
+            frame_skip: 动作重复次数
+            verbose: 是否打印详细信息
+            cmd_x_range: x方向速度命令范围
+            cmd_y_range: y方向速度命令范围
+            cmd_yaw_range: yaw角速度命令范围
+            reward_weights: 奖励权重字典
+        """
+        # 路径解析：优先使用xml_path（向后兼容），否则使用robot_name
+        if xml_path is None:
+            xml_path = str(resolve_scene_path(robot_name))
+
+        # 获取机器人配置（用于坐标系校正）
+        self.robot_config = get_robot_config(robot_name)
+
         # 调用父类初始化（加载模型）
         super().__init__(xml_path, max_steps, dt, frame_skip, verbose)
 
@@ -250,10 +274,14 @@ class VelocityTrackingEnv(MJXBaseEnv):
             quat_standard = jp.array(
                 [jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
 
-            # Jiyuan 逆校正
-            jiyuan_base_rotation = jp.array([0.70710678, 0.70710678, 0.0, 0.0])
-            quat_physical = quaternion_multiply(
-                jiyuan_base_rotation, quat_standard)
+            # 坐标系校正（使用robot_config中的旋转参数）
+            base_rotation = self.robot_config.get_base_rotation_array()
+            if base_rotation is not None:
+                # 需要逆校正（从Z-up标准坐标系转换到模型物理坐标系）
+                quat_physical = quaternion_multiply(base_rotation, quat_standard)
+            else:
+                # 无需校正，直接使用标准四元数
+                quat_physical = quat_standard
 
             quat_norm = jp.linalg.norm(quat_physical)
             quat_physical = jp.where(
@@ -533,10 +561,21 @@ class VelocityTrackingEnv(MJXBaseEnv):
 
 
 def create_velocity_tracking_env(
-    xml_path: str = "assets/xmls/scene.xml", **kwargs
+    xml_path: Optional[str] = None,
+    robot_name: Optional[str] = None,
+    **kwargs
 ) -> VelocityTrackingEnv:
-    """创建速度跟踪环境（便捷函数）"""
-    return VelocityTrackingEnv(xml_path=xml_path, **kwargs)
+    """创建速度跟踪环境（便捷函数）
+
+    Args:
+        xml_path: 场景XML路径（优先级最高，向后兼容）
+        robot_name: 机器人名称（如 'gaoda_jiyuan', 'unitree_h1'）
+        **kwargs: 传递给环境的其他参数
+
+    Returns:
+        VelocityTrackingEnv实例
+    """
+    return VelocityTrackingEnv(xml_path=xml_path, robot_name=robot_name, **kwargs)
 
 
 # ============================================================================================
@@ -560,24 +599,43 @@ class StandingEnv(MJXBaseEnv):
 
     def __init__(
         self,
-        xml_path: str = "assets/xmls/scene.xml",
+        xml_path: Optional[str] = None,
+        robot_name: Optional[str] = None,
         max_steps: int = 2000,
         dt: float = 0.002,
         frame_skip: int = 10,
         verbose: bool = True,
-        target_height: float = 0.3,
+        target_height: Optional[float] = None,
         reward_weights: Dict[str, float] = None,
     ):
-        """初始化站立环境"""
+        """初始化站立环境
+
+        Args:
+            xml_path: 场景XML路径（优先级最高，向后兼容）
+            robot_name: 机器人名称（如 'gaoda_jiyuan', 'unitree_h1'）
+            max_steps: episode最大步数
+            dt: 仿真时间步长
+            frame_skip: 动作重复次数
+            verbose: 是否打印详细信息
+            target_height: 目标高度（如果为None，则使用机器人配置中的nominal_height）
+            reward_weights: 奖励权重字典
+        """
         from ..rewards.standing_rewards import (
             DEFAULT_STANDING_REWARD_WEIGHTS, compute_standing_reward)
 
         self._compute_reward_fn = compute_standing_reward
         default_weights = DEFAULT_STANDING_REWARD_WEIGHTS
 
+        # 路径解析：优先使用xml_path（向后兼容），否则使用robot_name
+        if xml_path is None:
+            xml_path = str(resolve_scene_path(robot_name))
+
+        # 获取机器人配置（用于坐标系校正）
+        self.robot_config = get_robot_config(robot_name)
+
         super().__init__(xml_path, max_steps, dt, frame_skip, verbose)
 
-        self.target_height = target_height
+        self.target_height = target_height if target_height is not None else self.robot_config.nominal_height
         if reward_weights is None:
             reward_weights = default_weights.copy()
         self.reward_weights = reward_weights
@@ -688,14 +746,19 @@ class StandingEnv(MJXBaseEnv):
             yaw = jax.random.uniform(key2, minval=-0.1, maxval=0.1)
             quat_standard = jp.array(
                 [jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
-            jiyuan_base_rotation = jp.array([0.70710678, 0.70710678, 0.0, 0.0])
-            quat_physical = quaternion_multiply(
-                jiyuan_base_rotation, quat_standard)
+
+            # 坐标系校正（使用robot_config中的旋转参数）
+            base_rotation = self.robot_config.get_base_rotation_array()
+            if base_rotation is not None:
+                quat_physical = quaternion_multiply(base_rotation, quat_standard)
+            else:
+                quat_physical = quat_standard
+
             quat_norm = jp.linalg.norm(quat_physical)
             quat_physical = jp.where(
                 quat_norm > 1e-8,
                 quat_physical / quat_norm,
-                jp.array([0.70710678, 0.70710678, 0.0, 0.0]),
+                base_rotation if base_rotation is not None else jp.array([1.0, 0.0, 0.0, 0.0]),
             )
             qpos = qpos.at[
                 self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
@@ -861,10 +924,21 @@ class StandingEnv(MJXBaseEnv):
 
 
 def create_standing_env(
-    xml_path: str = "assets/xmls/scene.xml", **kwargs
+    xml_path: Optional[str] = None,
+    robot_name: Optional[str] = None,
+    **kwargs
 ) -> StandingEnv:
-    """创建站立环境（便捷函数）"""
-    return StandingEnv(xml_path=xml_path, **kwargs)
+    """创建站立环境（便捷函数）
+
+    Args:
+        xml_path: 场景XML路径（优先级最高，向后兼容）
+        robot_name: 机器人名称（如 'gaoda_jiyuan', 'unitree_h1'）
+        **kwargs: 传递给环境的其他参数
+
+    Returns:
+        StandingEnv实例
+    """
+    return StandingEnv(xml_path=xml_path, robot_name=robot_name, **kwargs)
 
 
 # ============================================================================================
@@ -888,7 +962,8 @@ class WalkingEnv(MJXBaseEnv):
 
     def __init__(
         self,
-        xml_path: str = "assets/xmls/scenes/flat_terrain.xml",
+        xml_path: Optional[str] = None,
+        robot_name: Optional[str] = None,
         max_steps: int = 2000,
         dt: float = 0.002,
         frame_skip: int = 10,
@@ -898,12 +973,34 @@ class WalkingEnv(MJXBaseEnv):
         cmd_x_range: tuple = (-0.2, 0.8),
         cmd_y_range: tuple = (-0.3, 0.3),
         cmd_yaw_range: tuple = (-1.0, 1.0),
-        target_height: float = 0.78,
+        target_height: Optional[float] = None,
         # 奖励权重
         reward_weights: Dict[str, float] = None,
     ):
-        """初始化行走环境"""
+        """初始化行走环境
+
+        Args:
+            xml_path: 场景XML路径（优先级最高，向后兼容）
+            robot_name: 机器人名称（如 'gaoda_jiyuan', 'unitree_h1'）
+            max_steps: episode最大步数
+            dt: 仿真时间步长
+            frame_skip: 动作重复次数
+            verbose: 是否打印详细信息
+            target_velocity: 目标速度
+            cmd_x_range: x方向速度命令范围
+            cmd_y_range: y方向速度命令范围
+            cmd_yaw_range: yaw角速度命令范围
+            target_height: 目标高度（如果为None，则使用机器人配置中的nominal_height）
+            reward_weights: 奖励权重字典
+        """
         from ..rewards.walking_rewards import DEFAULT_WALKING_REWARD_WEIGHTS
+
+        # 路径解析：优先使用xml_path（向后兼容），否则使用robot_name
+        if xml_path is None:
+            xml_path = str(resolve_scene_path(robot_name))
+
+        # 获取机器人配置（用于坐标系校正）
+        self.robot_config = get_robot_config(robot_name)
 
         super().__init__(xml_path, max_steps, dt, frame_skip, verbose)
 
@@ -911,7 +1008,7 @@ class WalkingEnv(MJXBaseEnv):
         self.cmd_x_range = cmd_x_range
         self.cmd_y_range = cmd_y_range
         self.cmd_yaw_range = cmd_yaw_range
-        self.target_height = target_height
+        self.target_height = target_height if target_height is not None else self.robot_config.nominal_height
 
         if reward_weights is None:
             reward_weights = DEFAULT_WALKING_REWARD_WEIGHTS.copy()
@@ -1067,14 +1164,19 @@ class WalkingEnv(MJXBaseEnv):
             yaw = jax.random.uniform(key2, minval=-0.1, maxval=0.1)
             quat_standard = jp.array(
                 [jp.cos(yaw / 2), 0.0, 0.0, jp.sin(yaw / 2)])
-            jiyuan_base_rotation = jp.array([0.70710678, 0.70710678, 0.0, 0.0])
-            quat_physical = quaternion_multiply(
-                jiyuan_base_rotation, quat_standard)
+
+            # 坐标系校正（使用robot_config中的旋转参数）
+            base_rotation = self.robot_config.get_base_rotation_array()
+            if base_rotation is not None:
+                quat_physical = quaternion_multiply(base_rotation, quat_standard)
+            else:
+                quat_physical = quat_standard
+
             quat_norm = jp.linalg.norm(quat_physical)
             quat_physical = jp.where(
                 quat_norm > 1e-8,
                 quat_physical / quat_norm,
-                jp.array([0.70710678, 0.70710678, 0.0, 0.0]),
+                base_rotation if base_rotation is not None else jp.array([1.0, 0.0, 0.0, 0.0]),
             )
             qpos = qpos.at[
                 self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
@@ -1314,12 +1416,17 @@ class WalkingEnv(MJXBaseEnv):
     def _get_info(
         self, state: EnvState, action: jax.Array, pipeline_state: Any
     ) -> Dict[str, jax.Array]:
-        """获取额外信息"""
-        info = {
-            "command": state.info.get("command", jp.zeros(3)),
-            "actual_velocity": jp.zeros(3),
-            "contact_history": jp.zeros((10, 4)),
-        }
+        """获取额外信息
+
+        关键修复: 必须保留 state.info 中已有的奖励键,确保pytree结构一致
+        """
+        # 从上一个state复制所有已存在的info键(特别是reward/键)
+        info = dict(state.info) if state.info else {}
+
+        # 更新环境特定信息
+        info["command"] = state.info.get("command", jp.zeros(3))
+        info["actual_velocity"] = jp.zeros(3)
+        info["contact_history"] = jp.zeros((10, 4))
 
         if self.floating_base_qvel_addr is not None:
             base_lin_vel = pipeline_state.qvel[
@@ -1393,10 +1500,21 @@ class WalkingEnv(MJXBaseEnv):
 
 
 def create_walking_env(
-    xml_path: str = "assets/xmls/scenes/flat_terrain.xml", **kwargs
+    xml_path: Optional[str] = None,
+    robot_name: Optional[str] = None,
+    **kwargs
 ) -> WalkingEnv:
-    """创建行走环境（便捷函数）"""
-    return WalkingEnv(xml_path=xml_path, **kwargs)
+    """创建行走环境（便捷函数）
+
+    Args:
+        xml_path: 场景XML路径（优先级最高，向后兼容）
+        robot_name: 机器人名称（如 'gaoda_jiyuan', 'unitree_h1'）
+        **kwargs: 传递给环境的其他参数
+
+    Returns:
+        WalkingEnv实例
+    """
+    return WalkingEnv(xml_path=xml_path, robot_name=robot_name, **kwargs)
 
 
 # ============================================================================================

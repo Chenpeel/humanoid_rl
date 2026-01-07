@@ -6,13 +6,16 @@
 #
 # 奖励权重和环境参数由课程学习模块自动管理，无需手动配置
 
+# ==================== 机器人模型配置 ====================
+robot_name: gaoda_jiyuan # 机器人模型名称（可选值: gaoda_jiyuan, unitree_h1）
+
 # ==================== 场景配置 ====================
-scene: flat_terrain
+scene: jiyuan_scene
 env_type: walking
 
 # ==================== 环境配置 ====================
-num_envs: 2048          # 并行环境数（适用于 RTX 3090/4080 16GB）
-num_steps: 64           # 每次rollout的步数
+num_envs: 2048 # 并行环境数（适用于 RTX 3090/4080 16GB）
+num_steps: 64 # 每次rollout的步数
 max_episode_steps: 2000 # episode最大步数
 
 # ==================== PPO超参数 ====================
@@ -22,21 +25,21 @@ gamma: 0.99
 gae_lambda: 0.95
 clip_epsilon: 0.2
 value_coef: 1.0
-entropy_coef: 0.005  # 略微降低熵系数，因为课程学习提供了足够的探索
+entropy_coef: 0.005 # 略微降低熵系数，因为课程学习提供了足够的探索
 max_grad_norm: 1.0
 
 # ==================== 课程学习配置 ====================
 curriculum_file: configs/train/curriculum.yaml
 
 # ==================== 训练配置 ====================
-total_timesteps: 200000000  # 200M steps
+total_timesteps: 200000000 # 200M steps
 log_interval: 10
 eval_interval: 25
 save_interval: 500
 
 # ==================== 优化器配置 ====================
-learning_rate: 5.0e-4       # 提高学习率，加速初期学习（你已调整）
-final_lr_fraction: 0.1      # 从 0.01 提高到 0.1，防止过早衰减到极小值
+learning_rate: 5.0e-4 # 提高学习率，加速初期学习（你已调整）
+final_lr_fraction: 0.1 # 从 0.01 提高到 0.1，防止过早衰减到极小值
 
 # ==================== 网络配置 ====================
 hidden_dims: [512, 512, 256]

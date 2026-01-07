@@ -8,6 +8,7 @@
 # 本配置优化显存使用，适合长时间训练
 
 # ==================== 场景配置 ====================
+robot_name: gaoda_jiyuan
 scene: flat_terrain
 env_type: walking
 
