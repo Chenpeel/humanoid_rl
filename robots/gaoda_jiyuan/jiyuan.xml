@@ -93,7 +93,8 @@
     <body name="base_link" pos="0.00000000 0.00000000 1.00000000"
       quat="0.70710678 0.70710678 0.00000000 0.00000000" childclass="robot">
       <freejoint name="floating_base" />
-      <inertial pos="0 0.2 0" mass="12.0" diaginertia="0.2 0.2 0.05" />
+      <!-- 虚拟质量调整为6kg，重心上移以模拟上半身平衡 -->
+      <inertial pos="0 0.3 0" mass="6.0" diaginertia="0.1 0.1 0.03" />
       <geom name="base_link_collision" type="capsule" fromto="0 0.02 0 0 0.42 0" size="0.10"
         class="collision" />
       <geom name="base_link_visual" pos="0 0 0" quat="1.0 0.0 0.0 0.0" type="mesh"
@@ -108,8 +109,8 @@
         <joint name="right_hip_roll_joint" type="hinge" ref="0.0" class="motor"
           range="-1.5707963267948966 1.5707963267948966" axis="1 0 0" />
         <inertial pos="0.0222625122554699 -4.28350421400515E-05 -2.24420624569832E-05"
-          quat="1.0 0.0 0.0 0.0" mass="0.00398432706561057"
-          diaginertia="1.88235287338231e-07 5.49391206748978e-07 5.05938324031621e-07" />
+          quat="1.0 0.0 0.0 0.0" mass="0.6"
+          diaginertia="0.0008 0.0008 0.0008" />
         <geom name="right_hip_roll_link_collision" pos="0 0 0" quat="1.0 0.0 0.0 0.0" type="sphere"
           class="right_leg_minor_collision" size="0.001" contype="0" conaffinity="0" />
         <geom name="right_hip_roll_link_visual" pos="0 0 0" quat="1.0 0.0 0.0 0.0" type="mesh"
@@ -118,8 +119,8 @@
           <joint name="right_hip_cube_joint" type="hinge" ref="0.0" class="motor" range="-1.0 1.5"
             axis="0 0 1" />
           <inertial pos="-7.58236988473993E-09 -8.10037224742346E-14 8.6035271838651E-15"
-            quat="1.0 0.0 0.0 0.0" mass="0.000245876972106248"
-            diaginertia="4.25015788197772e-09 2.40441818298092e-09 2.40441192528711e-09" />
+            quat="1.0 0.0 0.0 0.0" mass="0.3"
+            diaginertia="0.0004 0.0004 0.0004" />
           <geom name="right_hip_cube_link_collision" pos="0 0 0" quat="1.0 0.0 0.0 0.0"
             type="sphere" class="right_leg_minor_collision" size="0.001" contype="0" conaffinity="0" />
           <geom name="right_hip_cube_link_visual" pos="0 0 0" quat="1.0 0.0 0.0 0.0" type="mesh"
@@ -128,8 +129,8 @@
             <joint name="right_thigh_joint" type="hinge" ref="0.0" class="motor" range="-1.0 1.0"
               axis="0 1 0" />
             <inertial pos="-0.0353507257648988 -0.247894844440165 0.00178440950269929"
-              quat="1.0 0.0 0.0 0.0" mass="0.807844023825405"
-              diaginertia="0.00262872199337436 0.00181775503594599 0.00258154933740886" />
+              quat="1.0 0.0 0.0 0.0" mass="1.2"
+              diaginertia="0.005 0.005 0.003" />
             <geom name="right_thigh_link_collision" type="capsule"
               fromto="-0.07 -0.02 0 -0.03 -0.37 0" size="0.045" class="right_leg_collision" />
             <geom name="right_thigh_link_visual" pos="0 0 0" quat="1.0 0.0 0.0 0.0" type="mesh"
@@ -139,8 +140,8 @@
               <joint name="right_knee_joint" type="hinge" ref="0.0" class="motor"
                 range="-2.0943951023931953 0.0" axis="-1 0 0" />
               <inertial pos="0.00524376700949104 -0.205627168869245 0.00732812606870403"
-                quat="1.0 0.0 0.0 0.0" mass="0.364323955321575"
-                diaginertia="0.00132460554133456 0.000315850437296788 0.00134334443677415" />
+                quat="1.0 0.0 0.0 0.0" mass="0.9"
+                diaginertia="0.004 0.004 0.002" />
               <geom name="right_shin_link_collision" type="capsule" fromto="0 -0.06 0 0 -0.415 0.02"
                 size="0.035" class="right_leg_collision" />
               <geom name="right_shin_link_visual" pos="0 0 0" quat="1.0 0.0 0.0 0.0" type="mesh"
@@ -319,8 +320,8 @@
         <joint name="left_hip_roll_joint" type="hinge" ref="0.0" class="motor"
           range="-1.5707963267948966 1.5707963267948966" axis="-1.00000000 0.00000000 0.00000000" />
         <inertial pos="-0.02226251 -0.00004284 -0.00002244"
-          quat="1.00000000 0.00000000 -0.00000000 -0.00000000" mass="0.00398432706561057"
-          diaginertia="1.88235287338231e-07 5.49391206748978e-07 5.05938324031621e-07" />
+          quat="1.00000000 0.00000000 -0.00000000 -0.00000000" mass="0.6"
+          diaginertia="0.0008 0.0008 0.0008" />
         <geom name="left_hip_roll_link_collision" pos="-0.00000000 0.00000000 0.00000000"
           quat="1.00000000 0.00000000 -0.00000000 -0.00000000" type="sphere"
           class="left_leg_minor_collision" size="0.001" contype="0" conaffinity="0" />
@@ -332,8 +333,8 @@
           <joint name="left_hip_cube_joint" type="hinge" ref="0.0" class="motor" range="-1.5 1.0"
             axis="0 0 1" />
           <inertial pos="0.00000001 -0.00000000 0.00000000"
-            quat="1.00000000 0.00000000 -0.00000000 -0.00000000" mass="0.000245876972106248"
-            diaginertia="4.25015788197772e-09 2.40441818298092e-09 2.40441192528711e-09" />
+            quat="1.00000000 0.00000000 -0.00000000 -0.00000000" mass="0.3"
+            diaginertia="0.0004 0.0004 0.0004" />
           <geom name="left_hip_cube_link_collision" pos="-0.00000000 0.00000000 0.00000000"
             quat="1.00000000 0.00000000 -0.00000000 -0.00000000" type="sphere"
             class="left_leg_minor_collision" size="0.001" contype="0" conaffinity="0" />
@@ -345,8 +346,8 @@
             <joint name="left_thigh_joint" type="hinge" ref="0.0" class="motor" range="-1.0 1.0"
               axis="0 1 0" />
             <inertial pos="0.03535073 -0.24789484 0.00178441"
-              quat="1.00000000 0.00000000 -0.00000000 -0.00000000" mass="0.807844023825405"
-              diaginertia="0.00262872199337436 0.00181775503594599 0.00258154933740886" />
+              quat="1.00000000 0.00000000 -0.00000000 -0.00000000" mass="1.2"
+              diaginertia="0.005 0.005 0.003" />
             <geom name="left_thigh_link_collision" type="capsule" fromto="0.07 -0.02 0 0.03 -0.37 0"
               size="0.045" class="left_leg_collision" />
             <geom name="left_thigh_link_visual" pos="-0.00000000 0.00000000 0.00000000"
@@ -357,8 +358,8 @@
               <joint name="left_knee_joint" type="hinge" ref="0.0" class="motor"
                 range="0.0 2.0943951023931953" axis="1.00000000 0.00000000 0.00000000" />
               <inertial pos="-0.00524377 -0.20562717 0.00732813"
-                quat="1.00000000 0.00000000 -0.00000000 -0.00000000" mass="0.364323955321575"
-                diaginertia="0.00132460554133456 0.000315850437296788 0.00134334443677415" />
+                quat="1.00000000 0.00000000 -0.00000000 -0.00000000" mass="0.9"
+                diaginertia="0.004 0.004 0.002" />
               <geom name="left_shin_link_collision" type="capsule" fromto="0 -0.06 0 0 -0.415 0.02"
                 size="0.035" class="left_leg_collision" />
               <geom name="left_shin_link_visual" pos="-0.00000000 0.00000000 0.00000000"
