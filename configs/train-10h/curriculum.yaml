@@ -2,10 +2,10 @@
 # 三阶段渐进式训练配置
 
 stages:
-  # ==================== 阶段 1: 站立平衡 (0 - 50k) ====================
+  # ==================== 阶段 1: 站立平衡 (0 - 5M) ====================
   - name: "站立平衡"
     start_step: 0
-    end_step: 50000
+    end_step: 5000000  # 500万步 (约150次更新)
     description: "学习保持直立姿态、抵抗扰动、建立基本平衡控制能力"
 
     # 环境参数：严格限制移动，高姿态要求
@@ -13,29 +13,29 @@ stages:
       cmd_x_range: [0.0, 0.0]
       cmd_y_range: [0.0, 0.0]
       cmd_yaw_range: [0.0, 0.0]
-      target_height: 0.78  # 匹配机器人实际站立高度和keyframe
+      target_height: 0.92
 
-    # 奖励权重：存活 > 姿态 > 能量
+    # 奖励权重：存活 > 姿态 > 能量 (大幅降低数值以防止梯度爆炸)
     reward_weights:
-      termination: -200.0
-      alive: 5.0
-      upright_bonus: 2.0
-      trunk_height: 2.0
-      orientation: -1.5
-      trunk_lin_vel_z: -1.0
-      action_rate: -0.02
-      torques: -0.0002
-      joint_limits: -0.2
+      termination: -1.0    # 降低惩罚，避免 Value Loss 爆炸
+      alive: 1.0           # 标准化存活奖励
+      upright_bonus: 1.0
+      trunk_height: 1.0
+      orientation: -0.5
+      trunk_lin_vel_z: -0.5
+      action_rate: -0.005
+      torques: -0.0001
+      joint_limits: -0.1
       # 禁用项
       forward_velocity: 0.0
       gait_symmetry: 0.0
       foot_clearance: 0.0
       drag: 0.0
 
-  # ==================== 阶段 2: 低速行走 (50k - 150k) ====================
+  # ==================== 阶段 2: 低速行走 (5M - 20M) ====================
   - name: "低速行走"
-    start_step: 50000
-    end_step: 150000
+    start_step: 5000000
+    end_step: 20000000  # 2000万步 (约600次更新)
     description: "学习双脚交替接触、建立基本步态模式、实现低速稳定前进"
 
     # 环境参数：允许低速移动
@@ -43,7 +43,7 @@ stages:
       cmd_x_range: [0.1, 0.3]
       cmd_y_range: [-0.1, 0.1]
       cmd_yaw_range: [-0.3, 0.3]
-      target_height: 0.78  # 匹配机器人实际站立高度
+      target_height: 0.92
 
     # 奖励权重：步态 > 速度 > 稳定
     reward_weights:
@@ -62,12 +62,12 @@ stages:
       feet_slide: -0.8
       action_rate: -0.01
       torques: -0.0001
-      joint_symmetry: 0.2
+      # joint_symmetry: 0.2  <-- 已移除
       stumbling: -0.5
 
-  # ==================== 阶段 3: 全速行走 (150k+) ====================
+  # ==================== 阶段 3: 全速行走 (20M+) ====================
   - name: "全速行走"
-    start_step: 150000
+    start_step: 20000000
     end_step: "inf"
     description: "跟踪任意速度命令、优化步态质量和能量效率、提高鲁棒性"
 
@@ -76,7 +76,7 @@ stages:
       cmd_x_range: [-0.2, 0.8]
       cmd_y_range: [-0.3, 0.3]
       cmd_yaw_range: [-1.0, 1.0]
-      target_height: 0.78  # 匹配机器人实际站立高度
+      target_height: 0.92
 
     # 奖励权重：性能 > 质量 > 效率
     reward_weights:

@@ -13,7 +13,7 @@ stages:
       cmd_x_range: [0.0, 0.0]
       cmd_y_range: [0.0, 0.0]
       cmd_yaw_range: [0.0, 0.0]
-      target_height: 0.98
+      target_height: 0.92
 
     # 奖励权重：存活 > 姿态 > 能量
     reward_weights:
@@ -43,7 +43,7 @@ stages:
       cmd_x_range: [0.1, 0.3]
       cmd_y_range: [-0.1, 0.1]
       cmd_yaw_range: [-0.3, 0.3]
-      target_height: 0.98
+      target_height: 0.92
 
     # 奖励权重：步态 > 速度 > 稳定
     reward_weights:
@@ -76,7 +76,7 @@ stages:
       cmd_x_range: [-0.2, 0.8]
       cmd_y_range: [-0.3, 0.3]
       cmd_yaw_range: [-1.0, 1.0]
-      target_height: 0.98
+      target_height: 0.92
 
     # 奖励权重：性能 > 质量 > 效率
     reward_weights:

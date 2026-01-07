@@ -149,6 +149,7 @@ train-long:
 	} 2>&1 | tee "$$LOGFILE"; \
 	echo ""; \
 	echo "=== 训练完成 ==="; \
+	echo "日志文件: $$LOGFILE"; \
 	echo "结束时间: $$(date)"
 
 train-test:
