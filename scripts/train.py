@@ -433,26 +433,36 @@ def main():
     console.print(f"可用设备: {jax.devices()}")
     console.print(f"默认后端: {jax.default_backend()}")
 
-    console.print("\n[bold cyan]3. 创建MJX环境[/bold cyan]")
-    if args.xml_path:
-        scene_path = args.xml_path
-        console.print(f"使用自定义XML路径: {scene_path}")
+    console.print("\n[bold cyan]3. 创建MJX environment[/bold cyan]")
+
+    # 获取机器人配置
+    robot_name = yaml_config.get("robot_name", None)  # 从配置文件读取robot_name
+    if robot_name:
+        from rl.utils.robot_config import resolve_scene_path
+        xml_path = str(resolve_scene_path(robot_name))
+        console.print(f"使用机器人模型: [bold cyan]{robot_name}[/bold cyan]")
+        console.print(f"解析场景路径: [bold green]{xml_path}[/bold green]")
     else:
-        scene_file_map = {
-            "flat_terrain": "flat_terrain",
-            "rough_terrain": "rough_terrain",
-        }
-        scene_file = scene_file_map.get(args.scene, args.scene)
-        scene_path = f"assets/xmls/scenes/{scene_file}.xml"
-        console.print(f"使用预设场景: {args.scene}")
+        # 向后兼容：使用旧的路径逻辑
+        if args.xml_path:
+            xml_path = args.xml_path
+            console.print(f"使用自定义XML路径: {xml_path}")
+        else:
+            scene_file_map = {
+                "flat_terrain": "flat_terrain",
+                "rough_terrain": "rough_terrain",
+            }
+            scene_file = scene_file_map.get(args.scene, args.scene)
+            xml_path = f"assets/xmls/scenes/{scene_file}.xml"
+            console.print(f"使用预设场景: {args.scene}")
 
     t0 = time.time()
     if args.env_type == "walking":
-        env = create_walking_env(xml_path=scene_path)
+        env = create_walking_env(xml_path=xml_path, robot_name=robot_name)
         env_create_time = time.time() - t0
         console.print(f"✓ WalkingEnv 创建完成 (耗时: {env_create_time:.2f}s)")
     else:
-        env = create_velocity_tracking_env(xml_path=scene_path)
+        env = create_velocity_tracking_env(xml_path=xml_path, robot_name=robot_name)
         env_create_time = time.time() - t0
         console.print(
             f"✓ VelocityTrackingEnv 创建完成 (耗时: {env_create_time:.2f}s)")

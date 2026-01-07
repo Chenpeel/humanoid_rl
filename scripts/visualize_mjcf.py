@@ -14,7 +14,7 @@ import numpy as np
 # ======================================= 工具函数 ============================================
 # ============================================================================================
 
-def apply_stabilization(model: mujoco.MjModel, data: mujoco.MjData) -> None:
+def apply_stabilization(model: mujoco.MjModel, data: mujoco.MjData, gravity_enabled: bool) -> None:
     """增加数值稳定性，避免自由度速度发散。"""
     if model.dof_damping is not None:
         min_damping = 0.5
@@ -22,7 +22,9 @@ def apply_stabilization(model: mujoco.MjModel, data: mujoco.MjData) -> None:
 
     model.opt.integrator = mujoco.mjtIntegrator.mjINT_IMPLICIT
     model.opt.timestep = min(model.opt.timestep, 0.01)
-    # model.opt.gravity[:] = 0.0
+    
+    if not gravity_enabled:
+        model.opt.gravity[:] = 0.0
 
     mujoco.mj_resetData(model, data)
     mujoco.mj_forward(model, data)
@@ -61,7 +63,7 @@ def get_last_modified_time(files: list[Path]) -> float:
 # ======================================= 可视化逻辑 ==========================================
 # ============================================================================================
 
-def visualize_mjcf(xml_path: str, interactive: bool = True):
+def visualize_mjcf(xml_path: str, interactive: bool = True, gravity_enabled: bool = False):
     """可视化MJCF模型并支持热刷新"""
     xml_path_obj = Path(xml_path).resolve()
     if not xml_path_obj.exists():
@@ -93,7 +95,7 @@ def visualize_mjcf(xml_path: str, interactive: bool = True):
             data = mujoco.MjData(model)
 
             mujoco.mj_resetData(model, data)
-            apply_stabilization(model, data)
+            apply_stabilization(model, data, gravity_enabled=gravity_enabled)
 
             try:
                 for side in ["right", "left"]:
@@ -174,9 +176,20 @@ def main():
     )
     parser.add_argument("--no-interactive",
                         action="store_true", help="禁用交互式查看器")
+    parser.add_argument(
+        "--gravity",
+        type=int,
+        choices=[0, 1],
+        default=0,
+        help="是否启用重力 (1=启用, 0=禁用). 默认为0 (禁用).",
+    )
     args = parser.parse_args()
 
-    visualize_mjcf(args.xml, interactive=not args.no_interactive)
+    visualize_mjcf(
+        args.xml,
+        interactive=not args.no_interactive,
+        gravity_enabled=bool(args.gravity),
+    )
 
 
 if __name__ == "__main__":
