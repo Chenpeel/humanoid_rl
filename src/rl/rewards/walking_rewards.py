@@ -73,7 +73,6 @@ STAGE2_WEIGHTS = {
     "feet_slide": -0.8,
     "action_rate": -0.01,
     "torques": -0.0001,
-    "joint_symmetry": 0.2,
     "stumbling": -0.5,
 }
 
@@ -96,7 +95,6 @@ STAGE3_WEIGHTS = {
     "action_rate": -0.01,
     "torques": -0.001,
     "energy_efficiency": 0.001,
-    "joint_symmetry": 0.15,
     "joint_limits": -0.1,
     "landing_impact": 0.2,
     "stability": 0.1,
@@ -674,6 +672,7 @@ def compute_walking_reward(
         val = weights["alive"] * 1.0
         reward += val
         reward_info["reward/alive"] = val
+
 
     # 5. 动作平滑性和关节约束
     if "action_rate" in weights:
