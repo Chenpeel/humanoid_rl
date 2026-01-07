@@ -63,8 +63,10 @@ def infer_network_config_from_checkpoint(checkpoint_path: str):
     if "backbone" in params:
         shared_backbone = True
         backbone = params["backbone"]
-        console.print(f"  [dim]调试: 共享backbone层 = {list(backbone.keys())}[/dim]")
-        layer_names = sorted([k for k in backbone.keys() if k.startswith("Dense_")])
+        console.print(
+            f"  [dim]调试: 共享backbone层 = {list(backbone.keys())}[/dim]")
+        layer_names = sorted(
+            [k for k in backbone.keys() if k.startswith("Dense_")])
 
         for layer_name in layer_names:
             if "kernel" in backbone[layer_name]:
@@ -229,7 +231,8 @@ def evaluate_policy(
                 step_count = 0
 
                 while not done and step_count < max_steps:
-                    mean, log_std, _ = network.apply(params, env_state.obs[None, :])
+                    mean, log_std, _ = network.apply(
+                        params, env_state.obs[None, :])
                     action = mean[0]
 
                     if step_count < 10:
@@ -336,7 +339,8 @@ def main():
     parser.add_argument(
         "--use-local-mjcf", action="store_true", help="使用本地assets/mjcf中的MJCF模型"
     )
-    parser.add_argument("--num-episodes", type=int, default=10, help="评估episode数")
+    parser.add_argument("--num-episodes", type=int,
+                        default=10, help="评估episode数")
     parser.add_argument(
         "--render",
         type=int,
@@ -352,7 +356,8 @@ def main():
     parser.add_argument(
         "--video-path", type=str, default="eval_video.mp4", help="视频保存路径"
     )
-    parser.add_argument("--max-steps", type=int, default=1000, help="每个episode最大步数")
+    parser.add_argument("--max-steps", type=int,
+                        default=1000, help="每个episode最大步数")
     parser.add_argument(
         "--hidden-dims",
         type=int,
@@ -373,8 +378,15 @@ def main():
         choices=["velocity", "walking"],
         help="环境类型: velocity=速度跟踪(61维), walking=行走任务(65维，默认)",
     )
-    parser.add_argument("--cpu", action="store_true", help="使用CPU运行（避免GPU冲突，速度较慢）")
+    parser.add_argument("--cpu", action="store_true",
+                        help="使用CPU运行（避免GPU冲突，速度较慢）")
     parser.add_argument("--seed", type=int, default=42, help="随机种子")
+    parser.add_argument(
+        "--robot-name",
+        type=str,
+        default=None,
+        help="机器人名称 (可选: gaoda_jiyuan, unitree_h1)",
+    )
 
     args = parser.parse_args()
 
@@ -420,17 +432,29 @@ def main():
         console.print("[cyan]使用本地MJCF模型...[/cyan]")
         xml_path = "assets/xmls/scenes/flat_terrain.xml"
     elif xml_path is None:
-        xml_path = "assets/xmls/scenes/flat_terrain.xml"
-        console.print(f"[yellow]未指定场景文件，使用默认场景: {xml_path}[/yellow]")
+        # 尝试从检查点配置中获取robot_name
+        robot_name = args.robot_name
+
+        # 如果命令行没指定，尝试默认 (这里可以更智能地读取训练时的config.yaml，但目前简化处理)
+        if robot_name is None:
+            # 默认是 gaoda_jiyuan，或者将来从 checkpoint metadata 读取
+            robot_name = "gaoda_jiyuan"
+            console.print(f"[yellow]未指定机器人名称，默认使用: {robot_name}[/yellow]")
+
+        from rl.utils.robot_config import resolve_scene_path
+        xml_path = str(resolve_scene_path(robot_name))
+        console.print(f"[cyan]解析场景路径: {xml_path}[/cyan]")
 
     console.print(f"[cyan]模型文件: {xml_path}[/cyan]")
 
     console.print("\n[bold cyan]创建环境[/bold cyan]")
     if args.env_type == "walking":
-        env = create_walking_env(xml_path=xml_path, verbose=False)
+        env = create_walking_env(
+            xml_path=xml_path, robot_name=args.robot_name or "gaoda_jiyuan", verbose=False)
         console.print(f"  ✓ 环境类型: 行走环境 (WalkingEnv)")
     else:
-        env = create_velocity_tracking_env(xml_path=xml_path, verbose=False)
+        env = create_velocity_tracking_env(
+            xml_path=xml_path, robot_name=args.robot_name or "gaoda_jiyuan", verbose=False)
         console.print(f"  ✓ 环境类型: 速度跟踪环境 (VelocityTrackingEnv)")
     console.print(f"  ✓ obs={env.observation_size}, act={env.action_size}")
 
