@@ -4,7 +4,7 @@
 
 # ==================== 场景配置 ====================
 robot_name: gaoda_jiyuan
-scene: jiyuan_scene
+scene: flat_terrain
 env_type: walking
 
 # ==================== 自定义课程学习配置 ====================
