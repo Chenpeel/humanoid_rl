@@ -294,6 +294,7 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
                 "value": value,
                 "reward": new_e_state.reward,
                 "done": new_e_state.done,
+                "info": new_e_state.info,  # Capture info at each step
             }
             return (state, new_e_state, rng), transition
 
@@ -311,6 +312,7 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
         values = transitions["value"]
         rewards = transitions["reward"]
         dones = transitions["done"]
+        # transitions["info"] is automatically stacked by jax.lax.scan
 
         _, _, last_value = network.apply(train_state.params, env_state.obs)
         values_with_last = jp.concatenate([values, last_value[None, :]], axis=0)
@@ -343,10 +345,14 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
             "mean_advantage": jp.mean(advantages),
         }
 
-        if env_state.info:
-            for key, value in env_state.info.items():
-                if key not in info:
-                    info[key] = jp.mean(value)
+        # Calculate mean for each info key captured during rollout
+        if "info" in transitions:
+            # DEBUG: Print info keys and mean values
+            # jax.debug.print("Info Keys: {}", list(transitions["info"].keys()))
+            for key, val in transitions["info"].items():
+                mean_val = jp.mean(val)
+                # jax.debug.print("Key: {}, Mean: {}", key, mean_val)
+                info[key] = mean_val
 
         return batch, env_state, info
 
