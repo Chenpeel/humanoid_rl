@@ -1,8 +1,3 @@
-""
-可视化MJCF模型脚本
-用于查看和测试机器人的MJCF模型
-支持热刷新: 修改并保存XML文件后自动重新加载
-""
 
 import argparse
 import os
@@ -27,12 +22,13 @@ def apply_stabilization(model: mujoco.MjModel, data: mujoco.MjData) -> None:
 
     model.opt.integrator = mujoco.mjtIntegrator.mjINT_IMPLICIT
     model.opt.timestep = min(model.opt.timestep, 0.01)
-    model.opt.gravity[:] = 0.0
+    # model.opt.gravity[:] = 0.0
 
     mujoco.mj_resetData(model, data)
     mujoco.mj_forward(model, data)
 
 # --------------------------------------------------------------------------------------------
+
 
 def get_include_files(xml_path: Path) -> list[Path]:
     """递归获取所有被 <include> 标签引用的文件路径"""
@@ -50,6 +46,7 @@ def get_include_files(xml_path: Path) -> list[Path]:
     return includes
 
 # --------------------------------------------------------------------------------------------
+
 
 def get_last_modified_time(files: list[Path]) -> float:
     """获取一组文件中最新的修改时间"""
@@ -175,7 +172,8 @@ def main():
         default="assets/xmls/models/jiyuan_fit.xml",
         help="MJCF文件路径",
     )
-    parser.add_argument("--no-interactive", action="store_true", help="禁用交互式查看器")
+    parser.add_argument("--no-interactive",
+                        action="store_true", help="禁用交互式查看器")
     args = parser.parse_args()
 
     visualize_mjcf(args.xml, interactive=not args.no_interactive)

@@ -115,23 +115,27 @@ class BaseCurriculum(ABC):
     def apply_to_env(self, env, current_step: int, env_state=None):
         """将当前阶段配置应用到环境
 
+        关键修复: 课程学习只修改环境类的属性(在JIT外部),
+        绝不修改EnvState(在JIT内部),以保证JAX JIT/vmap兼容性。
+
         Args:
             env: 环境实例
             current_step: 当前训练步数
-            env_state: 可选的环境状态,如果提供则返回更新后的状态
+            env_state: 可选的环境状态(已废弃,为了向后兼容保留)
 
         Returns:
-            如果提供了env_state,返回更新后的EnvState;否则返回None
+            None (不再返回修改后的state)
         """
         stage = self.get_stage(current_step)
+        # 修改环境类的属性(在JIT外部)
         env.reward_weights = stage.reward_weights.copy()
         for key, value in stage.env_config.items():
             if hasattr(env, key):
                 setattr(env, key, value)
 
-        # 如果提供了env_state,返回更新后的状态
-        if env_state is not None:
-            return env_state.replace(reward_weights=stage.reward_weights.copy())
+        # 关键修复: 不再修改EnvState.reward_weights
+        # 原因: reward_weights是Python字典,不是JAX数组,
+        # 在JIT编译内部会被视为静态tracer,导致vmap失败
         return None
 
     # --------------------------------------------------------------------------------------------

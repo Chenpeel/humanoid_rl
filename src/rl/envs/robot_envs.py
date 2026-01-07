@@ -666,7 +666,6 @@ class StandingEnv(MJXBaseEnv):
             rng=state.rng,
             last_action=state.last_action,
             info=info,
-            reward_weights=self.reward_weights.copy(),
         )
 
     # --------------------------------------------------------------------------------------------
@@ -1046,7 +1045,6 @@ class WalkingEnv(MJXBaseEnv):
             rng=rng,
             last_action=state.last_action,
             info=info,
-            reward_weights=self.reward_weights.copy(),
         )
 
     # --------------------------------------------------------------------------------------------
@@ -1291,7 +1289,7 @@ class WalkingEnv(MJXBaseEnv):
             contact_history=contact_history,
             target_velocity=target_vel,
             target_height=self.target_height,
-            reward_weights=prev_state.reward_weights,
+            reward_weights=self.reward_weights,
         )
 
     # --------------------------------------------------------------------------------------------
@@ -1360,7 +1358,7 @@ class WalkingEnv(MJXBaseEnv):
         reward, reward_info = self._compute_reward(
             state, action, pipeline_state)
         done = self._is_done(state, pipeline_state)
-        termination_penalty = state.reward_weights.get("termination", 0.0)
+        termination_penalty = self.reward_weights.get("termination", 0.0)
 
         # 记录终止惩罚（仅在摔倒时应用）
         reward_info["reward/termination"] = jp.where(
@@ -1389,7 +1387,6 @@ class WalkingEnv(MJXBaseEnv):
             rng=state.rng,
             last_action=action,
             info=info,
-            reward_weights=state.reward_weights,  # 保持 reward_weights
         )
 
     # --------------------------------------------------------------------------------------------

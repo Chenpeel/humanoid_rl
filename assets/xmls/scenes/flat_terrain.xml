@@ -8,7 +8,7 @@
 
   <!-- 包含机器人模型定义 -->
   <!-- 这将导入机器人的 visual, default, asset, worldbody(base_link), actuator, sensor 等 -->
-  <include file="../models/jiyuan_fit.xml"/>
+  <include file="../models/jiyuan_fit.xml" />
 
   <worldbody>
     <!-- 光照 -->
