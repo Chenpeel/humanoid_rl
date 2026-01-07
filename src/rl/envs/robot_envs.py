@@ -302,6 +302,7 @@ class VelocityTrackingEnv(MJXBaseEnv):
             joint_pos = qpos[indices]
             qpos = qpos.at[indices].set(joint_pos + joint_noise)
 
+        # 关键修正：确保初始速度为零，防止初始随机化导致的高速弹射
         qvel = jp.zeros(self.nv)
         data = data.replace(qpos=qpos, qvel=qvel)
         data = mjx.forward(self.mjx_model, data)
