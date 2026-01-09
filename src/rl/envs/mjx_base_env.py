@@ -196,6 +196,20 @@ class MJXBaseEnv:
         self.control_dt = self.dt * self.frame_skip
         self.control_freq = 1.0 / self.control_dt
 
+        # 将归一化动作 [-1, 1] 映射到 MuJoCo actuator ctrlrange
+        # 许多模型的 ctrlrange 远大于 1（例如 [-8, 8]），直接传入会导致控制不足、频繁摔倒。
+        ctrlrange = jp.array(model.actuator_ctrlrange)
+        ctrllimited = jp.array(model.actuator_ctrllimited).astype(jp.bool_)
+        low = ctrlrange[:, 0]
+        high = ctrlrange[:, 1]
+        mid = 0.5 * (low + high)
+        half_range = 0.5 * (high - low)
+
+        self._ctrl_mid = jp.where(ctrllimited, mid, 0.0)
+        self._ctrl_scale = jp.where(ctrllimited, half_range, 1.0)
+        self._ctrl_low = jp.where(ctrllimited, low, -jp.inf)
+        self._ctrl_high = jp.where(ctrllimited, high, jp.inf)
+
     # --------------------------------------------------------------------------------------------
 
     def _display_model_info(self):
@@ -331,8 +345,13 @@ class MJXBaseEnv:
         Returns:
             新的mjx.Data
         """
+        # 将归一化动作映射到 actuator ctrlrange
+        action = jp.clip(action, -1.0, 1.0)
+        ctrl = self._ctrl_mid + self._ctrl_scale * action
+        ctrl = jp.clip(ctrl, self._ctrl_low, self._ctrl_high)
+
         # 设置控制输入
-        data = pipeline_state.replace(ctrl=action)
+        data = pipeline_state.replace(ctrl=ctrl)
 
         # 执行仿真步
         data = mjx.step(self.mjx_model, data)
