@@ -712,11 +712,37 @@ def main():
         video_recorder=None,
         video_config=None,
     ):
+        nonlocal train_step_jit
         metrics_logger.log_dict(info)
         if update_callback:
             update_callback(0, info)
 
         for update in range(1, config.num_updates):
+            if curriculum is not None:
+                prev_stage = curriculum.current_stage
+                curriculum.apply_to_env(env, update * config.batch_size)
+                if curriculum.current_stage != prev_stage:
+                    console.print(
+                        "[yellow]检测到课程阶段切换：重新编译JIT以应用新的环境/奖励配置...[/yellow]"
+                    )
+                    t_compile = time.time()
+                    train_step_fn = create_train_step_fn(
+                        config=config,
+                        env=env,
+                        network=network,
+                        optimizer=optimizer,
+                    )
+                    train_step_jit = jax.jit(train_step_fn)
+                    try:
+                        train_step_jit.lower(train_state, env_state).compile()
+                        console.print(
+                            f"[green]✓ 阶段切换编译完成 (耗时: {time.time() - t_compile:.2f}s)[/green]"
+                        )
+                    except Exception as e:
+                        console.print(
+                            f"[yellow]警告: 阶段切换预编译失败，将在下一次调用时自动编译: {e}[/yellow]"
+                        )
+
             if update == 1:
                 # 首次迭代显示
                 from rich.console import Console
@@ -745,9 +771,6 @@ def main():
                         target=update_timer, daemon=True)
                     timer_thread.start()
 
-                    if curriculum is not None:
-                        # 课程学习更新(在JIT外部修改env.reward_weights)
-                        curriculum.apply_to_env(env, update * config.batch_size)
                     train_state, env_state, info = train_step_jit(
                         train_state, env_state
                     )
@@ -762,9 +785,6 @@ def main():
                 )
             else:
                 # 正常迭代
-                if curriculum is not None:
-                    # 课程学习更新(在JIT外部修改env.reward_weights)
-                    curriculum.apply_to_env(env, update * config.batch_size)
                 train_state, env_state, info = train_step_jit(
                     train_state, env_state)
                 jax.block_until_ready(train_state)
