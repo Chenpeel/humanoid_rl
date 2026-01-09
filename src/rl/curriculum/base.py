@@ -194,6 +194,14 @@ class ConfigurableCurriculum(BaseCurriculum):
         if "stages" in self._raw_config and isinstance(
             self._raw_config["stages"], list
         ):
+            # 关键：统一所有阶段的 reward_weights 键集合，保证 JAX pytree 结构一致
+            # 否则在阶段切换时新增/缺失 reward/* 键会导致 jax.lax.scan 报错。
+            all_reward_keys: set[str] = set()
+            for stage_def in self._raw_config["stages"]:
+                stage_weights = stage_def.get("reward_weights", {})
+                if isinstance(stage_weights, dict):
+                    all_reward_keys.update(stage_weights.keys())
+
             stages = []
             raw_stages = self._raw_config["stages"]
 
@@ -211,11 +219,15 @@ class ConfigurableCurriculum(BaseCurriculum):
                 current_env_config = self._global_env_config.copy()
                 current_env_config.update(stage_def.get("env_config", {}))
 
+                stage_reward_weights = stage_def["reward_weights"]
+                reward_weights = {k: 0.0 for k in all_reward_keys}
+                reward_weights.update(stage_reward_weights)
+
                 stages.append(
                     CurriculumStage(
                         name=stage_def.get("name", f"Stage_{i+1}"),
                         step_range=(start_step, end_step),
-                        reward_weights=stage_def["reward_weights"],
+                        reward_weights=reward_weights,
                         env_config=current_env_config,
                         description=stage_def.get("description", ""),
                     )
