@@ -690,4 +690,12 @@
     <exclude body1="right_thigh_link" body2="left_thigh_link" />
     <exclude body1="right_shin_link" body2="left_shin_link" />
   </contact>
+
+  <!-- Keyframes -->
+  <!-- `home` is used by the environments as the default pose if present. -->
+  <!-- Slightly lowered base_z to start in contact (reduces initial free-fall). -->
+  <keyframe>
+    <key name="home"
+      qpos="0 0 0.986 0.70710678 0.70710678 0 0  0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0" />
+  </keyframe>
 </mujoco>
