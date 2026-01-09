@@ -319,7 +319,9 @@ def main():
 
     # PPO参数
     parser.add_argument(
-        "--num-epochs", type=int, default=yaml_config.get("num-epochs", 4)
+        "--num-epochs",
+        type=int,
+        default=yaml_config.get("num_epochs", yaml_config.get("num-epochs", 4)),
     )
     parser.add_argument(
         "--num-minibatches", type=int, default=yaml_config.get("num_minibatches", 4)
