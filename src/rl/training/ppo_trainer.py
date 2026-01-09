@@ -195,6 +195,7 @@ class PPOTrainer:
             "mean_reward": jp.mean(rewards),
             "mean_value": jp.mean(values),
             "mean_advantage": jp.mean(advantages),
+            "done_rate": jp.mean(dones.astype(jp.float32)),
         }
 
         if env_state.info:
@@ -393,6 +394,7 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
             "mean_reward": jp.mean(rewards),
             "mean_value": jp.mean(values),
             "mean_advantage": jp.mean(advantages),
+            "done_rate": jp.mean(dones.astype(jp.float32)),
         }
 
         # Calculate mean for each info key captured during rollout
