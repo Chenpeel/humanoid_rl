@@ -12,7 +12,9 @@ SHELL := /bin/bash
 PYTHON := python
 PROJECT_ROOT := $(shell pwd)
 LOG_DIR := $(PROJECT_ROOT)/logs
-MAKELOG_DIR := $(LOG_DIR)/makelog
+# Make命令执行日志固定写入项目根目录下的logs/makelog，
+# 避免用户覆写LOG_DIR（如指定某次训练run目录/某个checkpoint文件）导致日志目录解析失败。
+MAKELOG_DIR := $(PROJECT_ROOT)/logs/makelog
 CACHE_DIR := $(PROJECT_ROOT)/.jax_cache
 TRAIN_SCRIPT := scripts/train.py
 EVAL_SCRIPT := scripts/eval.py
@@ -25,9 +27,6 @@ CONFIG_QUICK := configs/quick_test/train.yaml
 # 日志时间戳生成函数
 TIMESTAMP := $(shell date '+%Y%m%d_%H%M%S')
 MAKELOG_FILE = $(MAKELOG_DIR)/$(1)_$(TIMESTAMP).log
-
-# 创建日志目录
-$(shell mkdir -p $(MAKELOG_DIR))
 
 # ==================== 帮助信息 ====================
 
@@ -42,7 +41,7 @@ help:
 	@echo "训练命令（自动课程学习）："
 	@echo "  make train                标准训练（2048 envs，200M steps，约8-12小时）"
 	@echo "  make train-long           长时间训练（4096 envs，500M steps，约24-48小时）"
-	@echo "  make train-test           快速测试（128 envs，1M steps，约5-10分钟）"
+	@echo "  make train-test           测试训练（256 envs，16M steps，约3-5小时）"
 	@echo "  make train-custom CONFIG=path/to/config.yaml  自定义配置训练"
 	@echo ""
 	@echo "课程学习机制："
@@ -106,6 +105,7 @@ check-env:
 
 train:
 	@LOGFILE="$(call MAKELOG_FILE,train)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
 	echo "=== 标准训练（自动课程学习）==="; \
 	echo "配置: $(CONFIG_TRAIN)"; \
 	echo "环境数: 2048，总步数: 200M"; \
@@ -132,6 +132,7 @@ train:
 
 train-long:
 	@LOGFILE="$(call MAKELOG_FILE,train-long)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
 	echo "=== 长时间训练（自动课程学习）==="; \
 	echo "配置: $(CONFIG_LONG)"; \
 	echo "环境数: 4096，总步数: 500M"; \
@@ -158,12 +159,13 @@ train-long:
 	echo "结束时间: $$(date)"
 
 train-test:
-	@LOGFILE="$(call MAKELOG_FILE,train-test)"; \
-	echo "=== 快速测试（自动课程学习）==="; \
-	echo "配置: $(CONFIG_QUICK)"; \
-	echo "环境数: 128，总步数: 1M"; \
-	echo "预计时间: 5-10分钟"; \
-	echo "日志文件: $$LOGFILE"; \
+		@LOGFILE="$(call MAKELOG_FILE,train-test)"; \
+		mkdir -p "$$(dirname "$$LOGFILE")"; \
+		echo "=== 快速测试（自动课程学习）==="; \
+		echo "配置: $(CONFIG_QUICK)"; \
+		echo "环境数: 256，总步数: 16M"; \
+		echo "预计时间: 3-5小时（含首次JIT编译开销）"; \
+		echo "日志文件: $$LOGFILE"; \
 	echo ""; \
 	{ \
 		echo "=== 测试日志 ==="; \
@@ -192,6 +194,7 @@ train-custom:
 		exit 1; \
 	fi
 	@LOGFILE="$(call MAKELOG_FILE,train-custom)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
 	echo "=== 自定义配置训练 ==="; \
 	echo "配置: $(CONFIG)"; \
 	echo "日志文件: $$LOGFILE"; \
@@ -231,6 +234,7 @@ eval:
 		exit 1; \
 	fi
 	@LOGFILE="$(call MAKELOG_FILE,eval)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
 	echo "=== 评估模型 ==="; \
 	echo "检查点: $(CKPT)"; \
 	echo "日志文件: $$LOGFILE"; \
@@ -278,6 +282,7 @@ play:
 		exit 1; \
 	fi
 	@LOGFILE="$(call MAKELOG_FILE,play)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
 	echo "=== 播放策略（仅可视化）==="; \
 	echo "检查点: $(CKPT)"; \
 	echo "日志文件: $$LOGFILE"; \
@@ -322,6 +327,23 @@ play:
 
 tensorboard:
 	@LOGFILE="$(call MAKELOG_FILE,tensorboard)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
+	TB_INPUT="$(LOG_DIR)"; \
+	TB_SEARCH="$$TB_INPUT"; \
+	if [ ! -e "$$TB_SEARCH" ]; then \
+		echo "错误: 指定的LOG_DIR不存在: $$TB_INPUT"; \
+		echo "示例: make tensorboard LOG_DIR=logs  # 监控全部训练"; \
+		echo "示例: make tensorboard LOG_DIR=logs/train/ppo_YYYYMMDD_HHMMSS  # 监控单次run"; \
+		exit 1; \
+	fi; \
+	if [ -f "$$TB_SEARCH" ]; then TB_SEARCH="$$(dirname "$$TB_SEARCH")"; fi; \
+	TB_LOGDIR=""; \
+	TB_UP="$$TB_SEARCH"; \
+	while [ "$$TB_UP" != "/" ] && [ -n "$$TB_UP" ]; do \
+		if [ -d "$$TB_UP/checkpoints" ]; then TB_LOGDIR="$$TB_UP"; break; fi; \
+		TB_UP="$$(dirname "$$TB_UP")"; \
+	done; \
+	if [ -z "$$TB_LOGDIR" ]; then TB_LOGDIR="$$TB_SEARCH"; fi; \
 	echo "=== 启动TensorBoard ==="; \
 	echo "访问: http://localhost:6006"; \
 	echo "日志文件: $$LOGFILE"; \
@@ -329,9 +351,9 @@ tensorboard:
 		echo "=== TensorBoard日志 ==="; \
 		echo "命令: make tensorboard"; \
 		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
-		echo "监控目录: $(LOG_DIR)/train/"; \
+		echo "监控目录: $$TB_LOGDIR/"; \
 		echo ""; \
-		FORCE_COLOR=1 tensorboard --logdir=$(LOG_DIR)/train --host=0.0.0.0 --port=6006 2>&1; \
+		FORCE_COLOR=1 tensorboard --logdir="$$TB_LOGDIR" --host=127.0.0.1 --port=6006 2>&1; \
 		EXIT_CODE=$$?; \
 		echo ""; \
 		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
@@ -366,7 +388,8 @@ clean-train:
 
 clean-makelog:
 	@echo "=== 清理Make执行日志 ==="
-	rm -rf $(MAKELOG_DIR)/*
+	rm -rf $(MAKELOG_DIR)
+	mkdir -p $(MAKELOG_DIR)
 	@echo "✓ Make日志已清空"
 
 clean-logs:

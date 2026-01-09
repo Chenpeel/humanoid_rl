@@ -71,10 +71,47 @@ class Logger:
 
                 self.writer = SummaryWriter(log_dir=str(self.log_dir), flush_secs=10)
                 self.disabled = False
-            except ImportError:
-                self.writer = None
-                self.disabled = True
-                print(f"警告: TensorBoard未安装，日志将被禁用")
+            except Exception as torch_exc:
+                try:
+                    from tensorboard.compat.proto import event_pb2, summary_pb2
+                    from tensorboard.summary.writer.event_file_writer import EventFileWriter
+
+                    class _TBEventWriter:
+                        def __init__(self, log_dir: Path, flush_secs: float = 10.0):
+                            self._writer = EventFileWriter(
+                                str(log_dir),
+                                flush_secs=flush_secs,
+                            )
+
+                        def add_scalar(self, tag: str, scalar_value: float, global_step: int):
+                            summary = summary_pb2.Summary(
+                                value=[
+                                    summary_pb2.Summary.Value(
+                                        tag=tag,
+                                        simple_value=float(scalar_value),
+                                    )
+                                ]
+                            )
+                            event = event_pb2.Event(
+                                wall_time=time.time(),
+                                step=int(global_step),
+                                summary=summary,
+                            )
+                            self._writer.add_event(event)
+
+                        def close(self):
+                            self._writer.close()
+
+                    self.writer = _TBEventWriter(self.log_dir, flush_secs=10.0)
+                    self.disabled = False
+                except Exception as tb_exc:
+                    self.writer = None
+                    self.disabled = True
+                    print(
+                        "警告: TensorBoard日志将被禁用（缺少写入依赖）。"
+                        f" torch.utils.tensorboard 导入错误: {torch_exc};"
+                        f" tensorboard EventFileWriter 导入错误: {tb_exc}"
+                    )
         else:
             self.writer = None
             self.disabled = True

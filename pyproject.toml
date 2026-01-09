@@ -43,7 +43,7 @@ dependencies = [
 
 [project.optional-dependencies]
 tensorboard = [
-    "torch",  # 用于 TensorBoard 日志，建议安装 CPU 版本
+    "tensorboard>=2.12.0",  # 用于 TensorBoard 日志写入/可视化
 ]
 
 [build-system]
