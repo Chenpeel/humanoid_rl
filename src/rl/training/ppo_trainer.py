@@ -103,13 +103,14 @@ class PPOTrainer:
             std = jp.maximum(std, 1e-6)
 
             action = mean + std * jax.random.normal(action_rng, mean.shape)
-            action = jp.clip(action, -10.0, 10.0)
+            # Align with env-side action bounds to avoid log-prob/transition mismatch.
+            action = jp.clip(action, -1.0, 1.0)
 
             action_diff = jp.clip((action - mean) / std, -100.0, 100.0)
             log_prob = -0.5 * jp.sum(
                 action_diff**2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
             )
-            log_prob = jp.clip(log_prob, -1000.0, 100.0)
+            log_prob = jp.clip(log_prob, -100.0, 100.0)
 
             new_e_state = self.env.batch_step(e_state, action)
 
@@ -277,13 +278,14 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
             std = jp.maximum(std, 1e-6)
 
             action = mean + std * jax.random.normal(action_rng, mean.shape)
-            action = jp.clip(action, -10.0, 10.0)
+            # Align with env-side action bounds to avoid log-prob/transition mismatch.
+            action = jp.clip(action, -1.0, 1.0)
 
             action_diff = jp.clip((action - mean) / std, -100.0, 100.0)
             log_prob = -0.5 * jp.sum(
                 action_diff**2 + 2 * log_std + jp.log(2 * jp.pi), axis=-1
             )
-            log_prob = jp.clip(log_prob, -1000.0, 100.0)
+            log_prob = jp.clip(log_prob, -100.0, 100.0)
 
             new_e_state = env.batch_step(e_state, action)
 
