@@ -9,19 +9,11 @@ import sys
 import time
 from pathlib import Path
 
-import jax
-import jax.numpy as jp
-import numpy as np
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.table import Table
-
-from rl.envs import create_velocity_tracking_env, create_walking_env
-from rl.models import ActorCriticNetwork
-from rl.utils import (InteractiveViewer, MujocoRenderer, create_video_writer,
-                      save_frame_to_video)
 
 # 屏蔽 MuJoCo warp 警告
 _original_stderr = sys.stderr
@@ -149,11 +141,27 @@ def evaluate_policy(
     num_episodes: int = 10,
     render: bool = False,
     render_interval: int = 1,
+    viewer_sleep: float = 0.0,
     save_video: bool = False,
     video_path: str = None,
+    video_fps: int = 50,
+    render_width: int = 1280,
+    render_height: int = 720,
+    camera_name: str = "track",
+    debug_first_n_steps: int = 0,
     max_steps: int = 1000,
 ):
     """评估策略"""
+    import jax
+    import jax.numpy as jp
+    import numpy as np
+    from rl.utils import (
+        InteractiveViewer,
+        MujocoRenderer,
+        create_video_writer,
+        save_frame_to_video,
+    )
+
     console.print(
         Panel.fit(
             f"[bold cyan]评估策略[/bold cyan]\n"
@@ -176,12 +184,22 @@ def evaluate_policy(
 
             mj_model = env.mj_model
             renderer = MujocoRenderer(
-                mj_model, width=1280, height=720, camera_name="track"
+                mj_model,
+                width=render_width,
+                height=render_height,
+                camera_name=camera_name,
             )
-            console.print("[green]✓ 离线渲染器已创建（使用 track 相机）[/green]")
+            console.print(
+                f"[green]✓ 离线渲染器已创建（使用 {camera_name} 相机）[/green]"
+            )
 
             if video_path:
-                video_writer = create_video_writer(video_path, fps=50)
+                video_writer = create_video_writer(
+                    video_path,
+                    fps=video_fps,
+                    width=render_width,
+                    height=render_height,
+                )
                 console.print(f"[green]✓ 视频写入器已创建: {video_path}[/green]")
         else:
             try:
@@ -197,13 +215,24 @@ def evaluate_policy(
                 console.print("[cyan]使用离线渲染器...[/cyan]")
                 mj_model = env.mj_model
                 renderer = MujocoRenderer(
-                    mj_model, width=1280, height=720, camera_name="track"
+                    mj_model,
+                    width=render_width,
+                    height=render_height,
+                    camera_name=camera_name,
                 )
                 console.print("[green]✓ 离线渲染器已创建[/green]")
 
     episode_returns = []
     episode_lengths = []
     rng = jax.random.PRNGKey(42)
+
+    def _eval_step(state):
+        mean, _, _ = network.apply(params, state.obs)
+        action = mean
+        new_state = env.step(state, action)
+        return new_state, action
+
+    eval_step = jax.jit(_eval_step)
 
     try:
         with Progress(
@@ -231,11 +260,9 @@ def evaluate_policy(
                 step_count = 0
 
                 while not done and step_count < max_steps:
-                    mean, log_std, _ = network.apply(
-                        params, env_state.obs[None, :])
-                    action = mean[0]
+                    env_state, action = eval_step(env_state)
 
-                    if step_count < 10:
+                    if debug_first_n_steps and step_count < debug_first_n_steps:
                         qpos_np = np.array(env_state.pipeline_state.qpos)
                         qvel_np = np.array(env_state.pipeline_state.qvel)
                         console.print(
@@ -248,7 +275,6 @@ def evaluate_policy(
                             f"    vel=[{qvel_np[0]:.3f}, {qvel_np[1]:.3f}, {qvel_np[2]:.3f}]"
                         )
 
-                    env_state = env.step(env_state, action)
                     episode_return += float(env_state.reward)
                     episode_length += 1
                     done = bool(env_state.done)
@@ -264,7 +290,8 @@ def evaluate_policy(
                             mj_data_for_viewer.qvel[:] = qvel_np
                             mujoco.mj_forward(viewer.model, mj_data_for_viewer)
                             viewer.update(mj_data_for_viewer)
-                            time.sleep(0.02)
+                            if viewer_sleep > 0:
+                                time.sleep(viewer_sleep)
 
                         elif renderer:
                             import mujoco
@@ -348,13 +375,32 @@ def main():
         help="渲染间隔（0=不渲染，N=每N步渲染一次，默认=1）",
     )
     parser.add_argument(
-        "--save-video", action="store_true", default=True, help="保存视频（默认开启）"
+        "--viewer-sleep",
+        type=float,
+        default=0.0,
+        help="交互式查看器每帧sleep秒数（用于限速；默认0=不sleep）",
     )
-    parser.add_argument(
+    video_group = parser.add_mutually_exclusive_group()
+    video_group.add_argument("--save-video", dest="save_video",
+                             action="store_true", help="保存视频")
+    video_group.add_argument(
         "--no-save-video", dest="save_video", action="store_false", help="不保存视频"
     )
+    parser.set_defaults(save_video=False)
     parser.add_argument(
         "--video-path", type=str, default="eval_video.mp4", help="视频保存路径"
+    )
+    parser.add_argument("--video-fps", type=int,
+                        default=50, help="保存视频FPS（仅--save-video时有效）")
+    parser.add_argument("--render-width", type=int, default=1280, help="渲染宽度")
+    parser.add_argument("--render-height", type=int, default=720, help="渲染高度")
+    parser.add_argument("--camera-name", type=str,
+                        default="track", help="MuJoCo相机名称")
+    parser.add_argument(
+        "--debug-first-n-steps",
+        type=int,
+        default=0,
+        help="调试：每个episode前N步打印action/rwd/qpos/qvel（默认0=不打印）",
     )
     parser.add_argument("--max-steps", type=int,
                         default=1000, help="每个episode最大步数")
@@ -380,6 +426,17 @@ def main():
     )
     parser.add_argument("--cpu", action="store_true",
                         help="使用CPU运行（避免GPU冲突，速度较慢）")
+    parser.add_argument(
+        "--no-jax-prealloc",
+        action="store_true",
+        help="禁用JAX预分配显存（降低显存占用，可能影响性能；需在导入jax前设置）",
+    )
+    parser.add_argument(
+        "--jax-mem-fraction",
+        type=float,
+        default=None,
+        help="设置JAX显存占用比例(0~1)，例如0.5（需在导入jax前设置）",
+    )
     parser.add_argument("--seed", type=int, default=42, help="随机种子")
     parser.add_argument(
         "--robot-name",
@@ -390,11 +447,17 @@ def main():
 
     args = parser.parse_args()
 
+    if args.no_jax_prealloc:
+        os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+    if args.jax_mem_fraction is not None:
+        os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(args.jax_mem_fraction)
     if args.cpu:
-        import os
-
         os.environ["JAX_PLATFORMS"] = "cpu"
         console.print("[yellow]使用 CPU 模式运行（速度较慢）[/yellow]")
+
+    import jax
+    from rl.envs import create_velocity_tracking_env, create_walking_env
+    from rl.models import ActorCriticNetwork
 
     console.print(
         Panel.fit(
@@ -496,6 +559,12 @@ def main():
         render_interval=args.render,
         save_video=args.save_video,
         video_path=args.video_path,
+        video_fps=args.video_fps,
+        render_width=args.render_width,
+        render_height=args.render_height,
+        camera_name=args.camera_name,
+        viewer_sleep=args.viewer_sleep,
+        debug_first_n_steps=args.debug_first_n_steps,
         max_steps=args.max_steps,
     )
 

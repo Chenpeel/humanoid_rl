@@ -4,7 +4,9 @@
 
 # ==================== 场景配置 ====================
 robot_name: gaoda_jiyuan
-scene: flat_terrain
+scene: jiyuan_scene
+# robot_name: unitree_h1
+# scene: h1_scene
 env_type: walking
 
 # ==================== 自定义课程学习配置 ====================

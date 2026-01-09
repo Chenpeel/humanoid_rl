@@ -58,6 +58,22 @@ make tensorboard
 
 ```bash
 make eval CKPT=logs/train/ppo_*/checkpoints/best_model
+make eval CKPT=... RENDER=0                 # 不渲染（最快）
+make eval CKPT=... RENDER=10                # 每10步渲染（加速）
+make eval CKPT=... SAVE_VIDEO=1 VIDEO_PATH=eval.mp4  # 保存视频（较慢）
+```
+
+### 仅可视化播放（不评估）
+
+```bash
+make play CKPT=logs/train/ppo_*/checkpoints/best_model
+# 或直接运行:
+python scripts/play.py --checkpoint logs/train/ppo_*/checkpoints/best_model --render 1 --realtime
+
+# 保存视频（可选）
+make play CKPT=... SAVE_VIDEO=1 VIDEO_PATH=play.mp4 VIDEO_FPS=50
+# 指定模型XML路径（可选）
+make play CKPT=... XML_PATH=assets/xmls/scenes/flat_terrain.xml
 ```
 
 ## 目录结构

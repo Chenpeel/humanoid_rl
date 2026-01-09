@@ -1,4 +1,4 @@
-<mujoco model="jiyuan_fit">
+<mujoco model="jiyuan">
   <compiler angle="radian" meshdir="assets" autolimits="true" />
 
   <default>

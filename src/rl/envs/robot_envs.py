@@ -223,12 +223,16 @@ class VelocityTrackingEnv(MJXBaseEnv):
             home_key_id = mujoco.mj_name2id(
                 model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
-                self.default_qpos = jp.array(
-                    model.key_qpos[
-                        home_key_id * model.nq: (home_key_id + 1) * model.nq
-                    ]
-                )
-        except:
+                key_qpos = model.key_qpos
+                if getattr(key_qpos, "ndim", 1) == 2:
+                    self.default_qpos = jp.array(key_qpos[home_key_id]).reshape(-1)
+                else:
+                    self.default_qpos = jp.array(
+                        key_qpos[
+                            home_key_id * model.nq: (home_key_id + 1) * model.nq
+                        ]
+                    ).reshape(-1)
+        except Exception:
             pass
 
     # --------------------------------------------------------------------------------------------
@@ -677,11 +681,15 @@ class StandingEnv(MJXBaseEnv):
             home_key_id = mujoco.mj_name2id(
                 model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
-                self.default_qpos = jp.array(
-                    model.key_qpos[
-                        home_key_id * model.nq: (home_key_id + 1) * model.nq
-                    ]
-                )
+                key_qpos = model.key_qpos
+                if getattr(key_qpos, "ndim", 1) == 2:
+                    self.default_qpos = jp.array(key_qpos[home_key_id]).reshape(-1)
+                else:
+                    self.default_qpos = jp.array(
+                        key_qpos[
+                            home_key_id * model.nq: (home_key_id + 1) * model.nq
+                        ]
+                    ).reshape(-1)
         except Exception:
             pass
 
@@ -855,6 +863,9 @@ class StandingEnv(MJXBaseEnv):
             base_angvel = jp.zeros(3)
 
         torques = pipeline_state.qfrc_actuator
+        qpos_indices = jp.array(self.actuator_qpos_indices)
+        joint_pos = qpos[qpos_indices]
+        joint_pos_default = self.default_qpos[qpos_indices]
 
         reward_params = {
             "torso_z": torso_z,
@@ -864,6 +875,8 @@ class StandingEnv(MJXBaseEnv):
             "action": action,
             "last_action": prev_state.last_action,
             "torques": torques,
+            "joint_pos": joint_pos,
+            "joint_pos_default": joint_pos_default,
             "target_height": self.target_height,
             "reward_weights": self.reward_weights,
         }
@@ -1080,11 +1093,15 @@ class WalkingEnv(MJXBaseEnv):
             home_key_id = mujoco.mj_name2id(
                 model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key_id >= 0:
-                self.default_qpos = jp.array(
-                    model.key_qpos[
-                        home_key_id * model.nq: (home_key_id + 1) * model.nq
-                    ]
-                )
+                key_qpos = model.key_qpos
+                if getattr(key_qpos, "ndim", 1) == 2:
+                    self.default_qpos = jp.array(key_qpos[home_key_id]).reshape(-1)
+                else:
+                    self.default_qpos = jp.array(
+                        key_qpos[
+                            home_key_id * model.nq: (home_key_id + 1) * model.nq
+                        ]
+                    ).reshape(-1)
         except Exception:
             pass
 
@@ -1346,6 +1363,7 @@ class WalkingEnv(MJXBaseEnv):
         qvel_indices = jp.array(self.actuator_qvel_indices)
         joint_pos = qpos[qpos_indices]
         joint_vel = qvel[qvel_indices]
+        joint_pos_default = self.default_qpos[qpos_indices]
 
         try:
             if hasattr(self, "actuator_joint_ids"):
@@ -1388,6 +1406,7 @@ class WalkingEnv(MJXBaseEnv):
             feet_velocities=feet_velocities,
             joint_pos=joint_pos,
             joint_vel=joint_vel,
+            joint_pos_default=joint_pos_default,
             joint_limits=joint_limits,
             contact_history=contact_history,
             target_velocity=target_vel,

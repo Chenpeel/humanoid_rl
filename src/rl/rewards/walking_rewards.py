@@ -493,14 +493,64 @@ def compute_feet_contact_forces_reward(
 
 
 def compute_joint_symmetry_reward(
-    joint_pos: jax.Array, tolerance: float = 0.1
+    joint_pos: jax.Array, tolerance: float = 0.1, mirror_signs: Optional[jax.Array] = None
 ) -> jax.Array:
-    """关节对称性奖励 (左右腿对称)"""
+    """关节对称性奖励 (左右腿镜像对称)
+
+    注意：Jiyuan 的部分左右关节在 MJCF 中轴向相反（例如 hip_roll/knee/ankle_roll/toe），
+    直接比较 right == left 会反向驱动这些关节，容易出现“两条腿同向歪斜/髋部扭曲”的坏解。
+
+    Args:
+        joint_pos: 关节位置 [batch, n_joints] 或 [n_joints]
+        tolerance: 对称误差容忍度
+        mirror_signs: 可选的左右镜像符号 (shape=[n_joints_per_leg])，
+            用于把 left_leg 映射到 right_leg 的符号空间：right ≈ left * mirror_signs。
+            若为 None 且每条腿 8 关节，则使用 Jiyuan 默认符号：
+            [hip_pitch, hip_yaw, hip_roll, knee, ankle_pitch, ankle_roll, ankle_yaw, toe]
+            = [ +, +, -, -, +, -, +, - ]。
+    """
+    joint_pos = jp.asarray(joint_pos)
+    if joint_pos.shape[-1] % 2 != 0:
+        symmetry_error = jp.mean(jp.abs(joint_pos), axis=-1)
+        return jp.exp(-symmetry_error / tolerance)
+
     num_joints_per_leg = joint_pos.shape[-1] // 2
     right_leg = joint_pos[..., :num_joints_per_leg]
     left_leg = joint_pos[..., num_joints_per_leg:]
-    symmetry_error = jp.mean(jp.abs(right_leg - left_leg), axis=-1)
+
+    if mirror_signs is None:
+        if num_joints_per_leg == 8:
+            mirror_signs = jp.array([1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, -1.0])
+        else:
+            mirror_signs = jp.ones((num_joints_per_leg,))
+    else:
+        mirror_signs = jp.asarray(mirror_signs, dtype=jp.float32)
+
+    broadcast_shape = (1,) * (right_leg.ndim - 1) + (num_joints_per_leg,)
+    mirror_signs = mirror_signs.reshape(broadcast_shape)
+    left_leg_mirrored = left_leg * mirror_signs
+
+    symmetry_error = jp.mean(jp.abs(right_leg - left_leg_mirrored), axis=-1)
     return jp.exp(-symmetry_error / tolerance)
+
+
+# ---------------------------------------------------------------------------------------------
+
+
+def compute_joint_deviation_penalty(
+    joint_pos: jax.Array,
+    joint_pos_default: jax.Array,
+    indices: Optional[jax.Array] = None,
+) -> jax.Array:
+    """关节姿态偏离惩罚 (保持接近默认/home pose)"""
+    joint_pos = jp.asarray(joint_pos)
+    joint_pos_default = jp.asarray(joint_pos_default)
+    if indices is not None:
+        indices = jp.asarray(indices)
+        joint_pos = joint_pos[..., indices]
+        joint_pos_default = joint_pos_default[..., indices]
+    diff = joint_pos - joint_pos_default
+    return jp.mean(jp.square(diff), axis=-1)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -576,6 +626,7 @@ def compute_walking_reward(
     feet_velocities: Optional[jax.Array] = None,
     joint_pos: Optional[jax.Array] = None,
     joint_vel: Optional[jax.Array] = None,
+    joint_pos_default: Optional[jax.Array] = None,
     joint_limits: Optional[tuple] = None,
     contact_history: Optional[jax.Array] = None,
     command: jax.Array = None,
@@ -701,7 +752,7 @@ def compute_walking_reward(
 
     if "trunk_lin_vel_z" in weights:
         # 惩罚垂直方向速度（防止跳跃）
-        vertical_vel_penalty = jp.square(base_linvel[2])
+        vertical_vel_penalty = jp.square(base_linvel[..., 2])
         val = weights["trunk_lin_vel_z"] * vertical_vel_penalty
         reward += val
         reward_info["reward/trunk_lin_vel_z"] = val
@@ -735,6 +786,29 @@ def compute_walking_reward(
             val = jp.array(0.0)
         reward += val
         reward_info["reward/joint_symmetry"] = val
+
+    if "joint_deviation" in weights:
+        if joint_pos is not None and joint_pos_default is not None:
+            val = weights["joint_deviation"] * compute_joint_deviation_penalty(
+                joint_pos, joint_pos_default
+            )
+        else:
+            val = jp.array(0.0)
+        reward += val
+        reward_info["reward/joint_deviation"] = val
+
+    if "hip_deviation" in weights:
+        if joint_pos is not None and joint_pos_default is not None:
+            # actuator 顺序假设：右腿8个 + 左腿8个
+            # [hip_pitch, hip_yaw, hip_roll, knee, ankle_pitch, ankle_roll, ankle_yaw, toe]
+            hip_indices = jp.array([0, 1, 2, 8, 9, 10])
+            val = weights["hip_deviation"] * compute_joint_deviation_penalty(
+                joint_pos, joint_pos_default, indices=hip_indices
+            )
+        else:
+            val = jp.array(0.0)
+        reward += val
+        reward_info["reward/hip_deviation"] = val
 
     if "stumbling" in weights:
         if feet_positions is not None and feet_velocities is not None:

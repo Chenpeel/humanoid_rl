@@ -19,6 +19,8 @@ trunk_lin_vel_z: -1.0 # 防止跳跃
 action_rate: -0.02   # 鼓励平滑动作
 torques: -0.0002     # 限制扭矩
 joint_limits: -0.2   # 防止关节超限
+hip_deviation: -0.05 # 抑制髋部偏置/歪斜（相对home pose）
+joint_deviation: -0.01 # 抑制整体关节姿态漂移（相对home pose）
 
 # 暂时禁用的项（设为0.0）
 forward_velocity: 0.0

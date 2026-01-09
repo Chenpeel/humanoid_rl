@@ -26,6 +26,8 @@ stages:
       action_rate: -0.02
       torques: -0.0002
       joint_limits: -0.2
+      hip_deviation: -0.05
+      joint_deviation: -0.01
       # 禁用项
       forward_velocity: 0.0
       gait_symmetry: 0.0
@@ -63,6 +65,8 @@ stages:
       action_rate: -0.01
       torques: -0.0001
       joint_symmetry: 0.2
+      hip_deviation: -0.02
+      joint_deviation: -0.005
       stumbling: -0.5
 
   # ==================== 阶段 3: 全速行走 (150k+) ====================
@@ -99,5 +103,7 @@ stages:
       energy_efficiency: 0.001
       joint_symmetry: 0.15
       joint_limits: -0.1
+      hip_deviation: -0.01
+      joint_deviation: -0.002
       landing_impact: 0.2
       stability: 0.1

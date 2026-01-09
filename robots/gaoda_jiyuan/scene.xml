@@ -1,4 +1,4 @@
-<mujoco model="flat_terrain">
+<mujoco model="gaoda_jiyuan_scene">
   <include file="jiyuan.xml" />
   <statistic center="0 0 1" extent="1.8" />
   <visual>
@@ -29,8 +29,11 @@
     <camera name="top" pos="0 0 8" xyaxes="1 0 0 0 1 0" />
   </worldbody>
 
+
+  <!-- 关键帧 放在Scene中 -->
   <keyframe>
-    <!-- 标准站立姿态：高度1.00m，避免初始穿模 -->
     <key name="home" qpos="0 0 1.00  0.70710678 0.70710678 0 0  0 0 0 0 0 0 0 0  0 0 0 0 0 0 0 0" />
   </keyframe>
+
+
 </mujoco>

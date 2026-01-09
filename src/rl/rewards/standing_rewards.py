@@ -5,7 +5,7 @@
 侧重于高度保持、垂直姿态和最小化关节动作。
 """
 
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import jax
 import jax.numpy as jp
@@ -158,6 +158,25 @@ def compute_velocity_penalty(
     return penalties["lin_vel_penalty"] + penalties["ang_vel_penalty"]
 
 
+# ---------------------------------------------------------------------------------------------
+
+
+def compute_joint_deviation_penalty(
+    joint_pos: jax.Array,
+    joint_pos_default: jax.Array,
+    indices: Optional[jax.Array] = None,
+) -> jax.Array:
+    """关节姿态偏离惩罚 (保持接近默认/home pose)"""
+    joint_pos = jp.asarray(joint_pos)
+    joint_pos_default = jp.asarray(joint_pos_default)
+    if indices is not None:
+        indices = jp.asarray(indices)
+        joint_pos = joint_pos[..., indices]
+        joint_pos_default = joint_pos_default[..., indices]
+    diff = joint_pos - joint_pos_default
+    return jp.mean(jp.square(diff), axis=-1)
+
+
 # =============================================================================================
 # ===================================== END: 基础奖励分量 =======================================
 # =============================================================================================
@@ -178,6 +197,8 @@ def compute_standing_reward(
     torques: jax.Array,
     target_height: float,
     reward_weights: Dict[str, float],
+    joint_pos: Optional[jax.Array] = None,
+    joint_pos_default: Optional[jax.Array] = None,
 ) -> Tuple[jax.Array, Dict[str, jax.Array]]:
     """计算完整的站立平衡奖励
 
@@ -237,6 +258,28 @@ def compute_standing_reward(
         weighted = reward_weights["torques"] * torque_penalty
         reward += weighted
         reward_info["reward/torques"] = weighted
+
+    # 8. 站立姿态正则（防止髋部长期偏置/歪斜）
+    if "joint_deviation" in reward_weights:
+        if joint_pos is not None and joint_pos_default is not None:
+            weighted = reward_weights["joint_deviation"] * compute_joint_deviation_penalty(
+                joint_pos, joint_pos_default
+            )
+        else:
+            weighted = jp.array(0.0)
+        reward += weighted
+        reward_info["reward/joint_deviation"] = weighted
+
+    if "hip_deviation" in reward_weights:
+        if joint_pos is not None and joint_pos_default is not None:
+            hip_indices = jp.array([0, 1, 2, 8, 9, 10])
+            weighted = reward_weights["hip_deviation"] * compute_joint_deviation_penalty(
+                joint_pos, joint_pos_default, indices=hip_indices
+            )
+        else:
+            weighted = jp.array(0.0)
+        reward += weighted
+        reward_info["reward/hip_deviation"] = weighted
 
     return reward, reward_info
 

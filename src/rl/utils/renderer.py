@@ -36,7 +36,24 @@ class MujocoRenderer:
         self.width = width
         self.height = height
 
-        self.renderer = mujoco.Renderer(model, height=height, width=width)
+        try:
+            global_vis = model.vis.global_
+            offwidth = int(getattr(global_vis, "offwidth", 0) or 0)
+            offheight = int(getattr(global_vis, "offheight", 0) or 0)
+            if width > offwidth or height > offheight:
+                global_vis.offwidth = max(offwidth, width)
+                global_vis.offheight = max(offheight, height)
+        except Exception:
+            pass
+
+        try:
+            self.renderer = mujoco.Renderer(model, height=height, width=width)
+        except ValueError as e:
+            raise ValueError(
+                f"{e}\n\n提示: 渲染分辨率 {width}x{height} 需要 XML 中的 offscreen framebuffer "
+                "至少同样大，可在模型 XML 添加:\n"
+                "<visual><global offwidth=\"...\" offheight=\"...\"/></visual>"
+            ) from e
 
         if camera_id is not None:
             self.renderer.camera_id = camera_id

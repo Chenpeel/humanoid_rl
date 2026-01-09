@@ -29,6 +29,7 @@ env/
 
 # 临时文件
 *.tmp
+*.mp4
 .DS_Store
 *.egg-info
 .abandoned/

@@ -1,7 +1,7 @@
 # Makefile for JRL - JAX Reinforcement Learning Training
 # 用于管理机器人训练（自动课程学习）
 
-.PHONY: help install train train-long train-test train-quick eval clean clean-cache clean-logs clean-train clean-makelog clean-all
+.PHONY: help install train train-long train-test train-quick eval play clean clean-cache clean-logs clean-train clean-makelog clean-all
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
@@ -52,10 +52,15 @@ help:
 	@echo "  - 奖励权重和环境参数自动切换，无需手动干预"
 	@echo ""
 	@echo "评估命令："
-	@echo "  make eval CKPT=path/to/checkpoint         评估模型（默认渲染+保存视频）"
+	@echo "  make eval CKPT=path/to/checkpoint         评估模型（默认渲染，不保存视频）"
 	@echo "  make eval CKPT=... CPU=1                   使用CPU评估"
-	@echo "  make eval CKPT=... NO_VIDEO=1              不保存视频"
+	@echo "  make eval CKPT=... RENDER=0                不渲染（最快）"
+	@echo "  make eval CKPT=... RENDER=10               每10步渲染（加速）"
+	@echo "  make eval CKPT=... SAVE_VIDEO=1            保存视频（较慢）"
+	@echo "  make eval CKPT=... NO_VIDEO=1              明确不保存视频"
 	@echo "  make eval CKPT=... ENV_TYPE=walking        指定环境类型"
+	@echo "  make eval CKPT=... ROBOT_NAME=unitree_h1   指定机器人模型"
+	@echo "  make play CKPT=...                         仅可视化播放（不评估）"
 	@echo ""
 	@echo "开发工具："
 	@echo "  make tensorboard          启动TensorBoard"
@@ -219,8 +224,10 @@ eval:
 		echo "示例: make eval CKPT=logs/ppo_*/checkpoints/best_model"; \
 		echo "示例: make eval CKPT=models/xxx ENV_TYPE=walking"; \
 		echo "示例: make eval CKPT=models/xxx CPU=1  # 使用CPU避免GPU冲突"; \
-		echo "示例: make eval CKPT=models/xxx NO_VIDEO=1  # 实时查看器（不保存视频）"; \
-		echo "示例: make eval CKPT=models/xxx RENDER=10  # 每10步渲染"; \
+		echo "示例: make eval CKPT=models/xxx RENDER=0  # 不渲染（最快）"; \
+		echo "示例: make eval CKPT=models/xxx RENDER=10  # 每10步渲染（加速）"; \
+		echo "示例: make eval CKPT=models/xxx SAVE_VIDEO=1 VIDEO_PATH=eval.mp4  # 保存视频（较慢）"; \
+		echo "示例: make eval CKPT=models/xxx ROBOT_NAME=unitree_h1  # 指定机器人模型"; \
 		exit 1; \
 	fi
 	@LOGFILE="$(call MAKELOG_FILE,eval)"; \
@@ -235,9 +242,75 @@ eval:
 		CMD="FORCE_COLOR=1 $(PYTHON) $(EVAL_SCRIPT) --checkpoint $(CKPT)"; \
 		if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
 		if [ -n "$(CPU)" ]; then CMD="$$CMD --cpu"; echo "设备: CPU"; fi; \
+		if [ -n "$(NO_JAX_PREALLOC)" ]; then CMD="$$CMD --no-jax-prealloc"; echo "JAX预分配: 关闭"; fi; \
+		if [ -n "$(JAX_MEM_FRACTION)" ]; then CMD="$$CMD --jax-mem-fraction $(JAX_MEM_FRACTION)"; echo "JAX显存比例: $(JAX_MEM_FRACTION)"; fi; \
 		if [ -n "$(RENDER)" ]; then CMD="$$CMD --render $(RENDER)"; echo "渲染间隔: $(RENDER)"; fi; \
-		if [ -n "$(NO_VIDEO)" ]; then CMD="$$CMD --no-save-video"; echo "保存视频: 否"; fi; \
+		if [ -n "$(VIEWER_SLEEP)" ]; then CMD="$$CMD --viewer-sleep $(VIEWER_SLEEP)"; echo "viewer sleep: $(VIEWER_SLEEP)s"; fi; \
+		if [ -n "$(RENDER_WIDTH)" ]; then CMD="$$CMD --render-width $(RENDER_WIDTH)"; echo "渲染宽度: $(RENDER_WIDTH)"; \
+		elif [ -n "$(WIDTH)" ]; then CMD="$$CMD --render-width $(WIDTH)"; echo "渲染宽度: $(WIDTH)"; \
+		elif [ -n "$(WEIGHT)" ]; then CMD="$$CMD --render-width $(WEIGHT)"; echo "渲染宽度: $(WEIGHT)"; fi; \
+		if [ -n "$(RENDER_HEIGHT)" ]; then CMD="$$CMD --render-height $(RENDER_HEIGHT)"; echo "渲染高度: $(RENDER_HEIGHT)"; \
+		elif [ -n "$(HEIGHT)" ]; then CMD="$$CMD --render-height $(HEIGHT)"; echo "渲染高度: $(HEIGHT)"; fi; \
+		if [ -n "$(CAMERA_NAME)" ]; then CMD="$$CMD --camera-name $(CAMERA_NAME)"; echo "相机: $(CAMERA_NAME)"; fi; \
+		if [ -n "$(DEBUG_STEPS)" ]; then CMD="$$CMD --debug-first-n-steps $(DEBUG_STEPS)"; echo "调试步数: $(DEBUG_STEPS)"; fi; \
+		if [ -n "$(NO_VIDEO)" ]; then CMD="$$CMD --no-save-video"; echo "保存视频: 否"; \
+		elif [ -n "$(SAVE_VIDEO)" ]; then CMD="$$CMD --save-video"; echo "保存视频: 是"; fi; \
 		if [ -n "$(VIDEO_PATH)" ]; then CMD="$$CMD --video-path $(VIDEO_PATH)"; echo "视频路径: $(VIDEO_PATH)"; fi; \
+		if [ -n "$(VIDEO_FPS)" ]; then CMD="$$CMD --video-fps $(VIDEO_FPS)"; echo "视频FPS: $(VIDEO_FPS)"; fi; \
+		if [ -n "$(ROBOT_NAME)" ]; then CMD="$$CMD --robot-name $(ROBOT_NAME)"; echo "机器人名称: $(ROBOT_NAME)"; fi; \
+		echo ""; \
+		eval $$CMD 2>&1; \
+		EXIT_CODE=$$?; \
+		echo ""; \
+		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "退出码: $$EXIT_CODE"; \
+		exit $$EXIT_CODE; \
+	} 2>&1 | tee "$$LOGFILE"
+
+play:
+	@if [ -z "$(CKPT)" ]; then \
+		echo "错误: 请指定检查点路径 CKPT=..."; \
+		echo "示例: make play CKPT=logs/ppo_*/checkpoints/best_model"; \
+		echo "示例: make play CKPT=models/xxx RENDER=1 REALTIME=1"; \
+		echo "示例: make play CKPT=models/xxx RENDER=10  # 每10步渲染（加速）"; \
+		echo "示例: make play CKPT=models/xxx SAVE_VIDEO=1 VIDEO_PATH=play.mp4  # 保存视频"; \
+		echo "示例: make play CKPT=models/xxx SAVE_VIDEO=1 RENDER_WIDTH=1280 RENDER_HEIGHT=720  # 指定分辨率"; \
+		exit 1; \
+	fi
+	@LOGFILE="$(call MAKELOG_FILE,play)"; \
+	echo "=== 播放策略（仅可视化）==="; \
+	echo "检查点: $(CKPT)"; \
+	echo "日志文件: $$LOGFILE"; \
+	{ \
+		echo "=== 播放日志 ==="; \
+		echo "命令: make play CKPT=$(CKPT)"; \
+		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		CMD="FORCE_COLOR=1 $(PYTHON) scripts/play.py --checkpoint $(CKPT)"; \
+		if [ -n "$(XML_PATH)" ]; then CMD="$$CMD --xml-path $(XML_PATH)"; echo "模型: $(XML_PATH)"; fi; \
+		if [ -n "$(USE_LOCAL_MJCF)" ]; then CMD="$$CMD --use-local-mjcf"; echo "模型: local mjcf"; fi; \
+		if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
+		if [ -n "$(CPU)" ]; then CMD="$$CMD --cpu"; echo "设备: CPU"; fi; \
+		if [ -n "$(RENDER)" ]; then CMD="$$CMD --render $(RENDER)"; echo "渲染间隔: $(RENDER)"; fi; \
+		if [ -n "$(VIEWER_SLEEP)" ]; then CMD="$$CMD --viewer-sleep $(VIEWER_SLEEP)"; echo "viewer sleep: $(VIEWER_SLEEP)s"; fi; \
+		if [ -n "$(STATUS_EVERY)" ]; then CMD="$$CMD --status-every $(STATUS_EVERY)"; echo "status-every: $(STATUS_EVERY)s"; fi; \
+		if [ -n "$(REALTIME)" ]; then CMD="$$CMD --realtime"; echo "播放: realtime"; fi; \
+		if [ -n "$(EPISODES)" ]; then CMD="$$CMD --episodes $(EPISODES)"; echo "episodes: $(EPISODES)"; fi; \
+		if [ -n "$(MAX_STEPS)" ]; then CMD="$$CMD --max-steps $(MAX_STEPS)"; echo "max-steps: $(MAX_STEPS)"; fi; \
+		if [ -n "$(STOCHASTIC)" ]; then CMD="$$CMD --stochastic"; echo "动作: stochastic"; fi; \
+		if [ -n "$(NO_JIT)" ]; then CMD="$$CMD --no-jit"; echo "JIT: 关闭"; fi; \
+		if [ -n "$(SAVE_VIDEO)" ]; then CMD="$$CMD --save-video"; echo "保存视频: 是"; fi; \
+		if [ -n "$(VIDEO_PATH)" ]; then CMD="$$CMD --video-path $(VIDEO_PATH)"; echo "视频路径: $(VIDEO_PATH)"; fi; \
+		if [ -n "$(VIDEO_FPS)" ]; then CMD="$$CMD --video-fps $(VIDEO_FPS)"; echo "视频FPS: $(VIDEO_FPS)"; fi; \
+		if [ -n "$(RENDER_WIDTH)" ]; then CMD="$$CMD --render-width $(RENDER_WIDTH)"; echo "渲染宽度: $(RENDER_WIDTH)"; \
+		elif [ -n "$(WIDTH)" ]; then CMD="$$CMD --render-width $(WIDTH)"; echo "渲染宽度: $(WIDTH)"; \
+		elif [ -n "$(WEIGHT)" ]; then CMD="$$CMD --render-width $(WEIGHT)"; echo "渲染宽度: $(WEIGHT)"; fi; \
+		if [ -n "$(RENDER_HEIGHT)" ]; then CMD="$$CMD --render-height $(RENDER_HEIGHT)"; echo "渲染高度: $(RENDER_HEIGHT)"; \
+		elif [ -n "$(HEIGHT)" ]; then CMD="$$CMD --render-height $(HEIGHT)"; echo "渲染高度: $(HEIGHT)"; fi; \
+		if [ -n "$(CAMERA_NAME)" ]; then CMD="$$CMD --camera-name $(CAMERA_NAME)"; echo "相机: $(CAMERA_NAME)"; fi; \
+		if [ -n "$(RECORD_INTERVAL)" ]; then CMD="$$CMD --record-interval $(RECORD_INTERVAL)"; echo "录制间隔: $(RECORD_INTERVAL)"; fi; \
+		if [ -n "$(NO_JAX_PREALLOC)" ]; then CMD="$$CMD --no-jax-prealloc"; echo "JAX预分配: 关闭"; fi; \
+		if [ -n "$(JAX_MEM_FRACTION)" ]; then CMD="$$CMD --jax-mem-fraction $(JAX_MEM_FRACTION)"; echo "JAX显存比例: $(JAX_MEM_FRACTION)"; fi; \
+		if [ -n "$(ROBOT_NAME)" ]; then CMD="$$CMD --robot-name $(ROBOT_NAME)"; echo "机器人名称: $(ROBOT_NAME)"; fi; \
 		echo ""; \
 		eval $$CMD 2>&1; \
 		EXIT_CODE=$$?; \
