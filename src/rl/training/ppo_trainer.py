@@ -91,6 +91,12 @@ class PPOTrainer:
     ) -> Tuple[PPOBatch, EnvState, Dict[str, Any]]:
         """收集轨迹数据（rollout）"""
 
+        def _masked_where(mask: jax.Array, x: jax.Array, y: jax.Array) -> jax.Array:
+            broadcast_mask = mask
+            while broadcast_mask.ndim < x.ndim:
+                broadcast_mask = broadcast_mask[..., None]
+            return jp.where(broadcast_mask, x, y)
+
         def scan_fn(carry, _):
             """扫描函数：执行一步环境交互"""
             state, e_state, rng = carry
@@ -112,21 +118,39 @@ class PPOTrainer:
             )
             log_prob = jp.clip(log_prob, -100.0, 100.0)
 
-            new_e_state = self.env.batch_step(e_state, action)
+            stepped_e_state = self.env.batch_step(e_state, action)
+            done = stepped_e_state.done
+
+            def _reset_branch(rng_in):
+                rng_out, reset_rng = jax.random.split(rng_in)
+                reset_state = self.env.batch_reset(reset_rng, done.shape[0])
+                merged_state = jax.tree.map(
+                    lambda r, s: _masked_where(done, r, s),
+                    reset_state,
+                    stepped_e_state,
+                )
+                return merged_state, rng_out
+
+            def _no_reset_branch(rng_in):
+                return stepped_e_state, rng_in
+
+            new_e_state, rng = jax.lax.cond(
+                jp.any(done), _reset_branch, _no_reset_branch, rng
+            )
 
             transition = {
                 "obs": e_state.obs,
                 "action": action,
                 "log_prob": log_prob,
                 "value": value,
-                "reward": new_e_state.reward,
-                "done": new_e_state.done,
+                "reward": stepped_e_state.reward,
+                "done": done,
             }
 
             return (state, new_e_state, rng), transition
 
         rng, _ = train_state.split_rng()
-        _, transitions = jax.lax.scan(
+        (_, final_env_state, _), transitions = jax.lax.scan(
             scan_fn,
             init=(train_state, env_state, rng),
             xs=None,
@@ -140,7 +164,7 @@ class PPOTrainer:
         rewards = transitions["reward"]
         dones = transitions["done"]
 
-        _, _, last_value = self.network.apply(train_state.params, env_state.obs)
+        _, _, last_value = self.network.apply(train_state.params, final_env_state.obs)
         values_with_last = jp.concatenate([values, last_value[None, :]], axis=0)
 
         advantages, returns = jax.vmap(
@@ -178,7 +202,7 @@ class PPOTrainer:
                 if key not in info:
                     info[key] = jp.mean(value)
 
-        return batch, env_state, info
+        return batch, final_env_state, info
 
     # --------------------------------------------------------------------------------------------
 
@@ -268,6 +292,12 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
     """创建纯函数版本的 train_step（支持持久化缓存）"""
 
     def collect_trajectory(train_state: TrainState, env_state: EnvState):
+        def _masked_where(mask: jax.Array, x: jax.Array, y: jax.Array) -> jax.Array:
+            broadcast_mask = mask
+            while broadcast_mask.ndim < x.ndim:
+                broadcast_mask = broadcast_mask[..., None]
+            return jp.where(broadcast_mask, x, y)
+
         def scan_fn(carry, _):
             state, e_state, rng = carry
             rng, action_rng = jax.random.split(rng)
@@ -287,21 +317,39 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
             )
             log_prob = jp.clip(log_prob, -100.0, 100.0)
 
-            new_e_state = env.batch_step(e_state, action)
+            stepped_e_state = env.batch_step(e_state, action)
+            done = stepped_e_state.done
+
+            def _reset_branch(rng_in):
+                rng_out, reset_rng = jax.random.split(rng_in)
+                reset_state = env.batch_reset(reset_rng, done.shape[0])
+                merged_state = jax.tree.map(
+                    lambda r, s: _masked_where(done, r, s),
+                    reset_state,
+                    stepped_e_state,
+                )
+                return merged_state, rng_out
+
+            def _no_reset_branch(rng_in):
+                return stepped_e_state, rng_in
+
+            new_e_state, rng = jax.lax.cond(
+                jp.any(done), _reset_branch, _no_reset_branch, rng
+            )
 
             transition = {
                 "obs": e_state.obs,
                 "action": action,
                 "log_prob": log_prob,
                 "value": value,
-                "reward": new_e_state.reward,
-                "done": new_e_state.done,
-                "info": new_e_state.info,  # Capture info at each step
+                "reward": stepped_e_state.reward,
+                "done": done,
+                "info": stepped_e_state.info,  # Capture info at each step
             }
             return (state, new_e_state, rng), transition
 
         rng, _ = train_state.split_rng()
-        _, transitions = jax.lax.scan(
+        (_, final_env_state, _), transitions = jax.lax.scan(
             scan_fn,
             init=(train_state, env_state, rng),
             xs=None,
@@ -316,7 +364,7 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
         dones = transitions["done"]
         # transitions["info"] is automatically stacked by jax.lax.scan
 
-        _, _, last_value = network.apply(train_state.params, env_state.obs)
+        _, _, last_value = network.apply(train_state.params, final_env_state.obs)
         values_with_last = jp.concatenate([values, last_value[None, :]], axis=0)
 
         advantages, returns = jax.vmap(
@@ -356,7 +404,7 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
                 # jax.debug.print("Key: {}, Mean: {}", key, mean_val)
                 info[key] = mean_val
 
-        return batch, env_state, info
+        return batch, final_env_state, info
 
     def update_policy(train_state: TrainState, batch: PPOBatch):
         def loss_fn(params, mb_batch):
