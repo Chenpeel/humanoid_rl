@@ -40,8 +40,8 @@ entropy_coef: 0.02
 max_grad_norm: 0.5
 
 # ==================== 训练配置（快速测试）====================
-# 目标：本机训练 3-5 小时（按当前吞吐量大约 12M~16M env steps）
-total_timesteps: 16000000
+# 目标：本机训练 3-5 小时（含首次JIT编译开销；可按实际速度微调）
+total_timesteps: 8000000
 log_interval: 10
 eval_interval: 50
 save_interval: 100
