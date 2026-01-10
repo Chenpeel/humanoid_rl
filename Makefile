@@ -215,7 +215,7 @@ train-stand:
 			CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_STAND)"; \
 			if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
 			if [ -n "$(RESUME_FROM)" ]; then CMD="$$CMD --resume-from $(RESUME_FROM)"; echo "恢复: $(RESUME_FROM)"; fi; \
-			# 使用 script 分配 pseudo-TTY，确保 Rich Live 进度条在日志模式(tee)下也能实时刷新
+			# 使用 script 分配 pseudo-TTY，确保 Rich Live 进度条在日志模式(tee)下也能实时刷新 \
 			script -q -e -c "$$CMD" /dev/null 2>&1; \
 			EXIT_CODE=$$?; \
 		echo ""; \
