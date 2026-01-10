@@ -421,8 +421,8 @@ def main():
         "--env-type",
         type=str,
         default="walking",
-        choices=["velocity", "walking"],
-        help="环境类型: velocity=速度跟踪(61维), walking=行走任务(65维，默认)",
+        choices=["velocity", "walking", "standing"],
+        help="环境类型: velocity=速度跟踪, walking=行走, standing=站立",
     )
     parser.add_argument("--cpu", action="store_true",
                         help="使用CPU运行（避免GPU冲突，速度较慢）")
@@ -456,7 +456,7 @@ def main():
         console.print("[yellow]使用 CPU 模式运行（速度较慢）[/yellow]")
 
     import jax
-    from rl.envs import create_velocity_tracking_env, create_walking_env
+    from rl.envs import create_standing_env, create_velocity_tracking_env, create_walking_env
     from rl.models import ActorCriticNetwork
 
     console.print(
@@ -515,6 +515,11 @@ def main():
         env = create_walking_env(
             xml_path=xml_path, robot_name=args.robot_name or "gaoda_jiyuan", verbose=False)
         console.print(f"  ✓ 环境类型: 行走环境 (WalkingEnv)")
+    elif args.env_type == "standing":
+        env = create_standing_env(
+            xml_path=xml_path, robot_name=args.robot_name or "gaoda_jiyuan", verbose=False
+        )
+        console.print(f"  ✓ 环境类型: 站立环境 (StandingEnv)")
     else:
         env = create_velocity_tracking_env(
             xml_path=xml_path, robot_name=args.robot_name or "gaoda_jiyuan", verbose=False)

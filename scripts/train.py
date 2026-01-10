@@ -82,8 +82,14 @@ if True:
     from rich.panel import Panel
 
     from rl.curriculum import ConfigurableCurriculum, WalkingCurriculum
-    from rl.envs import (VelocityTrackingEnv, WalkingEnv,
-                         create_velocity_tracking_env, create_walking_env)
+    from rl.envs import (
+        StandingEnv,
+        VelocityTrackingEnv,
+        WalkingEnv,
+        create_standing_env,
+        create_velocity_tracking_env,
+        create_walking_env,
+    )
     from rl.models.networks import ActorCriticNetwork, count_parameters
     from rl.models.optimizer import create_ppo_optimizer_cosine
     from rl.training.logger import (Logger, MetricsLogger,
@@ -299,7 +305,7 @@ def main():
         "--env-type",
         type=str,
         default=yaml_config.get("env_type", "velocity"),
-        choices=["velocity", "walking"],
+        choices=["velocity", "walking", "standing"],
         help="环境类型",
     )
 
@@ -358,6 +364,12 @@ def main():
     )
     parser.add_argument(
         "--save-interval", type=int, default=yaml_config.get("save_interval", 100)
+    )
+    parser.add_argument(
+        "--resume-from",
+        type=str,
+        default=None,
+        help="从已有检查点继续训练（支持传入 checkpoint 文件，或 run/checkpoints 目录）",
     )
 
     # 优化器与网络
@@ -463,11 +475,29 @@ def main():
         env = create_walking_env(xml_path=xml_path, robot_name=robot_name)
         env_create_time = time.time() - t0
         console.print(f"✓ WalkingEnv 创建完成 (耗时: {env_create_time:.2f}s)")
+    elif args.env_type == "standing":
+        reward_weights = yaml_config.get("reward_weights")
+        if reward_weights is not None and not isinstance(reward_weights, dict):
+            console.print(
+                "[yellow]警告: reward_weights 不是字典，已忽略（standing env 可用）[/yellow]"
+            )
+            reward_weights = None
+        env = create_standing_env(
+            xml_path=xml_path, robot_name=robot_name, reward_weights=reward_weights
+        )
+        env_create_time = time.time() - t0
+        console.print(f"✓ StandingEnv 创建完成 (耗时: {env_create_time:.2f}s)")
     else:
         env = create_velocity_tracking_env(xml_path=xml_path, robot_name=robot_name)
         env_create_time = time.time() - t0
-        console.print(
-            f"✓ VelocityTrackingEnv 创建完成 (耗时: {env_create_time:.2f}s)")
+        console.print(f"✓ VelocityTrackingEnv 创建完成 (耗时: {env_create_time:.2f}s)")
+
+    # 应用 YAML env_config（对standing/velocity尤其重要；walking 后续可能被 curriculum 覆盖）
+    env_config = yaml_config.get("env_config", {})
+    if isinstance(env_config, dict) and env_config:
+        for key, value in env_config.items():
+            if hasattr(env, key):
+                setattr(env, key, value)
 
     console.print(f"  观测维度: {env.observation_size}")
     console.print(f"  动作维度: {env.action_size}")
@@ -525,6 +555,10 @@ def main():
             )
         curriculum.apply_to_env(env, current_step=0)
         console.print(f"[dim]已应用初始阶段: {curriculum.stages[0].name}[/dim]")
+    elif yaml_config.get("curriculum_file") or yaml_config.get("weights_file"):
+        console.print(
+            "[dim]提示: 当前 env_type!=walking，已忽略 curriculum_file/weights_file（仅walking支持课程学习）[/dim]"
+        )
 
     # -------------------------------- 4. 网络与优化器 --------------------------------
     console.print("\n[bold cyan]4. 创建Actor-Critic网络[/bold cyan]")
@@ -587,6 +621,62 @@ def main():
         obs_shape=(env.observation_size,),
         rng=rng,
     )
+    if args.resume_from:
+        from flax import serialization
+
+        resume_path = Path(args.resume_from)
+        if resume_path.is_dir():
+            candidates = [
+                resume_path / "best_model" / "best_model",
+                resume_path / "models",
+            ]
+            chosen = None
+            if candidates[0].exists():
+                chosen = candidates[0]
+            elif candidates[1].exists() and candidates[1].is_dir():
+                ckpts = sorted(
+                    candidates[1].glob("checkpoint_*"),
+                    key=lambda p: int(p.name.split("_")[1]),
+                )
+                if ckpts:
+                    chosen = ckpts[-1]
+            if chosen is None:
+                ckpts = sorted(
+                    resume_path.glob("checkpoint_*"),
+                    key=lambda p: int(p.name.split("_")[1]),
+                )
+                if ckpts:
+                    chosen = ckpts[-1]
+            if chosen is None:
+                raise FileNotFoundError(f"未找到可恢复的检查点: {resume_path}")
+            resume_path = chosen
+
+        with open(resume_path, "rb") as f:
+            ckpt_data = serialization.from_bytes(None, f.read())
+
+        if isinstance(ckpt_data, dict) and "params" in ckpt_data:
+            # Full resume if optimizer/rng are present, otherwise params-only.
+            if "opt_state" in ckpt_data and "rng" in ckpt_data:
+                train_state = train_state.replace(
+                    step=int(ckpt_data.get("step", 0)),
+                    env_steps=int(ckpt_data.get("env_steps", 0)),
+                    params=ckpt_data["params"],
+                    opt_state=ckpt_data["opt_state"],
+                    rng=ckpt_data["rng"],
+                )
+                console.print(f"[yellow]↻ 从检查点恢复训练: {resume_path}[/yellow]")
+            else:
+                train_state = train_state.replace(
+                    step=int(ckpt_data.get("step", 0)),
+                    env_steps=int(ckpt_data.get("env_steps", 0)),
+                    params=ckpt_data["params"],
+                )
+                console.print(
+                    f"[yellow]↻ 从参数文件恢复（不含opt_state/rng）: {resume_path}[/yellow]"
+                )
+        else:
+            raise ValueError(f"检查点格式不正确: {resume_path}")
+
     train_state_init_time = time.time() - t0
     console.print(f"✓ 训练状态初始化完成 (耗时: {train_state_init_time:.2f}s)")
 
@@ -720,7 +810,7 @@ def main():
         for update in range(1, config.num_updates):
             if curriculum is not None:
                 prev_stage = curriculum.current_stage
-                curriculum.apply_to_env(env, update * config.batch_size)
+                curriculum.apply_to_env(env, train_state.env_steps)
                 if curriculum.current_stage != prev_stage:
                     console.print(
                         "[yellow]检测到课程阶段切换：重新编译JIT以应用新的环境/奖励配置...[/yellow]"
@@ -809,8 +899,7 @@ def main():
 
             # 课程学习信息
             if curriculum is not None:
-                stage_info = curriculum.get_stage_info(
-                    update * config.batch_size)
+                stage_info = curriculum.get_stage_info(train_state.env_steps)
                 info["curriculum_stage"] = stage_info["stage_name"]
                 info["curriculum_stage_index"] = stage_info["stage_index"]
                 if stage_info["progress"] is not None:
