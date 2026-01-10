@@ -461,6 +461,9 @@ class VelocityTrackingEnv(MJXBaseEnv):
             pipeline_state = self._step_pipeline(pipeline_state, action)
 
         obs = self._get_obs(pipeline_state, action)
+        # 保持 obs 中的 command 与 state.info 一致（否则 reset 后第一步开始 command 会被 _get_obs 覆盖为 0）
+        command = state.info.get("command", jp.zeros(3))
+        obs = obs.at[-3:].set(command)
         reward, reward_info = self._compute_reward(
             state, action, pipeline_state)
         done = self._is_done(state, pipeline_state)
@@ -1145,10 +1148,11 @@ class WalkingEnv(MJXBaseEnv):
             reward_key = f"reward/{weight_key}"
             info[reward_key] = jp.array(0.0)
 
-        # 更新观测中的命令部分
-        obs = state.obs.at[
-            -3 - len(self.contact_sensor_indices): -len(self.contact_sensor_indices)
-        ].set(command)
+        # 更新观测中的命令部分（command 位于 contact_data 之前）
+        num_contacts = len(self.contact_sensor_indices)
+        if num_contacts == 0:
+            num_contacts = 4
+        obs = state.obs.at[-3 - num_contacts: -num_contacts].set(command)
 
         # 返回新的EnvState
         return EnvState(
@@ -1482,6 +1486,14 @@ class WalkingEnv(MJXBaseEnv):
             pipeline_state = self._step_pipeline(pipeline_state, action)
 
         obs = self._get_obs(pipeline_state, action)
+        # 保持 obs 中的 command 与 state.info 一致（否则 reset 后第一步开始 command 会被 _get_obs 覆盖为 target_velocity）
+        num_contacts = len(self.contact_sensor_indices)
+        if num_contacts == 0:
+            num_contacts = 4
+        command = state.info.get(
+            "command", jp.array([self.target_velocity, 0.0, 0.0])
+        )
+        obs = obs.at[-3 - num_contacts: -num_contacts].set(command)
         reward, reward_info = self._compute_reward(
             state, action, pipeline_state)
         done = self._is_done(state, pipeline_state)
