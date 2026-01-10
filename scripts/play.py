@@ -23,6 +23,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="可视化策略（仅播放，不评估）")
     parser.add_argument("--checkpoint", type=str, required=True, help="检查点路径")
     parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="训练/运行的YAML配置文件（用于复现env_config，如零速度命令/target_height/max_steps）",
+    )
+    parser.add_argument(
         "--xml-path",
         type=str,
         default=None,
@@ -35,7 +41,12 @@ def main() -> int:
     )
     parser.add_argument("--video-path", type=str,
                         default="play_video.mp4", help="视频保存路径")
-    parser.add_argument("--video-fps", type=int, default=50, help="视频FPS")
+    parser.add_argument(
+        "--video-fps",
+        type=int,
+        default=None,
+        help="视频FPS（默认自动匹配control_dt/record_interval，避免视频加速/减速）",
+    )
     parser.add_argument("--render-width", type=int, default=1280, help="渲染宽度")
     parser.add_argument("--render-height", type=int, default=720, help="渲染高度")
     parser.add_argument("--camera-name", type=str,
@@ -54,9 +65,45 @@ def main() -> int:
     parser.add_argument(
         "--env-type",
         type=str,
-        default="walking",
-        choices=["velocity", "walking"],
+        default=None,
+        choices=["velocity", "walking", "standing"],
         help="环境类型: velocity / walking",
+    )
+    parser.add_argument(
+        "--cmd-x-range",
+        type=float,
+        nargs=2,
+        default=None,
+        metavar=("MIN", "MAX"),
+        help="覆盖x方向速度命令范围（walking/velocity均适用）",
+    )
+    parser.add_argument(
+        "--cmd-y-range",
+        type=float,
+        nargs=2,
+        default=None,
+        metavar=("MIN", "MAX"),
+        help="覆盖y方向速度命令范围（walking/velocity均适用）",
+    )
+    parser.add_argument(
+        "--cmd-yaw-range",
+        type=float,
+        nargs=2,
+        default=None,
+        metavar=("MIN", "MAX"),
+        help="覆盖yaw角速度命令范围（walking/velocity均适用）",
+    )
+    parser.add_argument(
+        "--target-height",
+        type=float,
+        default=None,
+        help="覆盖target_height（仅walking适用）",
+    )
+    parser.add_argument(
+        "--env-max-steps",
+        type=int,
+        default=None,
+        help="覆盖环境episode最大步数max_steps（walking/velocity均适用）",
     )
     parser.add_argument(
         "--robot-name",
@@ -122,6 +169,21 @@ def main() -> int:
 
     args = parser.parse_args()
 
+    config_data = {}
+    if args.config:
+        try:
+            import yaml
+        except Exception as e:
+            raise RuntimeError(
+                f"无法导入yaml以读取配置文件: {e}. 请安装PyYAML或移除 --config"
+            ) from e
+        with open(args.config, "r", encoding="utf-8") as f:
+            config_data = yaml.safe_load(f) or {}
+
+    env_type = args.env_type or config_data.get("env_type") or "walking"
+    robot_name = args.robot_name or config_data.get("robot_name") or "gaoda_jiyuan"
+    env_config = config_data.get("env_config") or {}
+
     ckpt_path = Path(args.checkpoint)
     if ckpt_path.is_dir():
         best_model_file = ckpt_path / "best_model"
@@ -142,6 +204,10 @@ def main() -> int:
     # Enable persistent JAX compilation cache (reduces repeated first-step compile cost).
     # Respect user-provided env vars when set.
     project_root = Path(__file__).resolve().parent.parent
+    src_root = project_root / "src"
+    if src_root.exists():
+        sys.path.insert(0, str(src_root))
+
     cache_dir = project_root / ".jax_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("JAX_COMPILATION_CACHE_DIR", str(cache_dir))
@@ -162,7 +228,7 @@ def main() -> int:
     with contextlib.redirect_stderr(io.StringIO()):
         import mujoco
 
-        from rl.envs import create_velocity_tracking_env, create_walking_env
+        from rl.envs import create_standing_env, create_velocity_tracking_env, create_walking_env
         from rl.models import ActorCriticNetwork
         from rl.utils import (
             InteractiveViewer,
@@ -187,6 +253,15 @@ def main() -> int:
         )
     )
 
+    try:
+        import rl
+        from rl.envs import robot_envs as _robot_envs
+
+        console.print(f"[dim]rl: {rl.__file__}[/dim]")
+        console.print(f"[dim]robot_envs: {_robot_envs.__file__}[/dim]")
+    except Exception:
+        pass
+
     ckpt_config = infer_network_config_from_checkpoint(args.checkpoint)
     args_hidden_dims = tuple(ckpt_config["hidden_dims"]) if ckpt_config["hidden_dims"] else (512, 512, 256)
     args_shared_backbone = bool(ckpt_config["shared_backbone"])
@@ -195,19 +270,60 @@ def main() -> int:
     if args.use_local_mjcf:
         xml_path = "assets/xmls/scenes/flat_terrain.xml"
     elif xml_path is None:
-        robot_name = args.robot_name or "gaoda_jiyuan"
         from rl.utils.robot_config import resolve_scene_path
 
         xml_path = str(resolve_scene_path(robot_name))
 
-    if args.env_type == "walking":
+    cmd_x_range = args.cmd_x_range
+    if cmd_x_range is None and "cmd_x_range" in env_config:
+        cmd_x_range = env_config.get("cmd_x_range")
+    cmd_y_range = args.cmd_y_range
+    if cmd_y_range is None and "cmd_y_range" in env_config:
+        cmd_y_range = env_config.get("cmd_y_range")
+    cmd_yaw_range = args.cmd_yaw_range
+    if cmd_yaw_range is None and "cmd_yaw_range" in env_config:
+        cmd_yaw_range = env_config.get("cmd_yaw_range")
+
+    env_max_steps = args.env_max_steps
+    if env_max_steps is None and "max_steps" in env_config:
+        env_max_steps = env_config.get("max_steps")
+
+    env_kwargs = {}
+    if cmd_x_range is not None:
+        env_kwargs["cmd_x_range"] = tuple(cmd_x_range)
+    if cmd_y_range is not None:
+        env_kwargs["cmd_y_range"] = tuple(cmd_y_range)
+    if cmd_yaw_range is not None:
+        env_kwargs["cmd_yaw_range"] = tuple(cmd_yaw_range)
+    if env_max_steps is not None:
+        env_kwargs["max_steps"] = int(env_max_steps)
+
+    if env_type in ("walking", "standing") and args.target_height is not None:
+        env_kwargs["target_height"] = float(args.target_height)
+    elif env_type in ("walking", "standing") and "target_height" in env_config:
+        env_kwargs["target_height"] = float(env_config.get("target_height"))
+
+    if env_type == "walking":
         env = create_walking_env(
-            xml_path=xml_path, robot_name=args.robot_name or "gaoda_jiyuan", verbose=False
+            xml_path=xml_path, robot_name=robot_name, verbose=False, **env_kwargs
+        )
+    elif env_type == "standing":
+        standing_kwargs = {}
+        if "max_steps" in env_kwargs:
+            standing_kwargs["max_steps"] = env_kwargs["max_steps"]
+        if "target_height" in env_kwargs:
+            standing_kwargs["target_height"] = env_kwargs["target_height"]
+        env = create_standing_env(
+            xml_path=xml_path, robot_name=robot_name, verbose=False, **standing_kwargs
         )
     else:
         env = create_velocity_tracking_env(
-            xml_path=xml_path, robot_name=args.robot_name or "gaoda_jiyuan", verbose=False
+            xml_path=xml_path, robot_name=robot_name, verbose=False, **env_kwargs
         )
+
+    # If user didn't override max steps, prefer env.max_steps to keep playback length aligned.
+    if args.max_steps == 2000 and getattr(env, "max_steps", 2000) != 2000:
+        args.max_steps = int(env.max_steps)
 
     network = ActorCriticNetwork(
         action_dim=env.action_size,
@@ -219,7 +335,7 @@ def main() -> int:
     params, step = load_checkpoint(args.checkpoint, network, rng)
 
     console.print(
-        f"[cyan]checkpoint step={step} | env={args.env_type} | render={args.render} | "
+        f"[cyan]checkpoint step={step} | env={env_type} | robot={robot_name} | render={args.render} | "
         f"deterministic={args.deterministic}[/cyan]"
     )
 
@@ -232,6 +348,26 @@ def main() -> int:
     mj_model = env.mj_model
     mj_data = mujoco.MjData(mj_model)
 
+    record_interval = args.record_interval
+    if record_interval is None:
+        # When saving video, default to recording every control step to avoid time scaling surprises.
+        record_interval = 1 if args.save_video else (args.render if args.render and args.render > 0 else 1)
+    if args.save_video and record_interval <= 0:
+        console.print("[yellow]record-interval<=0，自动改为1以便录制[/yellow]")
+        record_interval = 1
+
+    console.print(
+        f"[dim]control_dt={getattr(env, 'control_dt', None)} dt={getattr(env, 'dt', None)} "
+        f"frame_skip={getattr(env, 'frame_skip', None)} env.max_steps={getattr(env, 'max_steps', None)}[/dim]"
+    )
+    if hasattr(env, "cmd_x_range"):
+        console.print(
+            f"[dim]cmd ranges: x={getattr(env, 'cmd_x_range', None)} y={getattr(env, 'cmd_y_range', None)} "
+            f"yaw={getattr(env, 'cmd_yaw_range', None)}[/dim]"
+        )
+    if hasattr(env, "target_height"):
+        console.print(f"[dim]target_height={getattr(env, 'target_height', None)}[/dim]")
+
     viewer = None
     if args.render > 0:
         viewer = InteractiveViewer(mj_model, mj_data)
@@ -240,6 +376,17 @@ def main() -> int:
     renderer = None
     video_writer = None
     if args.save_video:
+        # Choose a video FPS that matches simulated time when recording every N control steps.
+        # One environment step advances env.control_dt seconds.
+        control_dt = float(getattr(env, "control_dt", 0.02))
+        realtime_fps = max(1, int(round(1.0 / (control_dt * record_interval))))
+        video_fps = int(args.video_fps) if args.video_fps is not None else realtime_fps
+        speed_ratio = video_fps / float(realtime_fps) if realtime_fps > 0 else 1.0
+        console.print(
+            f"[dim]record_interval={record_interval} -> realtime_fps≈{realtime_fps} | "
+            f"video_fps={video_fps} | speed≈{speed_ratio:.2f}x[/dim]"
+        )
+
         renderer = MujocoRenderer(
             mj_model,
             width=args.render_width,
@@ -248,7 +395,7 @@ def main() -> int:
         )
         video_writer = create_video_writer(
             args.video_path,
-            fps=args.video_fps,
+            fps=video_fps,
             width=args.render_width,
             height=args.render_height,
         )
@@ -270,17 +417,15 @@ def main() -> int:
 
     step_fn = _step_fn if args.no_jit else jax.jit(_step_fn)
 
-    record_interval = args.record_interval
-    if record_interval is None:
-        record_interval = args.render if args.render and args.render > 0 else 1
-    if args.save_video and record_interval <= 0:
-        console.print("[yellow]record-interval<=0，自动改为1以便录制[/yellow]")
-        record_interval = 1
-
     try:
         for ep in range(args.episodes):
             rng, reset_rng = jax.random.split(rng)
             env_state = env.reset(reset_rng)
+            try:
+                cmd0 = jax.device_get(env_state.info.get("command"))
+                console.print(f"[dim]episode {ep+1}/{args.episodes} init command={cmd0}[/dim]")
+            except Exception:
+                pass
 
             if not args.no_jit:
                 console.print("[dim]编译JIT中（首次会较慢，请稍等一次）...[/dim]")
@@ -297,6 +442,8 @@ def main() -> int:
             steps_rendered = 0
             last_status_t = wall_start
             last_status_step = 0
+            min_base_z = float("inf")
+            min_upright_z = float("inf")
 
             for step_idx in range(args.max_steps):
                 if viewer and not viewer.is_alive():
@@ -338,9 +485,37 @@ def main() -> int:
                     continue
 
                 # Only sync device → host when we actually need to draw/record.
-                qpos_np, qvel_np = jax.device_get(
-                    (env_state.pipeline_state.qpos, env_state.pipeline_state.qvel)
+                qpos_np, qvel_np, done_np = jax.device_get(
+                    (
+                        env_state.pipeline_state.qpos,
+                        env_state.pipeline_state.qvel,
+                        env_state.done,
+                    )
                 )
+                done_host = bool(done_np)
+
+                base_addr = getattr(env, "floating_base_qpos_addr", None)
+                if base_addr is not None:
+                    base_z = float(qpos_np[int(base_addr) + 2])
+                    base_quat = qpos_np[int(base_addr) + 3: int(base_addr) + 7]
+                else:
+                    base_z = float(qpos_np[2])
+                    base_quat = qpos_np[3:7]
+
+                min_base_z = min(min_base_z, base_z)
+                # upright_z: z-component of body z-axis in world frame
+                # Apply the same fix_quat used in env termination/reward code.
+                try:
+                    qw, qx, qy, qz = [float(x) for x in base_quat]
+                    fw, fx, fy, fz = 0.70710678, -0.70710678, 0.0, 0.0
+                    rw = fw * qw - fx * qx - fy * qy - fz * qz
+                    rx = fw * qx + fx * qw + fy * qz - fz * qy
+                    ry = fw * qy - fx * qz + fy * qw + fz * qx
+                    upright_z = 1.0 - 2.0 * (rx * rx + ry * ry)
+                    min_upright_z = min(min_upright_z, float(upright_z))
+                except Exception:
+                    pass
+
                 mj_data.qpos[:] = qpos_np
                 mj_data.qvel[:] = qvel_np
                 mj_data.ctrl[:] = 0.0
@@ -380,7 +555,16 @@ def main() -> int:
                         last_status_t = now
                         last_status_step = step_idx + 1
 
-            console.print(f"[dim]episode {ep+1}/{args.episodes} finished[/dim]")
+                if done_host:
+                    console.print(
+                        f"[yellow]done=True at step={step_idx+1} | base_z={base_z:.3f} | upright_z≈{min_upright_z:.3f}[/yellow]"
+                    )
+                    break
+
+            console.print(
+                f"[dim]episode {ep+1}/{args.episodes} finished | "
+                f"min_base_z={min_base_z:.3f} | min_upright_z≈{min_upright_z:.3f}[/dim]"
+            )
     finally:
         if viewer:
             viewer.close()
