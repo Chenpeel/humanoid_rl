@@ -22,6 +22,8 @@ stages:
       upright_bonus: 1.0
       trunk_height: 1.0
       orientation: -0.5
+      lin_vel: -1.0
+      ang_vel: -0.5
       trunk_lin_vel_z: -0.5
       action_rate: -0.005
       torques: -0.0001

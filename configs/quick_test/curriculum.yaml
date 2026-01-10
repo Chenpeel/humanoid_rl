@@ -14,6 +14,8 @@ orientation: -1.5    # 严格姿态约束
 
 # 抑制移动
 trunk_lin_vel_z: -1.0 # 防止跳跃
+lin_vel: -1.0         # 抑制水平漂移（站立阶段很关键）
+ang_vel: -0.5         # 抑制角速度（roll/pitch/yaw）
 
 # 能量约束
 action_rate: -0.02   # 鼓励平滑动作
