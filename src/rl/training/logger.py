@@ -340,9 +340,19 @@ class TrainingDisplay:
         if env_steps is not None:
             lines.append(f"{ 'Total steps:':<30}{int(env_steps):,}")
 
+        env_sps = self._get_value(
+            "env_sps", "perf/env_steps_per_sec", "perf/avg_env_steps_per_sec"
+        )
+        if env_sps is not None:
+            lines.append(f"{ 'Env steps per second:':<30}{float(env_sps):.0f}")
+
         sps = self._get_value("sps", "perf/steps_per_sec", "perf/avg_steps_per_sec")
         if sps is not None:
-            lines.append(f"{ 'Steps per second:':<30}{int(sps)}")
+            lines.append(f"{ 'Updates per second:':<30}{float(sps):.3f}")
+
+        done_rate = self._get_value("done_rate", "train/done_rate")
+        if done_rate is not None:
+            lines.append(f"{ 'Done rate:':<30}{float(done_rate):.2%}")
 
         if "collection_time" in self.current_metrics:
             lines.append(
