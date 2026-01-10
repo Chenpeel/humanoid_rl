@@ -229,7 +229,7 @@ class TrainingDisplay:
         )
 
         self.live = Live(
-            self._build_content(),
+            self,
             console=console,
             refresh_per_second=4,
         )
@@ -243,13 +243,29 @@ class TrainingDisplay:
         """构建显示内容"""
         summary_text, reward_items, other_items = self._format_details_structured()
 
-        renderables = [self.progress_bar, Text(""), Text(summary_text)]
+        # Progress bar should stay visible: place it at the very top,
+        # and ensure sufficient vertical spacing before large panels.
+        renderables = [self.progress_bar, Text(""), Text(""), Text(summary_text)]
 
         if other_items:
             renderables.append(Text(""))
             renderables.append(self._render_kv_table("Details", other_items, columns=1))
 
         if reward_items:
+            renderables.append(Text(""))
+            renderables.append(Text(""))
+            if self.start_time:
+                import time
+
+                elapsed = time.time() - self.start_time
+                renderables.append(
+                    Text(
+                        f"正在执行... 已用时: {self._format_hms(elapsed)}",
+                        style="bold yellow",
+                    )
+                )
+            else:
+                renderables.append(Text("正在执行...", style="bold yellow"))
             renderables.append(Text(""))
             renderables.append(
                 self._render_kv_table(
@@ -259,22 +275,31 @@ class TrainingDisplay:
 
         return Group(*renderables)
 
+    def __rich__(self):
+        # Let Rich Live refresh rebuild the content periodically, so timers/elapsed
+        # lines continue updating even when the training step is compiling/running.
+        return self._build_content()
+
     def _render_kv_table(self, title: str, items: list[tuple[str, float]], columns: int):
         columns = max(1, int(columns))
-        grid = Table.grid(padding=(0, 2))
-        for _ in range(columns):
-            grid.add_column(justify="left", ratio=1)
-            grid.add_column(justify="right", width=12)
+        grid = Table.grid(padding=(0, 1))
+        for group_idx in range(columns):
+            if group_idx > 0:
+                grid.add_column(width=6)  # spacer between groups
+            grid.add_column(justify="left", ratio=1, no_wrap=True)
+            grid.add_column(justify="right", width=14)
 
         def _pad_row(row: list[str]) -> list[str]:
-            target = columns * 2
+            target = columns * 2 + (columns - 1)
             if len(row) < target:
-                row.extend(["", ""] * ((target - len(row)) // 2))
+                row.extend([""] * (target - len(row)))
             return row
 
         for i in range(0, len(items), columns):
             row = []
-            for name, value in items[i : i + columns]:
+            for group_idx, (name, value) in enumerate(items[i : i + columns]):
+                if group_idx > 0:
+                    row.append("")
                 row.append(str(name))
                 row.append(f"{float(value):.4f}")
             grid.add_row(*_pad_row(row))
@@ -457,7 +482,7 @@ class TrainingDisplay:
                 self.progress_bar.update(self.progress_task_id, completed=epoch)
         if metrics:
             self.current_metrics = metrics.copy()
-        self.live.update(self._build_content())
+        self.live.update(self)
 
     def stop(self):
         if self.started:

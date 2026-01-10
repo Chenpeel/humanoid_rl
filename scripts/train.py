@@ -834,45 +834,9 @@ def main():
                         )
 
             if update == 1:
-                # 首次迭代显示
-                from rich.console import Console
-                from rich.live import Live
-                from rich.text import Text
-                import threading
-
-                _console = Console()
-                _console.print("\n[yellow]⚙️  首次循环迭代中...[/yellow]")
-
-                # 使用 Live 显示实时更新的计时
-                t0 = time.time()
-                stop_timer = threading.Event()
-
-                def get_timer_text():
-                    elapsed = time.time() - t0
-                    return Text(f"正在执行... 已用时: {elapsed:.1f}s", style="bold yellow")
-
-                with Live(get_timer_text(), console=_console, refresh_per_second=10) as live:
-                    def update_timer():
-                        while not stop_timer.is_set():
-                            live.update(get_timer_text())
-                            time.sleep(0.1)
-
-                    timer_thread = threading.Thread(
-                        target=update_timer, daemon=True)
-                    timer_thread.start()
-
-                    train_state, env_state, info = train_step_jit(
-                        train_state, env_state
-                    )
-                    jax.block_until_ready(train_state)
-
-                    stop_timer.set()
-                    timer_thread.join(timeout=0.5)
-
-                first_iter_time = time.time() - t0
-                _console.print(
-                    f"[green]✓ 首次迭代完成 (耗时: {first_iter_time:.2f}s)[/green]\n"
-                )
+                # 首次迭代通常包含额外编译/缓存开销；避免创建额外 Live，防止与训练进度 UI 冲突
+                train_state, env_state, info = train_step_jit(train_state, env_state)
+                jax.block_until_ready(train_state)
             else:
                 # 正常迭代
                 train_state, env_state, info = train_step_jit(
