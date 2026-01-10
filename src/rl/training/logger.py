@@ -208,6 +208,7 @@ class TrainingDisplay:
         total: int,
         steps_per_epoch: int = 1,
         description: str = "PPO训练",
+        reward_columns: int = 2,
     ):
         self.console = console
         self.total = total
@@ -216,6 +217,7 @@ class TrainingDisplay:
         self.start_time = None
         self.warmup_steps = 2
         self.current_metrics = {}
+        self.reward_columns = max(1, int(reward_columns))
 
         self.progress_bar = Progress(
             TextColumn("  "),
@@ -239,12 +241,49 @@ class TrainingDisplay:
 
     def _build_content(self):
         """构建显示内容"""
-        details_text = self._format_details()
-        return Group(Text(details_text), Text(""), self.progress_bar)
+        summary_text, reward_items, other_items = self._format_details_structured()
 
-    def _format_details(self):
-        """格式化详情信息"""
-        lines = []
+        renderables = [self.progress_bar, Text(""), Text(summary_text)]
+
+        if other_items:
+            renderables.append(Text(""))
+            renderables.append(self._render_kv_table("Details", other_items, columns=1))
+
+        if reward_items:
+            renderables.append(Text(""))
+            renderables.append(
+                self._render_kv_table(
+                    "Rewards", reward_items, columns=self.reward_columns
+                )
+            )
+
+        return Group(*renderables)
+
+    def _render_kv_table(self, title: str, items: list[tuple[str, float]], columns: int):
+        columns = max(1, int(columns))
+        grid = Table.grid(padding=(0, 2))
+        for _ in range(columns):
+            grid.add_column(justify="left", ratio=1)
+            grid.add_column(justify="right", width=12)
+
+        def _pad_row(row: list[str]) -> list[str]:
+            target = columns * 2
+            if len(row) < target:
+                row.extend(["", ""] * ((target - len(row)) // 2))
+            return row
+
+        for i in range(0, len(items), columns):
+            row = []
+            for name, value in items[i : i + columns]:
+                row.append(str(name))
+                row.append(f"{float(value):.4f}")
+            grid.add_row(*_pad_row(row))
+
+        return Panel(grid, title=title, border_style="dim", box=box.ROUNDED)
+
+    def _format_details_structured(self):
+        """格式化详情信息（结构化，便于多列展示）"""
+        lines: list[str] = []
 
         if self.start_time:
             import time
@@ -270,7 +309,7 @@ class TrainingDisplay:
             lines.append(
                 f"{ 'Current iteration:':<30}{self.current_epoch}/{self.total}"
             )
-            return "\n".join(lines)
+            return "\n".join(lines), [], []
 
         env_steps = self._get_value("env_steps", "perf/total_env_steps")
         if env_steps is not None:
@@ -329,7 +368,8 @@ class TrainingDisplay:
         if lr is not None:
             lines.append(f"{ 'Learning rate:':<30}{lr:.6f}")
 
-        detail_lines = []
+        reward_items: list[tuple[str, float]] = []
+        other_items: list[tuple[str, float]] = []
         for key in sorted(self.current_metrics.keys()):
             if any(
                 key.startswith(prefix)
@@ -352,6 +392,7 @@ class TrainingDisplay:
                 ):
                     value = self.current_metrics[key]
                     display_key = key
+                    is_reward = False
                     for prefix in [
                         "train/Episode_Reward/",
                         "train/Metrics/",
@@ -366,14 +407,18 @@ class TrainingDisplay:
                     ]:
                         if key.startswith(prefix):
                             display_key = key[len(prefix) :]
+                            if prefix in {"train/reward/", "reward/"}:
+                                is_reward = True
                     display_key = display_key.replace("_", " ")
-                    detail_lines.append(f"{display_key:<30}{float(value):.4f}")
+                    if isinstance(value, (int, float, jp.ndarray)):
+                        if isinstance(value, jp.ndarray):
+                            value = float(value)
+                        if is_reward:
+                            reward_items.append((display_key, float(value)))
+                        else:
+                            other_items.append((display_key, float(value)))
 
-        if detail_lines:
-            lines.append("")
-            lines.extend(detail_lines)
-
-        return "\n".join(lines)
+        return "\n".join(lines), reward_items, other_items
 
     # --------------------------------------------------------------------------------------------
 
