@@ -253,6 +253,8 @@ def compute_standing_reward(
     )
 
     for key, weight in reward_weights.items():
+        if weight == 0.0:
+            continue
         component = STANDING_REWARD_REGISTRY.get(key, None)
         if component is None:
             weighted = _zeros_like_reward(ctx)

@@ -397,6 +397,11 @@ def compute_energy_efficiency_reward(
     Returns:
         能量效率惩罚 [batch]
     """
+    # Robustness: some robots have extra actuators without corresponding joint_vel entries.
+    # Align shapes by truncating both to the common prefix length.
+    n = min(torques.shape[-1], joint_vel.shape[-1])
+    torques = torques[..., :n]
+    joint_vel = joint_vel[..., :n]
     power = jp.abs(torques * joint_vel)
     return jp.sum(power, axis=-1)
 
@@ -827,22 +832,24 @@ def compute_walking_reward(
     )
 
     # 速度项需要保持“二选一”的旧行为：若启用 velocity_tracking 且 command 可用则优先使用。
-    if "velocity_tracking" in weights and command is not None:
+    vt_w = weights.get("velocity_tracking", 0.0)
+    fv_w = weights.get("forward_velocity", 0.0)
+    if vt_w != 0.0 and command is not None:
         if actual_velocity is None:
             val = _zeros_like_reward(ctx)
         else:
             val = compute_velocity_tracking_reward(actual_velocity, command)
-        weighted = weights["velocity_tracking"] * val
+        weighted = vt_w * val
         reward += weighted
         reward_info["reward/velocity_tracking"] = weighted
-    elif "forward_velocity" in weights:
+    elif fv_w != 0.0:
         val = compute_forward_velocity_reward(base_linvel, target_velocity)
-        weighted = weights["forward_velocity"] * val
+        weighted = fv_w * val
         reward += weighted
         reward_info["reward/forward_velocity"] = weighted
 
     for key, weight in weights.items():
-        if key in {"velocity_tracking", "forward_velocity"}:
+        if key in {"velocity_tracking", "forward_velocity"} or weight == 0.0:
             continue
         component = WALKING_REWARD_REGISTRY.get(key, None)
         if component is None:

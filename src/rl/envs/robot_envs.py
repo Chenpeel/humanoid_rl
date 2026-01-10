@@ -203,6 +203,7 @@ class VelocityTrackingEnv(MJXBaseEnv):
                 break
 
         # 执行器关节地址
+        self.actuator_indices = []
         self.actuator_joint_ids = []
         self.actuator_qpos_indices = []
         self.actuator_qvel_indices = []
@@ -210,6 +211,7 @@ class VelocityTrackingEnv(MJXBaseEnv):
         for i in range(model.nu):
             trnid = model.actuator_trnid[i, 0]
             if trnid >= 0:
+                self.actuator_indices.append(i)
                 joint_id = trnid
                 self.actuator_joint_ids.append(joint_id)
                 qpos_addr = model.jnt_qposadr[joint_id]
@@ -1392,6 +1394,8 @@ class WalkingEnv(MJXBaseEnv):
 
         contact_history = prev_state.info.get("contact_history", None)
         torques = pipeline_state.qfrc_actuator
+        if getattr(self, "actuator_indices", None):
+            torques = torques[jp.array(self.actuator_indices)]
         command = prev_state.info.get(
             "command", jp.array([self.target_velocity, 0.0, 0.0])
         )
