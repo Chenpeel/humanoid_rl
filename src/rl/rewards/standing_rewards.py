@@ -5,10 +5,15 @@
 侧重于高度保持、垂直姿态和最小化关节动作。
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, NamedTuple, Optional, Tuple
 
 import jax
 import jax.numpy as jp
+
+from .components import (compute_action_rate_penalty, compute_ang_vel_penalty,
+                         compute_joint_deviation_penalty as _compute_joint_deviation_penalty,
+                         compute_lin_vel_penalty, compute_torque_penalty,
+                         normalize_quaternion, quat_to_euler)
 
 # =============================================================================================
 # ======================================= 默认奖励权重 =========================================
@@ -60,57 +65,8 @@ def check_standing_termination(
 
 
 # =============================================================================================
-# ========================================= 数学工具函数 ========================================
-# =============================================================================================
-
-
-def quat_to_euler(quat: jax.Array) -> jax.Array:
-    """四元数转欧拉角 [roll, pitch, yaw]"""
-    w, x, y, z = quat[..., 0], quat[..., 1], quat[..., 2], quat[..., 3]
-    sinr_cosp = 2 * (w * x + y * z)
-    cosr_cosp = 1 - 2 * (x * x + y * y)
-    roll = jp.arctan2(sinr_cosp, cosr_cosp)
-    sinp = 2 * (w * y - z * x)
-    pitch = jp.where(jp.abs(sinp) >= 1, jp.sign(sinp) * jp.pi / 2, jp.arcsin(sinp))
-    siny_cosp = 2 * (w * z + x * y)
-    cosy_cosp = 1 - 2 * (y * y + z * z)
-    yaw = jp.arctan2(siny_cosp, cosy_cosp)
-    return jp.stack([roll, pitch, yaw], axis=-1)
-
-
-# ---------------------------------------------------------------------------------------------
-
-
-def normalize_quaternion(quat: jax.Array) -> jax.Array:
-    """归一化四元数"""
-    norm = jp.linalg.norm(quat, axis=-1, keepdims=True)
-    return jp.where(norm > 1e-8, quat / norm, jp.array([1.0, 0.0, 0.0, 0.0]))
-
-
-# =============================================================================================
-# ======================================= END: 数学工具函数  ===================================
-# =============================================================================================
-
-
-# =============================================================================================
 # ======================================= 基础奖励分量 ===========================================
 # =============================================================================================
-
-
-def compute_action_rate_penalty(action: jax.Array, last_action: jax.Array) -> jax.Array:
-    """计算动作变化率惩罚"""
-    return jp.sum(jp.square(action - last_action), axis=-1)
-
-
-# ---------------------------------------------------------------------------------------------
-
-
-def compute_torque_penalty(torques: jax.Array) -> jax.Array:
-    """计算扭矩惩罚"""
-    return jp.sum(jp.square(torques), axis=-1)
-
-
-# ---------------------------------------------------------------------------------------------
 
 
 def compute_height_reward(
@@ -142,8 +98,8 @@ def compute_velocity_penalties(
 ) -> Dict[str, jax.Array]:
     """计算速度惩罚（鼓励静止）"""
     return {
-        "lin_vel_penalty": jp.sum(jp.square(base_linvel), axis=-1),
-        "ang_vel_penalty": jp.sum(jp.square(base_angvel), axis=-1),
+        "lin_vel_penalty": compute_lin_vel_penalty(base_linvel),
+        "ang_vel_penalty": compute_ang_vel_penalty(base_angvel),
     }
 
 
@@ -167,14 +123,9 @@ def compute_joint_deviation_penalty(
     indices: Optional[jax.Array] = None,
 ) -> jax.Array:
     """关节姿态偏离惩罚 (保持接近默认/home pose)"""
-    joint_pos = jp.asarray(joint_pos)
-    joint_pos_default = jp.asarray(joint_pos_default)
-    if indices is not None:
-        indices = jp.asarray(indices)
-        joint_pos = joint_pos[..., indices]
-        joint_pos_default = joint_pos_default[..., indices]
-    diff = joint_pos - joint_pos_default
-    return jp.mean(jp.square(diff), axis=-1)
+    return _compute_joint_deviation_penalty(
+        joint_pos=joint_pos, joint_pos_default=joint_pos_default, indices=indices
+    )
 
 
 # =============================================================================================
@@ -185,6 +136,85 @@ def compute_joint_deviation_penalty(
 # =============================================================================================
 # ======================================= 完整奖励函数 ==========================================
 # =============================================================================================
+
+
+class _StandingRewardContext(NamedTuple):
+    torso_z: jax.Array
+    base_quat: jax.Array
+    base_linvel: jax.Array
+    base_angvel: jax.Array
+    action: jax.Array
+    last_action: jax.Array
+    torques: jax.Array
+    target_height: float
+    joint_pos: Optional[jax.Array]
+    joint_pos_default: Optional[jax.Array]
+
+
+_HIP_INDICES = jp.array([0, 1, 2, 8, 9, 10])
+
+
+def _zeros_like_reward(ctx: _StandingRewardContext) -> jax.Array:
+    return jp.zeros_like(ctx.torso_z)
+
+
+def _ones_like_reward(ctx: _StandingRewardContext) -> jax.Array:
+    return jp.ones_like(ctx.torso_z)
+
+
+def _standing_height(ctx: _StandingRewardContext) -> jax.Array:
+    return compute_height_reward(ctx.torso_z, ctx.target_height)
+
+
+def _standing_orientation(ctx: _StandingRewardContext) -> jax.Array:
+    return compute_orientation_reward(ctx.base_quat)
+
+
+def _standing_lin_vel(ctx: _StandingRewardContext) -> jax.Array:
+    return compute_lin_vel_penalty(ctx.base_linvel)
+
+
+def _standing_ang_vel(ctx: _StandingRewardContext) -> jax.Array:
+    return compute_ang_vel_penalty(ctx.base_angvel)
+
+
+def _standing_alive(ctx: _StandingRewardContext) -> jax.Array:
+    return _ones_like_reward(ctx)
+
+
+def _standing_action_rate(ctx: _StandingRewardContext) -> jax.Array:
+    return compute_action_rate_penalty(ctx.action, ctx.last_action)
+
+
+def _standing_torques(ctx: _StandingRewardContext) -> jax.Array:
+    return compute_torque_penalty(ctx.torques)
+
+
+def _standing_joint_deviation(ctx: _StandingRewardContext) -> jax.Array:
+    if ctx.joint_pos is None or ctx.joint_pos_default is None:
+        return _zeros_like_reward(ctx)
+    return compute_joint_deviation_penalty(ctx.joint_pos, ctx.joint_pos_default)
+
+
+def _standing_hip_deviation(ctx: _StandingRewardContext) -> jax.Array:
+    if ctx.joint_pos is None or ctx.joint_pos_default is None:
+        return _zeros_like_reward(ctx)
+    return compute_joint_deviation_penalty(
+        ctx.joint_pos, ctx.joint_pos_default, indices=_HIP_INDICES
+    )
+
+
+STANDING_REWARD_REGISTRY: Dict[str, Callable[[_StandingRewardContext], jax.Array]] = {
+    "height": _standing_height,
+    "orientation": _standing_orientation,
+    "lin_vel": _standing_lin_vel,
+    "ang_vel": _standing_ang_vel,
+    "alive": _standing_alive,
+    "action_rate": _standing_action_rate,
+    "torques": _standing_torques,
+    "joint_deviation": _standing_joint_deviation,
+    "hip_deviation": _standing_hip_deviation,
+}
 
 
 def compute_standing_reward(
@@ -206,80 +236,30 @@ def compute_standing_reward(
     提供良好的扩展性和课程学习支持。
     """
 
-    # 初始化
     reward = jp.array(0.0)
-    reward_info = {}
+    reward_info = {f"reward/{k}": jp.array(0.0) for k in reward_weights.keys()}
 
-    # 1. 高度奖励
-    if "height" in reward_weights:
-        reward_height = compute_height_reward(torso_z, target_height)
-        weighted = reward_weights["height"] * reward_height
-        reward += weighted
-        reward_info["reward/height"] = weighted
+    ctx = _StandingRewardContext(
+        torso_z=jp.asarray(torso_z),
+        base_quat=base_quat,
+        base_linvel=base_linvel,
+        base_angvel=base_angvel,
+        action=action,
+        last_action=last_action,
+        torques=torques,
+        target_height=target_height,
+        joint_pos=joint_pos,
+        joint_pos_default=joint_pos_default,
+    )
 
-    # 2. 姿态奖励
-    if "orientation" in reward_weights:
-        reward_orientation = compute_orientation_reward(base_quat)
-        weighted = reward_weights["orientation"] * reward_orientation
-        reward += weighted
-        reward_info["reward/orientation"] = weighted
-
-    # 3. 线速度惩罚
-    if "lin_vel" in reward_weights:
-        vel_penalties = compute_velocity_penalties(base_linvel, base_angvel)
-        weighted = reward_weights["lin_vel"] * vel_penalties["lin_vel_penalty"]
-        reward += weighted
-        reward_info["reward/lin_vel"] = weighted
-
-    # 4. 角速度惩罚
-    if "ang_vel" in reward_weights:
-        if "lin_vel" not in reward_weights:  # 避免重复计算
-            vel_penalties = compute_velocity_penalties(base_linvel, base_angvel)
-        weighted = reward_weights["ang_vel"] * vel_penalties["ang_vel_penalty"]
-        reward += weighted
-        reward_info["reward/ang_vel"] = weighted
-
-    # 5. 存活奖励
-    if "alive" in reward_weights:
-        weighted = reward_weights["alive"] * 1.0
-        reward += weighted
-        reward_info["reward/alive"] = weighted
-
-    # 6. 动作平滑
-    if "action_rate" in reward_weights:
-        action_rate_penalty = jp.sum(jp.square(action - last_action), axis=-1)
-        weighted = reward_weights["action_rate"] * action_rate_penalty
-        reward += weighted
-        reward_info["reward/action_rate"] = weighted
-
-    # 7. 扭矩惩罚
-    if "torques" in reward_weights:
-        torque_penalty = jp.sum(jp.square(torques), axis=-1)
-        weighted = reward_weights["torques"] * torque_penalty
-        reward += weighted
-        reward_info["reward/torques"] = weighted
-
-    # 8. 站立姿态正则（防止髋部长期偏置/歪斜）
-    if "joint_deviation" in reward_weights:
-        if joint_pos is not None and joint_pos_default is not None:
-            weighted = reward_weights["joint_deviation"] * compute_joint_deviation_penalty(
-                joint_pos, joint_pos_default
-            )
+    for key, weight in reward_weights.items():
+        component = STANDING_REWARD_REGISTRY.get(key, None)
+        if component is None:
+            weighted = _zeros_like_reward(ctx)
         else:
-            weighted = jp.array(0.0)
+            weighted = weight * component(ctx)
         reward += weighted
-        reward_info["reward/joint_deviation"] = weighted
-
-    if "hip_deviation" in reward_weights:
-        if joint_pos is not None and joint_pos_default is not None:
-            hip_indices = jp.array([0, 1, 2, 8, 9, 10])
-            weighted = reward_weights["hip_deviation"] * compute_joint_deviation_penalty(
-                joint_pos, joint_pos_default, indices=hip_indices
-            )
-        else:
-            weighted = jp.array(0.0)
-        reward += weighted
-        reward_info["reward/hip_deviation"] = weighted
+        reward_info[f"reward/{key}"] = weighted
 
     return reward, reward_info
 

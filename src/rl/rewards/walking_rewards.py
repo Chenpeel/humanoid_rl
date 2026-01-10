@@ -10,10 +10,15 @@
 - ANYmal/Go1 机器人实现
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
 
 import jax
 import jax.numpy as jp
+
+from .components import (compute_action_rate_penalty, compute_ang_vel_penalty,
+                         compute_joint_deviation_penalty as _compute_joint_deviation_penalty,
+                         compute_lin_vel_xy_penalty, compute_torque_penalty,
+                         normalize_quaternion, quat_to_euler, wrap_to_pi)
 
 # ============================================================================================
 # ======================================= 默认奖励权重 =========================================
@@ -147,39 +152,6 @@ def check_walking_termination(
 # =============================================================================================
 # ========================================= 数学工具函数 ========================================
 # =============================================================================================
-
-
-def quat_to_euler(quat: jax.Array) -> jax.Array:
-    """四元数转欧拉角 [roll, pitch, yaw]"""
-    w, x, y, z = quat[..., 0], quat[..., 1], quat[..., 2], quat[..., 3]
-    sinr_cosp = 2 * (w * x + y * z)
-    cosr_cosp = 1 - 2 * (x * x + y * y)
-    roll = jp.arctan2(sinr_cosp, cosr_cosp)
-    sinp = 2 * (w * y - z * x)
-    pitch = jp.where(jp.abs(sinp) >= 1, jp.sign(sinp)
-                     * jp.pi / 2, jp.arcsin(sinp))
-    siny_cosp = 2 * (w * z + x * y)
-    cosy_cosp = 1 - 2 * (y * y + z * z)
-    yaw = jp.arctan2(siny_cosp, cosy_cosp)
-    return jp.stack([roll, pitch, yaw], axis=-1)
-
-
-# ---------------------------------------------------------------------------------------------
-
-
-def normalize_quaternion(quat: jax.Array) -> jax.Array:
-    """归一化四元数"""
-    norm = jp.linalg.norm(quat, axis=-1, keepdims=True)
-    return jp.where(norm > 1e-8, quat / norm, jp.array([1.0, 0.0, 0.0, 0.0]))
-
-
-# ---------------------------------------------------------------------------------------------
-
-
-def wrap_to_pi(angles: jax.Array) -> jax.Array:
-    """角度包装到 [-π, π]"""
-    return jp.arctan2(jp.sin(angles), jp.cos(angles))
-
 
 # =============================================================================================
 # ======================================= END: 数学工具函数  ===================================
@@ -543,14 +515,9 @@ def compute_joint_deviation_penalty(
     indices: Optional[jax.Array] = None,
 ) -> jax.Array:
     """关节姿态偏离惩罚 (保持接近默认/home pose)"""
-    joint_pos = jp.asarray(joint_pos)
-    joint_pos_default = jp.asarray(joint_pos_default)
-    if indices is not None:
-        indices = jp.asarray(indices)
-        joint_pos = joint_pos[..., indices]
-        joint_pos_default = joint_pos_default[..., indices]
-    diff = joint_pos - joint_pos_default
-    return jp.mean(jp.square(diff), axis=-1)
+    return _compute_joint_deviation_penalty(
+        joint_pos=joint_pos, joint_pos_default=joint_pos_default, indices=indices
+    )
 
 
 # ---------------------------------------------------------------------------------------------
@@ -613,6 +580,198 @@ def compute_stability_reward(
 # =============================================================================================
 
 
+class _WalkingRewardContext(NamedTuple):
+    torso_z: jax.Array
+    base_quat: jax.Array
+    base_linvel: jax.Array
+    base_angvel: jax.Array
+    contact_sensors: jax.Array
+    contacts: jax.Array
+    feet_positions: Optional[jax.Array]
+    action: Optional[jax.Array]
+    last_action: Optional[jax.Array]
+    torques: Optional[jax.Array]
+    feet_velocities: Optional[jax.Array]
+    joint_pos: Optional[jax.Array]
+    joint_vel: Optional[jax.Array]
+    joint_pos_default: Optional[jax.Array]
+    joint_limits: Optional[tuple]
+    contact_history: Optional[jax.Array]
+    command: Optional[jax.Array]
+    actual_velocity: Optional[jax.Array]
+    target_velocity: float
+    target_height: float
+
+
+_HIP_INDICES = jp.array([0, 1, 2, 8, 9, 10])
+
+
+def _zeros_like_reward(ctx: _WalkingRewardContext) -> jax.Array:
+    return jp.zeros_like(ctx.torso_z)
+
+
+def _ones_like_reward(ctx: _WalkingRewardContext) -> jax.Array:
+    return jp.ones_like(ctx.torso_z)
+
+
+def _walking_trunk_height(ctx: _WalkingRewardContext) -> jax.Array:
+    return compute_trunk_height_reward(ctx.torso_z, ctx.target_height)
+
+
+def _walking_orientation(ctx: _WalkingRewardContext) -> jax.Array:
+    return compute_trunk_orientation_penalty(ctx.base_quat)
+
+
+def _walking_upright_bonus(ctx: _WalkingRewardContext) -> jax.Array:
+    return compute_upright_bonus(ctx.base_quat)
+
+
+def _walking_gait_symmetry(ctx: _WalkingRewardContext) -> jax.Array:
+    return compute_gait_symmetry_reward(ctx.contacts)
+
+
+def _walking_foot_clearance(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.feet_positions is None:
+        return _zeros_like_reward(ctx)
+    return compute_foot_clearance_reward(ctx.feet_positions, ctx.contacts)
+
+
+def _walking_feet_air_time(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.contact_history is None:
+        return _zeros_like_reward(ctx)
+    return compute_feet_air_time_reward(ctx.contact_history)
+
+
+def _walking_lin_vel(ctx: _WalkingRewardContext) -> jax.Array:
+    return compute_lin_vel_xy_penalty(ctx.base_linvel)
+
+
+def _walking_ang_vel(ctx: _WalkingRewardContext) -> jax.Array:
+    return compute_ang_vel_penalty(ctx.base_angvel)
+
+
+def _walking_drag(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.feet_positions is None:
+        return _zeros_like_reward(ctx)
+    return compute_drag_penalty(ctx.feet_positions, ctx.contacts)
+
+
+def _walking_torques(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.torques is None:
+        return _zeros_like_reward(ctx)
+    return compute_torque_penalty(ctx.torques)
+
+
+def _walking_alive(ctx: _WalkingRewardContext) -> jax.Array:
+    return _ones_like_reward(ctx)
+
+
+def _walking_action_rate(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.action is None or ctx.last_action is None:
+        return _zeros_like_reward(ctx)
+    return compute_action_rate_penalty(ctx.action, ctx.last_action)
+
+
+def _walking_joint_limits(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.joint_pos is None or ctx.joint_limits is None:
+        return _zeros_like_reward(ctx)
+    lower_limits, upper_limits = ctx.joint_limits
+    lower_violation = jp.maximum(0.0, lower_limits - ctx.joint_pos)
+    upper_violation = jp.maximum(0.0, ctx.joint_pos - upper_limits)
+    return jp.sum(jp.square(lower_violation) + jp.square(upper_violation), axis=-1)
+
+
+def _walking_trunk_lin_vel_z(ctx: _WalkingRewardContext) -> jax.Array:
+    return jp.square(ctx.base_linvel[..., 2])
+
+
+def _walking_feet_contact_forces(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.contact_sensors is None:
+        return _zeros_like_reward(ctx)
+    return compute_feet_contact_forces_reward(ctx.contact_sensors)
+
+
+def _walking_feet_slide(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.feet_velocities is None or ctx.contact_sensors is None:
+        return _zeros_like_reward(ctx)
+    return compute_feet_slide_penalty(ctx.feet_velocities, ctx.contacts)
+
+
+def _walking_joint_symmetry(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.joint_pos is None:
+        return _zeros_like_reward(ctx)
+    return compute_joint_symmetry_reward(ctx.joint_pos)
+
+
+def _walking_joint_deviation(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.joint_pos is None or ctx.joint_pos_default is None:
+        return _zeros_like_reward(ctx)
+    return compute_joint_deviation_penalty(ctx.joint_pos, ctx.joint_pos_default)
+
+
+def _walking_hip_deviation(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.joint_pos is None or ctx.joint_pos_default is None:
+        return _zeros_like_reward(ctx)
+    return compute_joint_deviation_penalty(
+        ctx.joint_pos, ctx.joint_pos_default, indices=_HIP_INDICES
+    )
+
+
+def _walking_stumbling(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.feet_positions is None or ctx.feet_velocities is None:
+        return _zeros_like_reward(ctx)
+    return compute_stumbling_penalty(
+        ctx.feet_positions, ctx.feet_velocities, ctx.contacts
+    )
+
+
+def _walking_landing_impact(ctx: _WalkingRewardContext) -> jax.Array:
+    return _zeros_like_reward(ctx)
+
+
+def _walking_stability(ctx: _WalkingRewardContext) -> jax.Array:
+    return compute_stability_reward(
+        ctx.torso_z, ctx.base_quat, ctx.base_linvel, ctx.base_angvel, ctx.target_height
+    )
+
+
+def _walking_energy_efficiency(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.torques is None or ctx.joint_vel is None:
+        return _zeros_like_reward(ctx)
+    return compute_energy_efficiency_reward(ctx.torques, ctx.joint_vel)
+
+
+WALKING_REWARD_REGISTRY: Dict[str, Callable[[_WalkingRewardContext], jax.Array]] = {
+    # posture / stability
+    "trunk_height": _walking_trunk_height,
+    "orientation": _walking_orientation,
+    "upright_bonus": _walking_upright_bonus,
+    "stability": _walking_stability,
+    # gait quality
+    "gait_symmetry": _walking_gait_symmetry,
+    "foot_clearance": _walking_foot_clearance,
+    "feet_air_time": _walking_feet_air_time,
+    "feet_contact_forces": _walking_feet_contact_forces,
+    "feet_slide": _walking_feet_slide,
+    "stumbling": _walking_stumbling,
+    "landing_impact": _walking_landing_impact,
+    # regularization / penalties
+    "lin_vel": _walking_lin_vel,
+    "ang_vel": _walking_ang_vel,
+    "drag": _walking_drag,
+    "torques": _walking_torques,
+    "action_rate": _walking_action_rate,
+    "joint_limits": _walking_joint_limits,
+    "trunk_lin_vel_z": _walking_trunk_lin_vel_z,
+    "joint_symmetry": _walking_joint_symmetry,
+    "joint_deviation": _walking_joint_deviation,
+    "hip_deviation": _walking_hip_deviation,
+    "energy_efficiency": _walking_energy_efficiency,
+    # alive
+    "alive": _walking_alive,
+}
+
+
 def compute_walking_reward(
     torso_z: jax.Array,
     base_quat: jax.Array,
@@ -640,209 +799,58 @@ def compute_walking_reward(
     # 初始化
     base_quat = normalize_quaternion(base_quat)
     contacts = get_feet_contacts(contact_sensors)
-    reward = jp.array(0.0)
-    reward_info = {}
     weights = reward_weights or DEFAULT_WALKING_REWARD_WEIGHTS
+    reward = jp.array(0.0)
+    reward_info = {f"reward/{k}": jp.array(0.0) for k in weights.keys()}
 
-    # 1. 速度跟踪
+    ctx = _WalkingRewardContext(
+        torso_z=torso_z,
+        base_quat=base_quat,
+        base_linvel=base_linvel,
+        base_angvel=base_angvel,
+        contact_sensors=contact_sensors,
+        contacts=contacts,
+        feet_positions=feet_positions,
+        action=action,
+        last_action=last_action,
+        torques=torques,
+        feet_velocities=feet_velocities,
+        joint_pos=joint_pos,
+        joint_vel=joint_vel,
+        joint_pos_default=joint_pos_default,
+        joint_limits=joint_limits,
+        contact_history=contact_history,
+        command=command,
+        actual_velocity=actual_velocity,
+        target_velocity=target_velocity,
+        target_height=target_height,
+    )
+
+    # 速度项需要保持“二选一”的旧行为：若启用 velocity_tracking 且 command 可用则优先使用。
     if "velocity_tracking" in weights and command is not None:
-        val = weights["velocity_tracking"] * compute_velocity_tracking_reward(
-            actual_velocity, command
-        )
-        reward += val
-        reward_info["reward/velocity_tracking"] = val
+        if actual_velocity is None:
+            val = _zeros_like_reward(ctx)
+        else:
+            val = compute_velocity_tracking_reward(actual_velocity, command)
+        weighted = weights["velocity_tracking"] * val
+        reward += weighted
+        reward_info["reward/velocity_tracking"] = weighted
     elif "forward_velocity" in weights:
-        val = weights["forward_velocity"] * compute_forward_velocity_reward(
-            base_linvel, target_velocity
-        )
-        reward += val
-        reward_info["reward/forward_velocity"] = val
+        val = compute_forward_velocity_reward(base_linvel, target_velocity)
+        weighted = weights["forward_velocity"] * val
+        reward += weighted
+        reward_info["reward/forward_velocity"] = weighted
 
-    # 2. 姿态与稳定性
-    if "trunk_height" in weights:
-        val = weights["trunk_height"] * compute_trunk_height_reward(
-            torso_z, target_height
-        )
-        reward += val
-        reward_info["reward/trunk_height"] = val
-
-    if "orientation" in weights:
-        val = weights["orientation"] * \
-            compute_trunk_orientation_penalty(base_quat)
-        reward += val
-        reward_info["reward/orientation"] = val
-
-    if "upright_bonus" in weights:
-        val = weights["upright_bonus"] * compute_upright_bonus(base_quat)
-        reward += val
-        reward_info["reward/upright_bonus"] = val
-
-    # 3. 步态质量
-    if "gait_symmetry" in weights:
-        val = weights["gait_symmetry"] * compute_gait_symmetry_reward(contacts)
-        reward += val
-        reward_info["reward/gait_symmetry"] = val
-
-    if "foot_clearance" in weights:
-        if feet_positions is not None:
-            val = weights["foot_clearance"] * compute_foot_clearance_reward(
-                feet_positions, contacts
-            )
+    for key, weight in weights.items():
+        if key in {"velocity_tracking", "forward_velocity"}:
+            continue
+        component = WALKING_REWARD_REGISTRY.get(key, None)
+        if component is None:
+            weighted = _zeros_like_reward(ctx)
         else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/foot_clearance"] = val
-
-    if "feet_air_time" in weights:
-        if contact_history is not None:
-            val = weights["feet_air_time"] * \
-                compute_feet_air_time_reward(contact_history)
-        else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/feet_air_time"] = val
-
-    # 4. 物理惩罚项
-    if "drag" in weights:
-        if feet_positions is not None:
-            val = weights["drag"] * compute_drag_penalty(feet_positions, contacts)
-        else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/drag"] = val
-
-    if "torques" in weights:
-        if torques is not None:
-            val = weights["torques"] * jp.sum(jp.square(torques), axis=-1)
-        else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/torques"] = val
-
-    if "alive" in weights:
-        val = weights["alive"] * 1.0
-        reward += val
-        reward_info["reward/alive"] = val
-
-
-    # 5. 动作平滑性和关节约束
-    if "action_rate" in weights:
-        if action is not None and last_action is not None:
-            # 惩罚相邻时间步动作变化过大
-            action_diff = jp.sum(jp.square(action - last_action), axis=-1)
-            val = weights["action_rate"] * action_diff
-        else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/action_rate"] = val
-
-    if "joint_limits" in weights:
-        if joint_pos is not None and joint_limits is not None:
-            # 惩罚接近关节限制的动作
-            lower_limits, upper_limits = joint_limits
-            # 计算距离限制的距离(软约束)
-            lower_violation = jp.maximum(0.0, lower_limits - joint_pos)
-            upper_violation = jp.maximum(0.0, joint_pos - upper_limits)
-            limits_penalty = jp.sum(jp.square(lower_violation) + jp.square(upper_violation), axis=-1)
-            val = weights["joint_limits"] * limits_penalty
-        else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/joint_limits"] = val
-
-    if "trunk_lin_vel_z" in weights:
-        # 惩罚垂直方向速度（防止跳跃）
-        vertical_vel_penalty = jp.square(base_linvel[..., 2])
-        val = weights["trunk_lin_vel_z"] * vertical_vel_penalty
-        reward += val
-        reward_info["reward/trunk_lin_vel_z"] = val
-
-    # 6. 新增奖励项 (课程学习阶段2/3)
-    if "feet_contact_forces" in weights:
-        if contact_sensors is not None:
-            val = weights["feet_contact_forces"] * compute_feet_contact_forces_reward(
-                contact_sensors
-            )
-        else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/feet_contact_forces"] = val
-
-    if "feet_slide" in weights:
-        if feet_velocities is not None and contact_sensors is not None:
-            contacts_bool = get_feet_contacts(contact_sensors)
-            val = weights["feet_slide"] * compute_feet_slide_penalty(
-                feet_velocities, contacts_bool
-            )
-        else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/feet_slide"] = val
-
-    if "joint_symmetry" in weights:
-        if joint_pos is not None:
-            val = weights["joint_symmetry"] * compute_joint_symmetry_reward(joint_pos)
-        else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/joint_symmetry"] = val
-
-    if "joint_deviation" in weights:
-        if joint_pos is not None and joint_pos_default is not None:
-            val = weights["joint_deviation"] * compute_joint_deviation_penalty(
-                joint_pos, joint_pos_default
-            )
-        else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/joint_deviation"] = val
-
-    if "hip_deviation" in weights:
-        if joint_pos is not None and joint_pos_default is not None:
-            # actuator 顺序假设：右腿8个 + 左腿8个
-            # [hip_pitch, hip_yaw, hip_roll, knee, ankle_pitch, ankle_roll, ankle_yaw, toe]
-            hip_indices = jp.array([0, 1, 2, 8, 9, 10])
-            val = weights["hip_deviation"] * compute_joint_deviation_penalty(
-                joint_pos, joint_pos_default, indices=hip_indices
-            )
-        else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/hip_deviation"] = val
-
-    if "stumbling" in weights:
-        if feet_positions is not None and feet_velocities is not None:
-            contacts_bool = get_feet_contacts(contact_sensors)
-            val = weights["stumbling"] * compute_stumbling_penalty(
-                feet_positions, feet_velocities, contacts_bool
-            )
-        else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/stumbling"] = val
-
-    if "landing_impact" in weights:
-        # 需要上一步的接触传感器数据，暂时返回0.0
-        val = jp.array(0.0)
-        reward += val
-        reward_info["reward/landing_impact"] = val
-
-    if "stability" in weights:
-        val = weights["stability"] * compute_stability_reward(
-            torso_z, base_quat, base_linvel, base_angvel, target_height
-        )
-        reward += val
-        reward_info["reward/stability"] = val
-
-    if "energy_efficiency" in weights:
-        if torques is not None and joint_vel is not None:
-            val = weights["energy_efficiency"] * compute_energy_efficiency_reward(
-                torques, joint_vel
-            )
-        else:
-            val = jp.array(0.0)
-        reward += val
-        reward_info["reward/energy_efficiency"] = val
+            weighted = weight * component(ctx)
+        reward += weighted
+        reward_info[f"reward/{key}"] = weighted
 
     # 最终保护
     reward = jp.clip(reward, -10.0, 10.0)
