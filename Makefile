@@ -1,7 +1,7 @@
 # Makefile for JRL - JAX Reinforcement Learning Training
 # 用于管理机器人训练（自动课程学习）
 
-.PHONY: help install train train-long train-test train-quick eval play clean clean-cache clean-logs clean-train clean-makelog clean-all
+.PHONY: help install train train-long train-test train-stand train-quick eval play clean clean-cache clean-logs clean-train clean-makelog clean-all
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
@@ -23,6 +23,7 @@ EVAL_SCRIPT := scripts/eval.py
 CONFIG_TRAIN := configs/train/train.yaml
 CONFIG_LONG := configs/train-10h/train.yaml
 CONFIG_QUICK := configs/quick_test/train.yaml
+CONFIG_STAND := configs/train-stand/train.yaml
 
 # 日志时间戳生成函数
 TIMESTAMP := $(shell date '+%Y%m%d_%H%M%S')
@@ -42,12 +43,15 @@ help:
 	@echo "  make train                标准训练（2048 envs，200M steps，约8-12小时）"
 	@echo "  make train-long           长时间训练（4096 envs，500M steps，约24-48小时）"
 	@echo "  make train-test           测试训练（256 envs，16M steps，约3-5小时）"
+	@echo "  make train-stand          站立专训（walking env + 站立奖励，20M steps）"
+	@echo "  make train-test ENV_TYPE=standing          用站立环境跑快速训练"
+	@echo "  make train-custom CONFIG=... RESUME_FROM=...  从检查点继续训练"
 	@echo "  make train-custom CONFIG=path/to/config.yaml  自定义配置训练"
 	@echo ""
 	@echo "课程学习机制："
-	@echo "  - 阶段1 (0-50k steps):    站立平衡"
-	@echo "  - 阶段2 (50k-150k steps): 低速行走"
-	@echo "  - 阶段3 (150k+ steps):    全速行走"
+	@echo "  - 阶段1 (0-20M env steps):    站立平衡"
+	@echo "  - 阶段2 (20M-60M env steps): 低速行走"
+	@echo "  - 阶段3 (60M+ env steps):    全速行走"
 	@echo "  - 奖励权重和环境参数自动切换，无需手动干预"
 	@echo ""
 	@echo "评估命令："
@@ -60,6 +64,7 @@ help:
 	@echo "  make eval CKPT=... ENV_TYPE=walking        指定环境类型"
 	@echo "  make eval CKPT=... ROBOT_NAME=unitree_h1   指定机器人模型"
 	@echo "  make play CKPT=...                         仅可视化播放（不评估）"
+	@echo "  make play CKPT=... PLAY_CONFIG=...         使用YAML配置复现env_config（如零速度命令）"
 	@echo ""
 	@echo "开发工具："
 	@echo "  make tensorboard          启动TensorBoard"
@@ -119,8 +124,11 @@ train:
 		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "配置文件: $(CONFIG_TRAIN)"; \
 		echo ""; \
-		FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_TRAIN) 2>&1; \
-		EXIT_CODE=$$?; \
+			CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_TRAIN)"; \
+			if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
+			if [ -n "$(RESUME_FROM)" ]; then CMD="$$CMD --resume-from $(RESUME_FROM)"; echo "恢复: $(RESUME_FROM)"; fi; \
+			eval $$CMD 2>&1; \
+			EXIT_CODE=$$?; \
 		echo ""; \
 		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "退出码: $$EXIT_CODE"; \
@@ -146,8 +154,11 @@ train-long:
 		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "配置文件: $(CONFIG_LONG)"; \
 		echo ""; \
-		FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_LONG) 2>&1; \
-		EXIT_CODE=$$?; \
+			CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_LONG)"; \
+			if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
+			if [ -n "$(RESUME_FROM)" ]; then CMD="$$CMD --resume-from $(RESUME_FROM)"; echo "恢复: $(RESUME_FROM)"; fi; \
+			eval $$CMD 2>&1; \
+			EXIT_CODE=$$?; \
 		echo ""; \
 		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "退出码: $$EXIT_CODE"; \
@@ -173,8 +184,11 @@ train-test:
 		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "配置文件: $(CONFIG_QUICK)"; \
 		echo ""; \
-		FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_QUICK) 2>&1; \
-		EXIT_CODE=$$?; \
+			CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_QUICK)"; \
+			if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
+			if [ -n "$(RESUME_FROM)" ]; then CMD="$$CMD --resume-from $(RESUME_FROM)"; echo "恢复: $(RESUME_FROM)"; fi; \
+			eval $$CMD 2>&1; \
+			EXIT_CODE=$$?; \
 		echo ""; \
 		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "退出码: $$EXIT_CODE"; \
@@ -182,6 +196,35 @@ train-test:
 	} 2>&1 | tee "$$LOGFILE"; \
 	echo ""; \
 	echo "=== 测试完成 ==="
+
+train-stand:
+	@LOGFILE="$(call MAKELOG_FILE,train-stand)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
+	echo "=== 站立专训（walking env + 单阶段站立课程）==="; \
+	echo "配置: $(CONFIG_STAND)"; \
+	echo "总步数: 20M env steps"; \
+	echo "开始时间: $$(date)"; \
+	echo "日志文件: $$LOGFILE"; \
+	echo ""; \
+	{ \
+		echo "=== 训练日志 ==="; \
+		echo "命令: make train-stand"; \
+		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "配置文件: $(CONFIG_STAND)"; \
+		echo ""; \
+			CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_STAND)"; \
+			if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
+			if [ -n "$(RESUME_FROM)" ]; then CMD="$$CMD --resume-from $(RESUME_FROM)"; echo "恢复: $(RESUME_FROM)"; fi; \
+			eval $$CMD 2>&1; \
+			EXIT_CODE=$$?; \
+		echo ""; \
+		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "退出码: $$EXIT_CODE"; \
+		exit $$EXIT_CODE; \
+	} 2>&1 | tee "$$LOGFILE"; \
+	echo ""; \
+	echo "=== 训练完成 ==="; \
+	echo "结束时间: $$(date)"
 
 train-custom:
 	@if [ -z "$(CONFIG)" ]; then \
@@ -205,8 +248,11 @@ train-custom:
 		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "配置文件: $(CONFIG)"; \
 		echo ""; \
-		FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG) 2>&1; \
-		EXIT_CODE=$$?; \
+			CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG)"; \
+			if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
+			if [ -n "$(RESUME_FROM)" ]; then CMD="$$CMD --resume-from $(RESUME_FROM)"; echo "恢复: $(RESUME_FROM)"; fi; \
+			eval $$CMD 2>&1; \
+			EXIT_CODE=$$?; \
 		echo ""; \
 		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "退出码: $$EXIT_CODE"; \
@@ -217,7 +263,7 @@ train-custom:
 
 validate-config:
 	@echo "=== 验证配置文件 ==="
-	@$(PYTHON) -c "import yaml, sys; configs = ['$(CONFIG_TRAIN)', '$(CONFIG_LONG)', '$(CONFIG_QUICK)']; [yaml.safe_load(open(c)) or print(f'✓ {c}') for c in configs]; print('✓ 所有配置文件有效')"
+	@$(PYTHON) -c "import yaml, sys; configs = ['$(CONFIG_TRAIN)', '$(CONFIG_LONG)', '$(CONFIG_QUICK)', '$(CONFIG_STAND)']; [yaml.safe_load(open(c)) or print(f'✓ {c}') for c in configs]; print('✓ 所有配置文件有效')"
 
 # ==================== 评估相关 ====================
 
@@ -289,12 +335,13 @@ play:
 	{ \
 		echo "=== 播放日志 ==="; \
 		echo "命令: make play CKPT=$(CKPT)"; \
-		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
-		CMD="FORCE_COLOR=1 $(PYTHON) scripts/play.py --checkpoint $(CKPT)"; \
-		if [ -n "$(XML_PATH)" ]; then CMD="$$CMD --xml-path $(XML_PATH)"; echo "模型: $(XML_PATH)"; fi; \
-		if [ -n "$(USE_LOCAL_MJCF)" ]; then CMD="$$CMD --use-local-mjcf"; echo "模型: local mjcf"; fi; \
-		if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
-		if [ -n "$(CPU)" ]; then CMD="$$CMD --cpu"; echo "设备: CPU"; fi; \
+			echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+			CMD="FORCE_COLOR=1 $(PYTHON) scripts/play.py --checkpoint $(CKPT)"; \
+			if [ -n "$(PLAY_CONFIG)" ]; then CMD="$$CMD --config $(PLAY_CONFIG)"; echo "配置: $(PLAY_CONFIG)"; fi; \
+			if [ -n "$(XML_PATH)" ]; then CMD="$$CMD --xml-path $(XML_PATH)"; echo "模型: $(XML_PATH)"; fi; \
+			if [ -n "$(USE_LOCAL_MJCF)" ]; then CMD="$$CMD --use-local-mjcf"; echo "模型: local mjcf"; fi; \
+			if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
+			if [ -n "$(CPU)" ]; then CMD="$$CMD --cpu"; echo "设备: CPU"; fi; \
 		if [ -n "$(RENDER)" ]; then CMD="$$CMD --render $(RENDER)"; echo "渲染间隔: $(RENDER)"; fi; \
 		if [ -n "$(VIEWER_SLEEP)" ]; then CMD="$$CMD --viewer-sleep $(VIEWER_SLEEP)"; echo "viewer sleep: $(VIEWER_SLEEP)s"; fi; \
 		if [ -n "$(STATUS_EVERY)" ]; then CMD="$$CMD --status-every $(STATUS_EVERY)"; echo "status-every: $(STATUS_EVERY)s"; fi; \

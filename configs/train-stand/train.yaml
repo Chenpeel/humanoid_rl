@@ -1,0 +1,51 @@
+# ==================== 站立专训配置（20M env steps）====================
+# 说明：
+# - 仍然使用 walking 环境（obs/act 维度与后续走路课程一致），但通过课程配置把命令锁死为 0，
+#   并只启用“站立平衡”阶段的奖励与环境参数。
+# - 训练满 20M env steps 后，可以用同一个 checkpoint 直接接着跑 configs/train/train.yaml 的课程学习走路。
+
+# ==================== 机器人模型配置 ====================
+robot_name: gaoda_jiyuan
+
+# ==================== 场景配置 ====================
+scene: jiyuan_scene
+env_type: walking
+
+# ==================== 环境配置 ====================
+num_envs: 2048
+num_steps: 64
+max_episode_steps: 1000 # (备注) 当前代码不直接读取该字段；若需要请放到 curriculum 的 env_config.max_steps
+
+# ==================== PPO超参数 ====================
+num_epochs: 5
+num_minibatches: 4
+gamma: 0.99
+gae_lambda: 0.95
+clip_epsilon: 0.2
+value_coef: 1.0
+entropy_coef: 0.005
+max_grad_norm: 1.0
+
+# ==================== 课程学习配置 ====================
+curriculum_file: configs/train-stand/curriculum.yaml
+
+# ==================== 训练配置 ====================
+total_timesteps: 20000000 # >=20M env steps
+log_interval: 10
+eval_interval: 25
+save_interval: 25
+
+# ==================== 优化器配置 ====================
+learning_rate: 5.0e-4
+final_lr_fraction: 0.1
+
+# ==================== 网络配置 ====================
+hidden_dims: [512, 512, 256]
+shared_backbone: true
+
+# ==================== 视频录制 ====================
+enable_video: false
+video_interval: 100
+video_frames: 180
+video_camera: "track"
+

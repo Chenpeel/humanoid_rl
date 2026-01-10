@@ -5,9 +5,9 @@
 **自动课程学习 + YAML 驱动 + 统一配置结构**
 
 从 2026-01-06 起，项目采用**配置驱动**的自动三阶段课程学习框架：
-- **阶段1（0-50k steps）**：站立平衡 - 学习保持直立不摔倒
-- **阶段2（50k-150k steps）**：低速行走 - 学习基本步态和低速前进
-- **阶段3（150k+ steps）**：全速行走 - 跟踪任意速度命令并优化性能
+- **阶段1（0-20M env steps）**：站立平衡 - 学习保持直立不摔倒
+- **阶段2（20M-60M env steps）**：低速行走 - 学习基本步态和低速前进
+- **阶段3（60M+ env steps）**：全速行走 - 跟踪任意速度命令并优化性能
 
 **优势**：
 ✅ **YAML 定义课程**：通过 `curriculum.yaml` 自由定义奖励权重和环境阶段，无需修改代码。
@@ -24,6 +24,10 @@ configs/
 ├── train/                      # 标准训练配置（主版本）
 │   ├── train.yaml              # PPO 训练与环境超参数
 │   └── curriculum.yaml         # 三阶段课程学习权重定义
+│
+├── train-stand/                # 站立专训配置（walking env + 单阶段站立课程）
+│   ├── train.yaml              # 20M env steps 站立专训
+│   └── curriculum.yaml         # 单阶段(站立)课程定义
 │
 ├── train-10h/                  # 长时间训练配置
 │   └── train.yaml              # 优化显存，适合 1080Ti/4090 长时间运行
@@ -50,6 +54,15 @@ configs/
 make train
 # 或者手动指定：
 python scripts/train.py --config configs/train/train.yaml
+```
+
+### 1.1 站立专训（train-stand/）
+
+**适用场景**：先把“站立”练稳（>=20M env steps），然后无缝继续跑走路课程学习（obs/act 维度保持一致）。
+
+**使用方式**：
+```bash
+make train-stand
 ```
 
 ### 2. 长时间训练（train-10h/）
@@ -117,4 +130,4 @@ A: 确保在 `logger.py` 的白名单中包含了 `reward/` 前缀（系统默�
 A: `src/rl/curriculum/base.py` 中的 `ConfigurableCurriculum` 会根据 `train_state.env_steps` 自动计算当前所属阶段，并实时更新环境的 `reward_weights`。
 
 ---
-*更新日期：2026-01-06*
+*更新日期：2026-01-10*
