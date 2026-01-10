@@ -198,6 +198,12 @@ class PPOTrainer:
             "done_rate": jp.mean(dones.astype(jp.float32)),
         }
 
+        # Fall rate (per-step): use env-provided termination reward, which is only applied on falls
+        # (WalkingEnv sets reward/termination based on fall-only done, before timeout is OR'ed in).
+        if env_state.info and "reward/termination" in env_state.info:
+            term = env_state.info["reward/termination"]
+            info["fall_rate"] = jp.mean(term != 0.0)
+
         if env_state.info:
             for key, value in env_state.info.items():
                 if key not in info:
@@ -405,6 +411,10 @@ def create_train_step_fn(config: PPOConfig, env, network, optimizer):
                 mean_val = jp.mean(val)
                 # jax.debug.print("Key: {}, Mean: {}", key, mean_val)
                 info[key] = mean_val
+
+            if "reward/termination" in transitions["info"]:
+                term = transitions["info"]["reward/termination"]
+                info["fall_rate"] = jp.mean(term != 0.0)
 
         return batch, final_env_state, info
 

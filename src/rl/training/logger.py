@@ -387,6 +387,10 @@ class TrainingDisplay:
         if clip_frac is not None:
             lines.append(f"{ 'Clip fraction:':<30}{clip_frac:.2%}")
 
+        fall_rate = self._get_value("fall_rate", "train/fall_rate")
+        if fall_rate is not None:
+            lines.append(f"{ 'Fall rate:':<30}{float(fall_rate):.2%}")
+
         lines.append("")
 
         episode_reward = self._get_value(
