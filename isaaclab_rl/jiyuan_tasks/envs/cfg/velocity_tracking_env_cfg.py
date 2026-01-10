@@ -41,9 +41,11 @@ from .jiyuan_scene_cfg import JiyuanSceneCfg
 
 # 导入Isaac Lab内置的MDP函数
 import isaaclab.envs.mdp as mdp
+# 导入 locomotion 任务的 MDP（包含更稳健的 feet_air_time 等实现）
+import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp_locomotion
 
 # 导入自定义管理器函数
-from jiyuan_tasks.managers import rewards, terminations
+from jiyuan_tasks.managers import commands, observations, rewards, terminations
 
 
 ##
@@ -61,7 +63,7 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
     # 场景配置
     # num_envs 在运行时由 train.py 从配置文件或命令行参数设置
     # 默认值仅用于未指定时的后备
-    scene: JiyuanSceneCfg = JiyuanSceneCfg(num_envs=2048, env_spacing=2.5)
+    scene: JiyuanSceneCfg = JiyuanSceneCfg(num_envs=512, env_spacing=2.5)
 
     # 基础设置
     decimation = 4  # 控制频率：50Hz / 4 = 12.5Hz
@@ -72,8 +74,8 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
     class CommandsCfg:
         """命令生成器配置"""
 
-        # 使用 Isaac Lab 内置的均匀速度命令生成器
-        base_velocity = mdp.UniformVelocityCommandCfg(
+        # 使用校正版速度命令生成器（Jiyuan base 存在固定旋转）
+        base_velocity = commands.CorrectedUniformVelocityCommandCfg(
             asset_name="robot",
             resampling_time_range=(10.0, 10.0),  # 每10秒重新采样命令
             rel_standing_envs=0.1,  # 10% 的环境站立不动
@@ -99,9 +101,11 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
             """策略观测（完整信息）"""
 
             # 基础状态（17维）
-            base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))  # 3
-            base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))  # 3
-            projected_gravity = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05))  # 3
+            base_lin_vel = ObsTerm(func=observations.base_lin_vel_corrected, noise=Unoise(n_min=-0.1, n_max=0.1))  # 3
+            base_ang_vel = ObsTerm(func=observations.base_ang_vel_corrected, noise=Unoise(n_min=-0.2, n_max=0.2))  # 3
+            projected_gravity = ObsTerm(
+                func=observations.projected_gravity_corrected, noise=Unoise(n_min=-0.05, n_max=0.05)
+            )  # 3
 
             # 速度命令（3维）
             velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})  # 3
@@ -153,13 +157,17 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
 
         # 速度跟踪奖励（主要目标）
         track_lin_vel_xy = RewTerm(
-            func=rewards.track_lin_vel_xy_exp,
+            func=rewards.track_lin_vel_xy_yaw_frame_exp,
             weight=1.5,
-            params={"std": 0.5, "command_name": "base_velocity"},
+            params={
+                "std": 0.5,
+                "command_name": "base_velocity",
+                "base_quat_correction": rewards.DEFAULT_BASE_QUAT_CORRECTION_WXYZ,
+            },
         )
 
         track_ang_vel_z = RewTerm(
-            func=rewards.track_ang_vel_z_exp,
+            func=rewards.track_ang_vel_z_world_exp,
             weight=0.75,
             params={"std": 0.5, "command_name": "base_velocity"},
         )
@@ -168,33 +176,64 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
         orientation = RewTerm(
             func=rewards.orientation_reward,
             weight=0.5,
-            params={"tolerance": 0.2},
+            params={"tolerance": 0.2, "base_quat_correction": rewards.DEFAULT_BASE_QUAT_CORRECTION_WXYZ},
         )
 
         # 脚部空中时间（借鉴H1/G1，鼓励自然步态）
         feet_air_time = RewTerm(
-            func=rewards.feet_air_time,
+            func=mdp_locomotion.feet_air_time_positive_biped,
             weight=0.3,  # 速度跟踪任务用稍低权重
+            params={
+                "command_name": "base_velocity",
+                "threshold": 0.5,
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot_link"),
+            },
         )
 
-        # 速度惩罚（Z方向不应有速度）
-        lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
+        # 速度惩罚（Z方向不应有速度；需做 base 固定旋转校正）
+        lin_vel_z_l2 = RewTerm(
+            func=rewards.lin_vel_z_l2_corrected,
+            weight=-2.0,
+            params={"base_quat_correction": rewards.DEFAULT_BASE_QUAT_CORRECTION_WXYZ},
+        )
 
-        # 角速度惩罚（XY方向不应旋转）
-        ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+        # 角速度惩罚（XY方向不应旋转；需做 base 固定旋转校正）
+        ang_vel_xy_l2 = RewTerm(
+            func=rewards.ang_vel_xy_l2_corrected,
+            weight=-0.05,
+            params={"base_quat_correction": rewards.DEFAULT_BASE_QUAT_CORRECTION_WXYZ},
+        )
 
         # 不期望的接触惩罚（借鉴H1/G1）
         undesired_contacts = RewTerm(
             func=mdp.undesired_contacts,
             weight=-1.0,
             params={
-                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*thigh|.*torso|.*hip"),
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*thigh_link|.*hip_.*_link|base_link"),
+                "threshold": 1.0,
+            },
+        )
+
+        # 脚部滑动惩罚（默认关闭；用 YAML 开启并调权）
+        feet_slide = RewTerm(
+            func=rewards.feet_slide_penalty,
+            weight=0.0,
+            params={
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot_link"),
+                "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot_link"),
                 "threshold": 1.0,
             },
         )
 
         # 动作平滑性
         action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
+
+        # 低命令时的关节偏差惩罚（默认关闭；能抑制“站立 env 抖动”）
+        stand_still_joint_deviation = RewTerm(
+            func=mdp_locomotion.stand_still_joint_deviation_l1,
+            weight=0.0,
+            params={"command_name": "base_velocity", "command_threshold": 0.06, "asset_cfg": SceneEntityCfg("robot")},
+        )
 
         # 能量效率
         joint_powers = RewTerm(
@@ -207,6 +246,20 @@ class VelocityTrackingEnvCfg(ManagerBasedRLEnvCfg):
             func=mdp.joint_acc_l2,
             weight=-2.5e-7,
             params={"asset_cfg": SceneEntityCfg("robot")},
+        )
+
+        # Sim2Real：脚踝工作空间软约束（默认权重为0，由 YAML 决定是否启用）
+        ankle_workspace = RewTerm(
+            func=rewards.ankle_workspace_penalty,
+            weight=0.0,
+            params={
+                "asset_cfg": SceneEntityCfg(
+                    "robot",
+                    joint_names=".*ankle_cube_joint|.*ankle_axle_joint|.*foot_joint",
+                ),
+                "max_angle": 0.5235987755982988,  # pi/6
+                "margin": 0.1,
+            },
         )
 
         # 存活奖励（借鉴Humanoid配置，增加权重）

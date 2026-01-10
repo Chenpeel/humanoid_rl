@@ -11,10 +11,7 @@
 - visualization.py: 可视化辅助函数（计划中）
 """
 
-from . import math_utils
-from . import sim2real
-from . import imitation
-from . import config_loader
+from __future__ import annotations
 
 __all__ = [
     "math_utils",
@@ -22,3 +19,12 @@ __all__ = [
     "imitation",
     "config_loader",
 ]
+
+
+def __getattr__(name: str):
+    # 避免在 import jiyuan_tasks.utils 时立即拉起 torch / isaaclab 等重依赖，保持“纯 Python 可导入”。
+    if name in __all__:
+        import importlib
+
+        return importlib.import_module(f"{__name__}.{name}")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

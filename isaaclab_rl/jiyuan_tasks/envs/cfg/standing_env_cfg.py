@@ -43,7 +43,7 @@ from .jiyuan_scene_cfg import JiyuanSceneCfg
 import isaaclab.envs.mdp as mdp
 
 # 导入自定义管理器函数
-from jiyuan_tasks.managers import rewards, terminations
+from jiyuan_tasks.managers import observations, rewards, terminations
 
 
 ##
@@ -61,7 +61,7 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
     # 场景配置
     # num_envs 在运行时由 train.py 从配置文件或命令行参数设置
     # 默认值仅用于未指定时的后备
-    scene: JiyuanSceneCfg = JiyuanSceneCfg(num_envs=2048, env_spacing=2.5)
+    scene: JiyuanSceneCfg = JiyuanSceneCfg(num_envs=512, env_spacing=2.5)
 
     # 基础设置
     decimation = 2  # 控制频率：50Hz / 2 = 25Hz (P0修复: 从4提升到2,提高响应频率,对齐JAX分支50Hz)
@@ -93,9 +93,11 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
             """策略观测（包含命令，确保维度兼容）"""
 
             # 基础状态（17维）
-            base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))  # 3
-            base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))  # 3
-            projected_gravity = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05))  # 3
+            base_lin_vel = ObsTerm(func=observations.base_lin_vel_corrected, noise=Unoise(n_min=-0.1, n_max=0.1))  # 3
+            base_ang_vel = ObsTerm(func=observations.base_ang_vel_corrected, noise=Unoise(n_min=-0.2, n_max=0.2))  # 3
+            projected_gravity = ObsTerm(
+                func=observations.projected_gravity_corrected, noise=Unoise(n_min=-0.05, n_max=0.05)
+            )  # 3
 
             # 速度命令（3维）- 即使是站立也保留，为了维度兼容
             velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})  # 3
@@ -156,7 +158,7 @@ class StandingEnvCfg(ManagerBasedRLEnvCfg):
         orientation = RewTerm(
             func=rewards.orientation_reward,
             weight=2.0,  # 更高权重
-            params={"tolerance": 0.1},
+            params={"tolerance": 0.1, "base_quat_correction": rewards.DEFAULT_BASE_QUAT_CORRECTION_WXYZ},
         )
 
         # 线速度惩罚（应该尽量不动）

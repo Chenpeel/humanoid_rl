@@ -7,6 +7,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # 训练日志
 logs/
@@ -41,7 +45,4 @@ build/
 
 # std_docs
 .std_docs/
-.claude/
-.eval/
-.migrate/
-GEMINI.md
+AGENTS.md

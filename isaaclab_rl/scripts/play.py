@@ -104,6 +104,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="评估 Jiyuan 机器人策略",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        parents=[app_launcher_parser],  # 继承 AppLauncher 参数（--headless/--device 等）
     )
 
     # 任务选择
@@ -152,13 +153,7 @@ def parse_args():
         help="使用确定性策略（无探索噪声）",
     )
 
-    # 设备选择
-    parser.add_argument(
-        "--device",
-        type=str,
-        default="cuda:0",
-        help="评估设备 (默认: cuda:0)",
-    )
+    # 注意：--device 参数由 AppLauncher 提供，不在此重复定义
 
     # 视频录制
     parser.add_argument(

@@ -23,7 +23,57 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 # 导入数学工具
-from ..utils.math_utils import quat_to_euler_xyz, normalize_quaternion
+from ..utils.math_utils import (
+    DEFAULT_BASE_QUAT_CORRECTION_WXYZ as _DEFAULT_BASE_QUAT_CORRECTION_WXYZ,
+    apply_base_quat_correction_to_body_vec,
+    normalize_quaternion,
+    remove_fixed_quat_rotation,
+)
+
+
+# Jiyuan 特有：历史原因 base frame 存在 90° 旋转（wxyz）。
+# 在需要把观测/奖励对齐到 Z-up 语义坐标系时，使用 quat ⊗ fixed^{-1} 移除该旋转。
+DEFAULT_BASE_QUAT_CORRECTION_WXYZ = _DEFAULT_BASE_QUAT_CORRECTION_WXYZ
+
+
+try:  # Isaac Lab 运行时可用；纯 Python 环境下保持为 None
+    from isaaclab.utils.math import quat_apply_inverse as _quat_apply_inverse
+    from isaaclab.utils.math import yaw_quat as _yaw_quat
+except Exception:  # pragma: no cover
+    _quat_apply_inverse = None
+    _yaw_quat = None
+
+
+def feet_slide_penalty(
+    env: ManagerBasedRLEnv,
+    sensor_cfg,
+    asset_cfg,
+    threshold: float = 1.0,
+) -> Tensor:
+    """脚部滑动惩罚（可配置阈值版）。
+
+    参考 Isaac Lab locomotion `feet_slide`，但把接触阈值暴露为参数，便于 YAML 动态调参。
+
+    Args:
+        env: 环境实例
+        sensor_cfg: 接触传感器配置（SceneEntityCfg），应匹配脚部 bodies
+        asset_cfg: 机器人资产配置（SceneEntityCfg），应匹配脚部 bodies
+        threshold: 接触力阈值（N），越大越“严格”
+    """
+    if sensor_cfg.name not in env.scene.sensors:
+        return torch.zeros(env.num_envs, device=env.device)
+    contact_sensor = env.scene.sensors[sensor_cfg.name]
+    forces_hist = getattr(contact_sensor.data, "net_forces_w_history", None)
+    if forces_hist is None or sensor_cfg.body_ids is None:
+        return torch.zeros(env.num_envs, device=env.device)
+
+    contacts = forces_hist[:, :, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0] > float(threshold)
+
+    asset = env.scene[asset_cfg.name]
+    if asset_cfg.body_ids is None:
+        return torch.zeros(env.num_envs, device=env.device)
+    body_vel = asset.data.body_lin_vel_w[:, asset_cfg.body_ids, :2]
+    return torch.sum(body_vel.norm(dim=-1) * contacts, dim=1)
 
 
 ##
@@ -61,6 +111,7 @@ def height_reward(
 def orientation_reward(
     env: ManagerBasedRLEnv,
     tolerance: float = 0.1,
+    base_quat_correction: tuple[float, float, float, float] | None = DEFAULT_BASE_QUAT_CORRECTION_WXYZ,
 ) -> Tensor:
     """姿态稳定奖励
 
@@ -73,21 +124,15 @@ def orientation_reward(
     Returns:
         姿态奖励值，形状 (num_envs,)，范围 [0, 1]
     """
-    # 获取机器人base的四元数
-    base_quat = env.scene["robot"].data.root_quat_w
+    # 使用 projected_gravity_b（Isaac Lab 内部已缓存），避免每步创建 gravity_w 张量。
+    asset = env.scene["robot"]
+    gravity_b = asset.data.projected_gravity_b
 
-    # 归一化四元数
-    base_quat = normalize_quaternion(base_quat)
+    gravity_b = apply_base_quat_correction_to_body_vec(gravity_b, base_quat_correction)
 
-    # 转换为欧拉角
-    euler = quat_to_euler_xyz(base_quat)
-    roll, pitch = euler[:, 0], euler[:, 1]
-
-    # 计算姿态误差（roll和pitch的平方和）
-    orientation_error = torch.square(roll) + torch.square(pitch)
-
-    # 指数奖励
-    return torch.exp(-orientation_error / tolerance)
+    # 直立时 gravity_b ≈ [0,0,-1]，因此用 XY 分量的平方和作为 tilt 误差（数值稳定、无欧拉角奇异）。
+    tilt_error = torch.sum(torch.square(gravity_b[:, :2]), dim=-1)
+    return torch.exp(-tilt_error / tolerance)
 
 
 ##
@@ -131,6 +176,30 @@ def ang_vel_penalty_l2(env: ManagerBasedRLEnv) -> Tensor:
     return torch.sum(torch.square(base_ang_vel), dim=-1)
 
 
+def lin_vel_z_l2_corrected(
+    env: ManagerBasedRLEnv,
+    base_quat_correction: tuple[float, float, float, float] | None = DEFAULT_BASE_QUAT_CORRECTION_WXYZ,
+) -> Tensor:
+    """Z 方向线速度惩罚（使用校正后的 body frame）。
+
+    说明：Isaac Lab 的 `mdp.lin_vel_z_l2` 直接取 `root_lin_vel_b[:,2]`。
+    对于 base 存在固定旋转的机器人，这个 “z” 轴含义会错位，必须先做校正。
+    """
+    asset = env.scene["robot"]
+    vel_b = apply_base_quat_correction_to_body_vec(asset.data.root_lin_vel_b, base_quat_correction)
+    return torch.square(vel_b[:, 2])
+
+
+def ang_vel_xy_l2_corrected(
+    env: ManagerBasedRLEnv,
+    base_quat_correction: tuple[float, float, float, float] | None = DEFAULT_BASE_QUAT_CORRECTION_WXYZ,
+) -> Tensor:
+    """XY 平面角速度惩罚（使用校正后的 body frame）。"""
+    asset = env.scene["robot"]
+    ang_b = apply_base_quat_correction_to_body_vec(asset.data.root_ang_vel_b, base_quat_correction)
+    return torch.sum(torch.square(ang_b[:, :2]), dim=-1)
+
+
 def xy_vel_penalty_l2(env: ManagerBasedRLEnv) -> Tensor:
     """XY平面速度惩罚
 
@@ -142,11 +211,9 @@ def xy_vel_penalty_l2(env: ManagerBasedRLEnv) -> Tensor:
     Returns:
         XY速度惩罚值，形状 (num_envs,)
     """
-    # 获取base线速度
-    base_lin_vel = env.scene["robot"].data.root_lin_vel_b
-
-    # 只惩罚XY方向
-    return torch.sum(torch.square(base_lin_vel[:, :2]), dim=-1)
+    # 使用 world frame 的 XY，避免受 base frame 固定旋转影响
+    base_lin_vel_w = env.scene["robot"].data.root_lin_vel_w
+    return torch.sum(torch.square(base_lin_vel_w[:, :2]), dim=-1)
 
 
 ##
@@ -230,8 +297,9 @@ def action_rate_l2(env: ManagerBasedRLEnv) -> Tensor:
     Returns:
         动作变化率惩罚值，形状 (num_envs,)
     """
-    # 获取当前动作和上一步动作
-    # Isaac Lab 会自动在环境中存储 last_actions
+    # 条件返回安全：部分版本/配置可能没有 prev_action
+    if not hasattr(env, "action_manager") or not hasattr(env.action_manager, "action") or not hasattr(env.action_manager, "prev_action"):
+        return torch.zeros(env.num_envs, device=env.device)
     return torch.sum(torch.square(env.action_manager.action - env.action_manager.prev_action), dim=-1)
 
 
@@ -358,6 +426,7 @@ def feet_air_time(
     env: ManagerBasedRLEnv,
     sensor_cfg_name: str = "contact_forces",
     threshold: float = 1.0,
+    foot_body_regex: str = ".*_foot_link|.*_toe_link",
 ) -> Tensor:
     """脚部离地时间奖励
 
@@ -371,41 +440,82 @@ def feet_air_time(
     Returns:
         离地时间奖励值，形状 (num_envs,)
     """
-    # 获取接触力
-    contact_forces = env.scene.sensors[sensor_cfg_name].data.net_forces_w_history
+    if sensor_cfg_name not in env.scene.sensors:
+        return torch.zeros(env.num_envs, device=env.device)
 
-    # 检测接触（力大于阈值）
-    contact_detected = torch.max(torch.norm(contact_forces, dim=-1), dim=-1)[0] > threshold
+    contact_sensor = env.scene.sensors[sensor_cfg_name]
 
-    # 奖励非接触状态
-    return (~contact_detected).float()
+    # 尝试只选择脚/脚趾 body（避免把躯干/大腿接触也当作“脚接触”）
+    body_ids = None
+    if hasattr(contact_sensor, "find_bodies"):
+        try:
+            body_ids, _ = contact_sensor.find_bodies(foot_body_regex)
+        except Exception:
+            body_ids = None
+
+    contact_forces = contact_sensor.data.net_forces_w_history
+    if body_ids is not None:
+        contact_forces = contact_forces[:, :, body_ids, :]
+
+    # contact_forces: (num_envs, history, num_bodies, 3)
+    is_contact = torch.max(torch.norm(contact_forces, dim=-1), dim=1)[0] > threshold  # (num_envs, num_bodies)
+    # 以脚为单位平均，避免脚数量变化导致尺度变化
+    return torch.mean((~is_contact).float(), dim=1)
 
 
-##
-# 默认奖励权重
-##
+def ankle_workspace_penalty(
+    env: ManagerBasedRLEnv,
+    asset_cfg,
+    max_angle: float = 0.5235987755982988,  # pi/6
+    margin: float = 0.1,
+) -> Tensor:
+    """脚踝工作空间软约束惩罚（基于关节位置）
+
+    目的：为 Sim2Real 准备，限制脚踝关节角度在实体可用范围（±30°）附近。
+
+    注意：使用关节位置而不是动作索引，避免 action 维度/顺序不一致导致误惩罚。
+    """
+    asset = env.scene[asset_cfg.name]
+    joint_pos = asset.data.joint_pos[:, asset_cfg.joint_ids]
+
+    safe_limit = max(float(max_angle) - float(margin), 0.0)
+    violation = torch.clamp(torch.abs(joint_pos) - safe_limit, min=0.0)
+    return torch.sum(violation, dim=-1)
 
 
-# 站立任务奖励权重
-STANDING_REWARD_WEIGHTS = {
-    "height": 1.0,  # 高度保持
-    "orientation": 1.0,  # 姿态稳定
-    "lin_vel": -0.5,  # 线速度惩罚
-    "ang_vel": -0.3,  # 角速度惩罚
-    "alive": 0.2,  # 存活奖励
-    "action_rate": -0.01,  # 动作平滑
-    "torques": -0.0001,  # 能量效率
-}
+def track_lin_vel_xy_yaw_frame_exp(
+    env: ManagerBasedRLEnv,
+    std: float = 0.5,
+    command_name: str = "base_velocity",
+    base_quat_correction: tuple[float, float, float, float] | None = DEFAULT_BASE_QUAT_CORRECTION_WXYZ,
+) -> Tensor:
+    """线速度跟踪奖励（gravity-aligned yaw frame）
 
-# 速度跟踪任务奖励权重
-VELOCITY_TRACKING_REWARD_WEIGHTS = {
-    "track_lin_vel": 1.0,  # 线速度跟踪
-    "track_ang_vel": 0.5,  # 角速度跟踪
-    "lin_vel_z": -2.0,  # Z方向速度惩罚
-    "ang_vel_xy": -0.05,  # XY方向角速度惩罚
-    "orientation": 0.5,  # 姿态稳定
-    "action_rate": -0.01,  # 动作平滑
-    "joint_accel": -2.5e-7,  # 关节加速度惩罚
-    "joint_powers": -2e-5,  # 能量效率
-    "alive": 0.1,  # 存活奖励
-}
+    对齐 Isaac Lab locomotion 的实现：把 world 线速度旋转到“只含 yaw 的机体坐标系”后跟踪命令。
+    对于 Jiyuan，如果 base frame 存在固定旋转，需先移除该旋转再提取 yaw。
+    """
+    if _quat_apply_inverse is None or _yaw_quat is None:  # pragma: no cover
+        raise RuntimeError("该奖励函数需要 Isaac Lab 运行时（isaaclab.utils.math）。")
+
+    asset = env.scene["robot"]
+    base_quat_w = normalize_quaternion(asset.data.root_quat_w)
+    if base_quat_correction is not None:
+        base_quat_w = remove_fixed_quat_rotation(base_quat_w, base_quat_correction)
+
+    vel_w = asset.data.root_lin_vel_w[:, :3]
+    vel_yaw = _quat_apply_inverse(_yaw_quat(base_quat_w), vel_w)
+
+    command = env.command_manager.get_command(command_name)[:, :2]
+    lin_vel_error = torch.sum(torch.square(command - vel_yaw[:, :2]), dim=1)
+    return torch.exp(-lin_vel_error / std**2)
+
+
+def track_ang_vel_z_world_exp(
+    env: ManagerBasedRLEnv,
+    std: float = 0.5,
+    command_name: str = "base_velocity",
+) -> Tensor:
+    """角速度跟踪奖励（world frame yaw）"""
+    asset = env.scene["robot"]
+    ang_vel_error = torch.square(env.command_manager.get_command(command_name)[:, 2] - asset.data.root_ang_vel_w[:, 2])
+    return torch.exp(-ang_vel_error / std**2)

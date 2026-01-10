@@ -64,7 +64,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from tkinter.constants import FALSE
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg

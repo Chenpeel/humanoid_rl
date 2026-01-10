@@ -23,7 +23,14 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 # 导入数学工具
-from ..utils.math_utils import quat_to_euler_xyz, normalize_quaternion
+from ..utils.math_utils import (
+    DEFAULT_BASE_QUAT_CORRECTION_WXYZ as _DEFAULT_BASE_QUAT_CORRECTION_WXYZ,
+    apply_base_quat_correction_to_body_vec,
+)
+
+
+# Jiyuan 特有：历史原因 base frame 存在 90° 旋转（wxyz）。
+DEFAULT_BASE_QUAT_CORRECTION_WXYZ = _DEFAULT_BASE_QUAT_CORRECTION_WXYZ
 
 
 ##
@@ -94,6 +101,7 @@ def base_orientation_out_of_bounds(
     env: ManagerBasedRLEnv,
     max_roll: float = 0.8,  # ~45度
     max_pitch: float = 0.8,
+    base_quat_correction: tuple[float, float, float, float] | None = DEFAULT_BASE_QUAT_CORRECTION_WXYZ,
 ) -> Tensor:
     """姿态超出范围终止
 
@@ -107,15 +115,15 @@ def base_orientation_out_of_bounds(
     Returns:
         终止标志，形状 (num_envs,)
     """
-    # 获取机器人base的四元数
-    base_quat = env.scene["robot"].data.root_quat_w
+    # 使用 projected_gravity_b（无 yaw 影响，避免欧拉角万向节问题）
+    asset = env.scene["robot"]
+    gravity_b = asset.data.projected_gravity_b
 
-    # 归一化四元数
-    base_quat = normalize_quaternion(base_quat)
+    gravity_b = apply_base_quat_correction_to_body_vec(gravity_b, base_quat_correction)
 
-    # 转换为欧拉角
-    euler = quat_to_euler_xyz(base_quat)
-    roll, pitch = euler[:, 0], euler[:, 1]
+    # 从重力投影直接恢复 roll/pitch（比 quat->euler 更轻量，且与 yaw 解耦）
+    roll = torch.atan2(gravity_b[:, 1], -gravity_b[:, 2])
+    pitch = torch.atan2(gravity_b[:, 0], -gravity_b[:, 2])
 
     # 检查是否超出范围
     roll_out = torch.abs(roll) > max_roll
@@ -348,6 +356,7 @@ def is_fallen(
     min_height: float = 0.2,
     max_roll: float = 0.8,
     max_pitch: float = 0.8,
+    base_quat_correction: tuple[float, float, float, float] | None = DEFAULT_BASE_QUAT_CORRECTION_WXYZ,
 ) -> Tensor:
     """机器人摔倒检测（组合条件）
 
@@ -366,7 +375,12 @@ def is_fallen(
     height_fail = base_height_below_threshold(env, min_height)
 
     # 姿态超限
-    orientation_fail = base_orientation_out_of_bounds(env, max_roll, max_pitch)
+    orientation_fail = base_orientation_out_of_bounds(
+        env,
+        max_roll=max_roll,
+        max_pitch=max_pitch,
+        base_quat_correction=base_quat_correction,
+    )
 
     # 任一条件满足即判定为摔倒
     return height_fail | orientation_fail

@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import math
 import torch
 from torch import Tensor
 from typing import TYPE_CHECKING
@@ -25,7 +26,10 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 # 导入数学工具
-from ..utils.math_utils import quat_to_euler_xyz, normalize_quaternion
+from ..utils.math_utils import (
+    DEFAULT_BASE_QUAT_CORRECTION_WXYZ as _DEFAULT_BASE_QUAT_CORRECTION_WXYZ,
+    apply_base_quat_correction_to_body_vec,
+)
 
 # 导入 Isaac Lab 管理器工具
 from isaaclab.managers import SceneEntityCfg
@@ -37,10 +41,15 @@ from isaaclab.sensors import ContactSensor
 ##
 
 
+# Jiyuan 特有：历史原因 base frame 存在 90° 旋转（wxyz）。
+DEFAULT_BASE_QUAT_CORRECTION_WXYZ = _DEFAULT_BASE_QUAT_CORRECTION_WXYZ
+
+
 def feet_slide(
     env: ManagerBasedRLEnv,
-    sensor_cfg: SceneEntityCfg,
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces", body_names=".*_foot_link"),
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=".*_foot_link"),
+    threshold: float = 1.0,
 ) -> Tensor:
     """脚部滑动惩罚
 
@@ -57,13 +66,29 @@ def feet_slide(
     Returns:
         滑动惩罚值，形状 (num_envs,)
     """
+    if sensor_cfg.name not in env.scene.sensors:
+        return torch.zeros(env.num_envs, device=env.device)
+
     # 获取接触传感器
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
-    # 检测接触（使用历史力的最大值）
-    contacts = contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0] > 1.0
+
+    if sensor_cfg.body_ids is None:
+        return torch.zeros(env.num_envs, device=env.device)
+
+    # 检测接触（优先历史力，更稳；否则退化到当前力）
+    if contact_sensor.data.net_forces_w_history is not None:
+        forces = contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :]
+        contacts = forces.norm(dim=-1).max(dim=1)[0] > threshold
+    elif contact_sensor.data.net_forces_w is not None:
+        forces = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, :]
+        contacts = forces.norm(dim=-1) > threshold
+    else:
+        return torch.zeros(env.num_envs, device=env.device)
 
     # 获取资产
     asset = env.scene[asset_cfg.name]
+    if asset_cfg.body_ids is None:
+        return torch.zeros(env.num_envs, device=env.device)
     # 获取脚部线速度（只考虑 XY 平面）
     body_vel = asset.data.body_lin_vel_w[:, asset_cfg.body_ids, :2]
 
@@ -75,32 +100,33 @@ def feet_slide(
 
 def feet_contact_forces(
     env: ManagerBasedRLEnv,
-    sensor_cfg_name: str = "contact_forces",
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces", body_names=".*_foot_link"),
     threshold: float = 1.0,
 ) -> Tensor:
-    """获取脚部接触力（用于其他奖励函数）
+    """脚部接触标志（用于其他奖励函数）"""
+    if sensor_cfg.name not in env.scene.sensors:
+        return torch.zeros(env.num_envs, 0, dtype=torch.bool, device=env.device)
 
-    Args:
-        env: 环境实例
-        sensor_cfg_name: 接触传感器名称
-        threshold: 接触力阈值
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    if sensor_cfg.body_ids is None:
+        return torch.zeros(env.num_envs, 0, dtype=torch.bool, device=env.device)
 
-    Returns:
-        接触标志，形状 (num_envs, num_feet)
-    """
-    if sensor_cfg_name not in env.scene.sensors:
-        return torch.zeros(env.num_envs, 2, dtype=torch.bool, device=env.device)
+    # 优先用历史力（更抗抖动），否则退化到当前力
+    if contact_sensor.data.net_forces_w_history is not None:
+        forces = contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :]
+        force_norm = forces.norm(dim=-1).max(dim=1)[0]
+    elif contact_sensor.data.net_forces_w is not None:
+        forces = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, :]
+        force_norm = forces.norm(dim=-1)
+    else:
+        return torch.zeros(env.num_envs, 0, dtype=torch.bool, device=env.device)
 
-    contact_forces = env.scene.sensors[sensor_cfg_name].data.net_forces_w
-    contact_force_norm = torch.norm(contact_forces, dim=-1)
-
-    # 检测接触（力大于阈值）
-    return contact_force_norm > threshold
+    return force_norm > threshold
 
 
 def gait_symmetry_reward(
     env: ManagerBasedRLEnv,
-    sensor_cfg_name: str = "contact_forces",
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces", body_names=".*_foot_link"),
     threshold: float = 1.0,
 ) -> Tensor:
     """步态对称性奖励
@@ -109,15 +135,17 @@ def gait_symmetry_reward(
 
     Args:
         env: 环境实例
-        sensor_cfg_name: 接触传感器名称
+        sensor_cfg: 接触传感器配置（建议只匹配左右脚各一个 body）
         threshold: 接触力阈值
 
     Returns:
         对称性奖励，形状 (num_envs,)
     """
-    contacts = feet_contact_forces(env, sensor_cfg_name, threshold)
+    contacts = feet_contact_forces(env, sensor_cfg=sensor_cfg, threshold=threshold)
+    if contacts.shape[1] < 2:
+        return torch.zeros(env.num_envs, device=env.device)
 
-    # 假设左脚是第0个，右脚是第1个
+    # 假设前两个 body 分别对应左右脚（需要在 cfg 中保证匹配顺序/数量）
     left_contact = contacts[:, 0].float()
     right_contact = contacts[:, 1].float()
 
@@ -130,9 +158,9 @@ def gait_symmetry_reward(
 
 def feet_air_time_reward(
     env: ManagerBasedRLEnv,
-    sensor_cfg_name: str = "contact_forces",
-    threshold: float = 1.0,
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces", body_names=".*_foot_link"),
     target_air_time: float = 0.5,
+    air_time_std: float = 0.2,
 ) -> Tensor:
     """脚部离地时间奖励
 
@@ -140,42 +168,38 @@ def feet_air_time_reward(
 
     Args:
         env: 环境实例
-        sensor_cfg_name: 接触传感器名称
-        threshold: 接触力阈值
+        sensor_cfg: 接触传感器配置（需要 track_air_time=True）
         target_air_time: 目标离地时间（秒）
 
     Returns:
         离地时间奖励，形状 (num_envs,)
 
     注意:
-        需要环境维护 feet_air_time 缓冲区（累计离地时间）
+        依赖 ContactSensor 的 air_time 跟踪（cfg.track_air_time=True）。若不可用则返回 0。
     """
-    if not hasattr(env, "feet_air_time"):
-        # 如果环境未实现，返回零奖励
+    if sensor_cfg.name not in env.scene.sensors:
         return torch.zeros(env.num_envs, device=env.device)
 
-    contacts = feet_contact_forces(env, sensor_cfg_name, threshold)
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    if sensor_cfg.body_ids is None or contact_sensor.data.last_air_time is None:
+        return torch.zeros(env.num_envs, device=env.device)
 
-    # 获取当前的离地时间（假设环境已累计）
-    air_times = env.feet_air_time  # 形状 (num_envs, num_feet)
+    try:
+        first_contact = contact_sensor.compute_first_contact(env.step_dt)[:, sensor_cfg.body_ids]
+    except Exception:
+        return torch.zeros(env.num_envs, device=env.device)
 
-    # 当脚接触地面时，计算离地时间是否接近目标
-    # 使用指数奖励形式
-    air_time_error = torch.abs(air_times - target_air_time)
-    air_time_reward = torch.exp(-air_time_error / 0.2)
-
-    # 只在接触时计算奖励
-    air_time_reward = air_time_reward * contacts.float()
-
-    # 对所有脚求和
-    return air_time_reward.sum(dim=-1)
+    last_air_time = contact_sensor.data.last_air_time[:, sensor_cfg.body_ids]
+    air_time_error = torch.abs(last_air_time - float(target_air_time))
+    air_time_reward = torch.exp(-air_time_error / float(air_time_std)) * first_contact.float()
+    return torch.sum(air_time_reward, dim=1)
 
 
 def stance_duration_reward(
     env: ManagerBasedRLEnv,
-    sensor_cfg_name: str = "contact_forces",
-    threshold: float = 1.0,
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces", body_names=".*_foot_link"),
     target_stance_time: float = 0.3,
+    stance_time_std: float = 0.2,
 ) -> Tensor:
     """支撑相持续时间奖励
 
@@ -183,36 +207,38 @@ def stance_duration_reward(
 
     Args:
         env: 环境实例
-        sensor_cfg_name: 接触传感器名称
-        threshold: 接触力阈值
+        sensor_cfg: 接触传感器配置（需要 track_air_time=True）
         target_stance_time: 目标支撑时间（秒）
 
     Returns:
         支撑时间奖励，形状 (num_envs,)
     """
-    if not hasattr(env, "feet_stance_time"):
+    if sensor_cfg.name not in env.scene.sensors:
         return torch.zeros(env.num_envs, device=env.device)
 
-    contacts = feet_contact_forces(env, sensor_cfg_name, threshold)
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    if sensor_cfg.body_ids is None or contact_sensor.data.last_contact_time is None:
+        return torch.zeros(env.num_envs, device=env.device)
 
-    # 获取支撑时间
-    stance_times = env.feet_stance_time  # 形状 (num_envs, num_feet)
+    # 当脚从接触转为空中时触发（first_air），用 last_contact_time 评价支撑时长
+    try:
+        first_air = contact_sensor.compute_first_air(env.step_dt)[:, sensor_cfg.body_ids]
+    except Exception:
+        return torch.zeros(env.num_envs, device=env.device)
 
-    # 当脚离地时，计算支撑时间是否接近目标
-    stance_time_error = torch.abs(stance_times - target_stance_time)
-    stance_time_reward = torch.exp(-stance_time_error / 0.2)
-
-    # 只在离地时刻计算奖励
-    stance_time_reward = stance_time_reward * (~contacts).float()
-
-    return stance_time_reward.sum(dim=-1)
+    last_contact_time = contact_sensor.data.last_contact_time[:, sensor_cfg.body_ids]
+    stance_time_error = torch.abs(last_contact_time - float(target_stance_time))
+    stance_time_reward = torch.exp(-stance_time_error / float(stance_time_std)) * first_air.float()
+    return torch.sum(stance_time_reward, dim=1)
 
 
 def foot_clearance_reward(
     env: ManagerBasedRLEnv,
-    sensor_cfg_name: str = "contact_forces",
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces", body_names=".*_foot_link"),
     threshold: float = 1.0,
     target_clearance: float = 0.05,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=".*_foot_link"),
+    clearance_std: float = 0.02,
 ) -> Tensor:
     """脚部抬高奖励
 
@@ -228,130 +254,30 @@ def foot_clearance_reward(
         抬高奖励，形状 (num_envs,)
 
     注意:
-        需要环境提供脚部位置信息
+        使用 Articulation 的 body_pos_w 获取脚部高度；摆动相通过 ContactSensor 的 in_air 判定。
     """
-    contacts = feet_contact_forces(env, sensor_cfg_name, threshold)
-
-    # 获取脚部高度（需要环境提供）
-    if not hasattr(env, "feet_positions"):
+    if sensor_cfg.name not in env.scene.sensors:
         return torch.zeros(env.num_envs, device=env.device)
 
-    feet_positions = env.feet_positions  # 形状 (num_envs, num_feet, 3)
-    feet_heights = feet_positions[:, :, 2]  # Z坐标
-
-    # 只在摆动相（脚离地）时计算
-    swing_phase = ~contacts
-
-    # 计算高度误差
-    height_error = torch.abs(feet_heights - target_clearance)
-    clearance_reward = torch.exp(-height_error / 0.02)
-
-    # 只在摆动相有奖励
-    clearance_reward = clearance_reward * swing_phase.float()
-
-    return clearance_reward.sum(dim=-1)
-
-
-##
-# 步态频率和周期
-##
-
-
-def stride_frequency_reward(
-    env: ManagerBasedRLEnv,
-    target_frequency: float = 2.0,
-) -> Tensor:
-    """步态频率奖励
-
-    鼓励保持目标的步态频率（步/秒）。
-
-    Args:
-        env: 环境实例
-        target_frequency: 目标步态频率（Hz）
-
-    Returns:
-        频率奖励，形状 (num_envs,)
-
-    注意:
-        需要环境跟踪步数和时间
-    """
-    if not hasattr(env, "step_count") or not hasattr(env, "episode_time"):
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    if sensor_cfg.body_ids is None:
         return torch.zeros(env.num_envs, device=env.device)
 
-    step_count = env.step_count  # 累计步数
-    episode_time = env.episode_time  # episode 时间（秒）
+    # 判定是否在空中（需要 track_air_time=True）；否则用接触力近似摆动相
+    if contact_sensor.data.current_air_time is not None:
+        in_air = contact_sensor.data.current_air_time[:, sensor_cfg.body_ids] > 0.0
+    else:
+        contacts = feet_contact_forces(env, sensor_cfg=sensor_cfg, threshold=threshold)
+        in_air = ~contacts
 
-    # 计算当前频率
-    current_frequency = step_count / (episode_time + 1e-6)
-
-    # 频率误差
-    frequency_error = torch.abs(current_frequency - target_frequency)
-    return torch.exp(-frequency_error / 0.5)
-
-
-##
-# 行走特定的惩罚
-##
-
-
-def stumbling_penalty(
-    env: ManagerBasedRLEnv,
-    sensor_cfg_name: str = "contact_forces",
-    threshold: float = 1.0,
-) -> Tensor:
-    """绊倒惩罚
-
-    惩罚脚部在摆动相意外接触地面。
-
-    Args:
-        env: 环境实例
-        sensor_cfg_name: 接触传感器名称
-        threshold: 接触力阈值
-
-    Returns:
-        绊倒惩罚值，形状 (num_envs,)
-    """
-    if not hasattr(env, "feet_in_swing_phase"):
+    asset = env.scene[asset_cfg.name]
+    if asset_cfg.body_ids is None:
         return torch.zeros(env.num_envs, device=env.device)
 
-    contacts = feet_contact_forces(env, sensor_cfg_name, threshold)
-    swing_phase = env.feet_in_swing_phase  # 形状 (num_envs, num_feet)
-
-    # 如果脚应该在摆动相但接触了地面，施加惩罚
-    stumbling = contacts.float() * swing_phase.float()
-
-    return stumbling.sum(dim=-1)
-
-
-def drag_penalty(
-    env: ManagerBasedRLEnv,
-    sensor_cfg_name: str = "contact_forces",
-    threshold: float = 0.5,
-) -> Tensor:
-    """拖地惩罚
-
-    惩罚脚部在摆动相拖地（低高度+小接触力）。
-
-    Args:
-        env: 环境实例
-        sensor_cfg_name: 接触传感器名称
-        threshold: 拖地检测阈值
-
-    Returns:
-        拖地惩罚值，形状 (num_envs,)
-    """
-    if not hasattr(env, "feet_positions"):
-        return torch.zeros(env.num_envs, device=env.device)
-
-    # 获取脚部高度和接触力
-    feet_heights = env.feet_positions[:, :, 2]
-    contact_forces = env.scene.sensors[sensor_cfg_name].data.net_forces_w
-    contact_force_norm = torch.norm(contact_forces, dim=-1)
-
-    # 检测拖地：低高度且有小接触力
-    is_dragging = (feet_heights < 0.02) & (contact_force_norm > threshold) & (contact_force_norm < 10.0)
-
-    return is_dragging.float().sum(dim=-1)
+    feet_heights = asset.data.body_pos_w[:, asset_cfg.body_ids, 2]
+    height_error = torch.abs(feet_heights - float(target_clearance))
+    clearance_reward = torch.exp(-height_error / float(clearance_std)) * in_air.float()
+    return torch.sum(clearance_reward, dim=1)
 
 
 ##
@@ -384,6 +310,7 @@ def trunk_height_reward(
 def trunk_orientation_penalty(
     env: ManagerBasedRLEnv,
     max_tilt: float = 0.3,
+    base_quat_correction: tuple[float, float, float, float] | None = DEFAULT_BASE_QUAT_CORRECTION_WXYZ,
 ) -> Tensor:
     """躯干过度倾斜惩罚
 
@@ -396,16 +323,15 @@ def trunk_orientation_penalty(
     Returns:
         倾斜惩罚，形状 (num_envs,)
     """
-    base_quat = env.scene["robot"].data.root_quat_w
-    base_quat = normalize_quaternion(base_quat)
-    euler = quat_to_euler_xyz(base_quat)
-    roll, pitch = euler[:, 0], euler[:, 1]
+    asset = env.scene["robot"]
+    gravity_b = asset.data.projected_gravity_b
 
-    # 只惩罚超过阈值的倾斜
-    roll_penalty = torch.clamp(torch.abs(roll) - max_tilt, min=0.0)
-    pitch_penalty = torch.clamp(torch.abs(pitch) - max_tilt, min=0.0)
+    gravity_b = apply_base_quat_correction_to_body_vec(gravity_b, base_quat_correction)
 
-    return roll_penalty + pitch_penalty
+    # 用 sin(tilt) 近似 tilt（小角度下等价），避免 asin/acos 带来的开销
+    tilt_sin = torch.norm(gravity_b[:, :2], dim=-1)
+    limit_sin = float(math.sin(float(max_tilt)))
+    return torch.clamp(tilt_sin - limit_sin, min=0.0)
 
 
 def trunk_lin_vel_z_penalty(env: ManagerBasedRLEnv) -> Tensor:
@@ -424,58 +350,5 @@ def trunk_lin_vel_z_penalty(env: ManagerBasedRLEnv) -> Tensor:
 
 
 ##
-# 前向运动奖励
+# 说明：本模块不提供硬编码的 reward 权重表（权重应从 YAML/训练配置动态驱动）。
 ##
-
-
-def forward_velocity_reward(
-    env: ManagerBasedRLEnv,
-    target_velocity: float = 0.5,
-) -> Tensor:
-    """前向速度奖励（简化版，无命令）
-
-    鼓励机器人前向移动。
-
-    Args:
-        env: 环境实例
-        target_velocity: 目标前向速度（m/s）
-
-    Returns:
-        前向速度奖励，形状 (num_envs,)
-    """
-    base_lin_vel = env.scene["robot"].data.root_lin_vel_w
-    forward_vel = base_lin_vel[:, 0]  # X方向
-
-    # 速度误差
-    vel_error = torch.abs(forward_vel - target_velocity)
-    return torch.exp(-vel_error / 0.5)
-
-
-##
-# 行走任务默认奖励权重
-##
-
-
-WALKING_REWARD_WEIGHTS = {
-    # 主要目标：前向运动
-    "track_lin_vel_xy": 1.5,  # 速度跟踪
-    "track_ang_vel_z": 0.5,  # 转向
-    # 步态质量
-    "gait_symmetry": 0.5,  # 步态对称性
-    "feet_air_time": 0.3,  # 离地时间
-    "stance_duration": 0.3,  # 支撑时间
-    "foot_clearance": 0.2,  # 脚部抬高
-    # 躯干稳定
-    "trunk_height": 0.5,  # 高度保持
-    "orientation": 0.3,  # 姿态稳定
-    "trunk_lin_vel_z": -1.0,  # Z方向速度惩罚
-    "trunk_tilt": -0.5,  # 过度倾斜惩罚
-    # 步态惩罚
-    "stumbling": -2.0,  # 绊倒
-    "drag": -1.0,  # 拖地
-    # 能量效率
-    "action_rate": -0.01,  # 动作平滑
-    "joint_powers": -2.0e-5,  # 功率消耗
-    # 存活
-    "alive": 0.5,
-}

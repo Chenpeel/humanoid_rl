@@ -17,13 +17,15 @@ robot:
 
 # 环境配置
 environment:
-  num_envs: 2048
+  # 1080 Ti (11GB) 建议从 256~1024 起步；默认取更保守的 512，避免 OOM/显存抖动。
+  num_envs: 512
   episode_length_s: 20.0
-  headless: true  # 远程服务器必须启用无头模式
+  headless: true  # 远程服务器必须启用无头模式（需在命令行传入 --headless）
 
   # 环境特定配置（可覆盖默认值）
   velocity_tracking:
     target_velocity_range: [-1.5, 1.5]  # m/s
+    target_lateral_velocity_range: [-0.8, 0.8]  # m/s
     target_angular_velocity_range: [-1.5, 1.5]  # rad/s
     command_resample_time: 10.0  # 秒
 
@@ -45,8 +47,8 @@ ppo:
     clip_param: 0.2
     entropy_coef: 0.01
     num_learning_epochs: 5
-    num_mini_batches: 4
-    learning_rate: 0.001
+    num_mini_batches: 8
+    learning_rate: 3.0e-4
     schedule: "adaptive"
     gamma: 0.99
     lam: 0.95
@@ -57,7 +59,7 @@ ppo:
   runner:
     seed: 78
     device: "cuda:0"
-    num_steps_per_env: 24
+    num_steps_per_env: 32
     max_iterations: 30000
     save_interval: 500
     log_dir: "logs"
@@ -65,8 +67,8 @@ ppo:
 
   # 网络架构
   network:
-    actor_hidden_dims: [512, 256, 128]
-    critic_hidden_dims: [512, 256, 128]
+    actor_hidden_dims: [512, 512, 256]
+    critic_hidden_dims: [512, 512, 256]
     activation: "elu"
     init_noise_std: 1.0
 
@@ -77,28 +79,33 @@ rewards:
     track_lin_vel_xy: 1.5
     track_ang_vel_z: 0.75
     orientation: 0.5
+    feet_air_time: 0.3
     lin_vel_z_l2: -2.0
     ang_vel_xy_l2: -0.05
+    undesired_contacts: -1.0
     action_rate_l2: -0.01
     joint_powers: -2.0e-5
-    joint_accel_l2: -2.5e-7
-    alive: 0.5
+    joint_acc_l2: -2.5e-7
+    alive: 2.0
+    termination_penalty: -200.0
     joint_pos_limits: -1.0
     joint_vel_limits: -1.0
-    # Sim2Real 准备
-    ankle_workspace: -1.0
+    ankle_workspace: -0.05
+    feet_slide: 0.0
+    stand_still_joint_deviation: 0.0
 
   # 站立任务
   standing:
     height: 2.0
     orientation: 2.0
-    lin_vel: -1.0
-    ang_vel: -0.5
-    xy_vel: -0.5
+    lin_vel: -0.5
+    ang_vel: -0.25
+    xy_vel: -0.25
     action_rate: -0.01
     action_l2: -0.005
     torques: -0.0002
-    alive: 0.5
+    alive: 2.0
+    termination_penalty: -50.0
     joint_pos_limits: -0.5
 
   # 行走任务
@@ -124,8 +131,8 @@ domain_randomization:
   # 质量随机化
   randomize_mass:
     enable: true
-    operation: "add"  # 使用add操作而不是scale，因为范围包含负数
-    range: [-0.2, 0.2]  # ±20% (使用add操作)
+    operation: "scale"  # 与 env_cfg 中的 mdp.randomize_rigid_body_mass 保持一致
+    range: [0.8, 1.2]  # 0.8~1.2 倍（±20%）
 
   # 执行器增益随机化
   randomize_actuator_gains:
@@ -200,3 +207,30 @@ experiment:
   name: null  # 如果为null，使用任务名称
   tags: []  # 实验标签
   notes: ""  # 实验备注
+reward_params:
+  # 可选：覆盖 reward term 的 params（动态键，不硬编码）
+  # 示例：
+  #   velocity_tracking:
+  #     feet_air_time:
+  #       threshold: 0.5
+  #       sensor_cfg.body_names: ".*_foot_link"
+  velocity_tracking:
+    feet_air_time:
+      threshold: 0.5
+      sensor_cfg.body_names: ".*_foot_link"
+    undesired_contacts:
+      threshold: 1.0
+      sensor_cfg.body_names: ".*thigh_link|.*hip_.*_link|base_link"
+    feet_slide:
+      threshold: 1.0
+  # rough / flat / curriculum 默认复用 velocity_tracking
+  # 但你也可以单独给 rough 设置（会覆盖 velocity_tracking 同名项）
+  rough:
+    feet_air_time:
+      threshold: 0.4
+      sensor_cfg.body_names: ".*_foot_link"
+    undesired_contacts:
+      threshold: 1.0
+      sensor_cfg.body_names: ".*thigh_link|.*hip_.*_link|base_link"
+    feet_slide:
+      threshold: 1.0

@@ -17,6 +17,29 @@
 ISAACLAB_PATH ?= dep/IsaacLab
 ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 
+# 运行模式
+# - RUNNER=isaaclab: 使用 Isaac Lab 管理的 Python（默认，训练/评估推荐）
+# - RUNNER=uv: 使用 uv 的虚拟环境（适合 format/lint/纯 Python 单测；训练需你自行安装 Isaac 依赖）
+RUNNER ?= isaaclab
+UV ?= uv
+UV_PROJECT ?= isaaclab_rl
+
+# Isaac Sim AppLauncher 常用参数
+# HEADLESS=1 时自动追加 --headless（云服务器/无显示环境推荐）
+HEADLESS ?= 1
+DEVICE ?= cuda:0
+APP_ARGS :=
+ifeq ($(HEADLESS),1)
+APP_ARGS += --headless
+endif
+APP_ARGS += --device $(DEVICE)
+
+ifeq ($(RUNNER),uv)
+PYTHON_RUN = $(UV) run --project $(UV_PROJECT) python
+else
+PYTHON_RUN = $(ISAACLAB_PYTHON)
+endif
+
 # AutoDL 云服务器平台专用配置
 export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
 export CARB_LOG_LEVEL=ERROR
@@ -24,9 +47,11 @@ export TERM=xterm
 
 .PHONY: help install install-dev install-vis install-all clean clean-logs verify
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
-.PHONY: check-env check-isaaclab convert-usd
+.PHONY: check-env check-isaaclab check-uv check-runner convert-usd
 .PHONY: train train-curriculum train-standing train-flat train-walking train-rough
+.PHONY: train-smoke
 .PHONY: play play-velocity play-standing play-walking play-video play-video-velocity play-video-standing
+.PHONY: uv-sync uv-run
 
 # 默认目标
 help:
@@ -65,6 +90,67 @@ help:
 	@echo ""
 
 # ==============================================================================
+# 子模块与安装
+# ==============================================================================
+
+check-isaaclab:
+	@test -x $(ISAACLAB_PATH)/isaaclab.sh || (echo "Error: 找不到 $(ISAACLAB_PATH)/isaaclab.sh，请先初始化子模块或修正 ISAACLAB_PATH"; exit 1)
+
+check-uv:
+	@command -v $(UV) >/dev/null 2>&1 || (echo "Error: 未找到 uv（请先安装 uv 或设置 UV=...）"; exit 1)
+
+check-runner:
+ifeq ($(RUNNER),uv)
+	@$(MAKE) check-uv
+else
+	@$(MAKE) check-isaaclab
+endif
+
+submodule-init:
+	@git submodule update --init --recursive
+
+submodule-update: submodule-init
+	@echo "✓ 子模块已更新"
+
+submodule-status:
+	@git submodule status --recursive
+
+submodule-update-remote:
+	@git submodule update --remote --merge --recursive
+
+install: check-isaaclab
+	@echo "安装项目（开发模式，安装到 Isaac Lab Python）..."
+	$(ISAACLAB_PYTHON) -m pip install -e "isaaclab_rl"
+	@echo "✓ 安装完成"
+
+install-dev: check-isaaclab
+	@echo "安装项目（含 dev 依赖，安装到 Isaac Lab Python）..."
+	$(ISAACLAB_PYTHON) -m pip install -e "isaaclab_rl[dev]"
+	@echo "✓ 安装完成"
+
+install-vis: check-isaaclab
+	@echo "安装项目（含 vis 依赖，安装到 Isaac Lab Python）..."
+	$(ISAACLAB_PYTHON) -m pip install -e "isaaclab_rl[vis]"
+	@echo "✓ 安装完成"
+
+install-all: check-isaaclab
+	@echo "安装项目（含 all 依赖，安装到 Isaac Lab Python）..."
+	$(ISAACLAB_PYTHON) -m pip install -e "isaaclab_rl[all]"
+	@echo "✓ 安装完成"
+
+uv-sync:
+	@echo "使用 uv 同步 $(UV_PROJECT) 依赖（仅管理纯 Python 依赖/工具）..."
+	@$(MAKE) check-uv
+	$(UV) sync --project $(UV_PROJECT) --all-extras
+	@echo "✓ uv 同步完成"
+
+uv-run:
+	@echo "示例：make uv-run CMD=\"python -m black isaaclab_rl\""
+	@$(MAKE) check-uv
+	@if [ -z "$(CMD)" ]; then echo "Error: 需要提供 CMD=..."; exit 1; fi
+	$(UV) run --project $(UV_PROJECT) $(CMD)
+
+# ==============================================================================
 # 资产转换
 # ==============================================================================
 
@@ -85,10 +171,24 @@ convert-usd: check-isaaclab
 train: train-standing train-flat train-walking train-rough
 	@echo "✓ 流水线全流程训练完成！"
 
+# 低资源 smoke：用于验证 reward/termination/坐标系是否一致（1080 Ti 友好）
+# 用法：
+#   make train-smoke                     # 默认 128 envs, 50 iters
+#   make train-smoke ARGS="--task rough" # 指定任务
+#   make train-smoke NUM_ENVS=256 ITERS=200
+NUM_ENVS_SMOKE ?= 128
+ITERS_SMOKE ?= 50
+train-smoke: check-isaaclab
+	@echo ">>> [SMOKE] 低资源快速验证 (NUM_ENVS=$(NUM_ENVS_SMOKE), ITERS=$(ITERS_SMOKE))..."
+	$(PYTHON_RUN) isaaclab_rl/scripts/train.py $(APP_ARGS) \
+		--config isaaclab_rl/configs/train_config.yaml \
+		--num_envs $(NUM_ENVS_SMOKE) \
+		--max_iterations $(ITERS_SMOKE) $(ARGS)
+
 # 全自动课程学习
 train-curriculum: check-isaaclab
 	@echo ">>> [全自动课程学习] 开始训练..."
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+	$(PYTHON_RUN) isaaclab_rl/scripts/train.py $(APP_ARGS) \
 		--config isaaclab_rl/configs/train_config.yaml \
 		--task curriculum \
 		--max_iterations 30000 $(ARGS)
@@ -97,7 +197,7 @@ train-curriculum: check-isaaclab
 
 train-standing: check-isaaclab
 	@echo ">>> [Stage 1: 站立平衡] 开始训练 (2000 iterations)..."
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+	$(PYTHON_RUN) isaaclab_rl/scripts/train.py $(APP_ARGS) \
 		--config isaaclab_rl/configs/train_config.yaml \
 		--task standing \
 		--max_iterations 2000 $(ARGS)
@@ -106,7 +206,7 @@ train-flat: check-isaaclab
 	@echo ">>> [Stage 2: 平坦地形] 加载站立权重并训练 (5000 iterations)..."
 	@LATEST_STANDING=$$(ls -td logs/jiyuan_standing/*/ 2>/dev/null | head -1 | xargs -I {} basename {}); \
 	if [ -z "$$LATEST_STANDING" ]; then echo "Error: 未找到站立训练记录"; exit 1; fi; \
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+	$(PYTHON_RUN) isaaclab_rl/scripts/train.py $(APP_ARGS) \
 		--config isaaclab_rl/configs/train_config.yaml \
 		--task flat \
 		--max_iterations 5000 \
@@ -116,7 +216,7 @@ train-walking: check-isaaclab
 	@echo ">>> [Stage 3: 正常行走] 加载平坦地形权重并训练 (10000 iterations)..."
 	@LATEST_VEL=$$(ls -td logs/jiyuan_velocity_tracking/*/ 2>/dev/null | head -1 | xargs -I {} basename {}); \
 	if [ -z "$$LATEST_VEL" ]; then echo "Error: 未找到平坦地形训练记录"; exit 1; fi; \
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+	$(PYTHON_RUN) isaaclab_rl/scripts/train.py $(APP_ARGS) \
 		--config isaaclab_rl/configs/train_config.yaml \
 		--task velocity \
 		--max_iterations 10000 \
@@ -126,7 +226,7 @@ train-rough: check-isaaclab
 	@echo ">>> [Stage 4: 粗糙地形] 加载行走权重并训练 (30000 iterations)..."
 	@LATEST_VEL=$$(ls -td logs/jiyuan_velocity_tracking/*/ 2>/dev/null | head -1 | xargs -I {} basename {}); \
 	if [ -z "$$LATEST_VEL" ]; then echo "Error: 未找到行走训练记录"; exit 1; fi; \
-	$(ISAACLAB_PYTHON) isaaclab_rl/scripts/train.py \
+	$(PYTHON_RUN) isaaclab_rl/scripts/train.py $(APP_ARGS) \
 		--config isaaclab_rl/configs/train_config.yaml \
 		--task rough \
 		--max_iterations 30000 \
@@ -149,13 +249,13 @@ play-velocity: check-isaaclab
 	@echo "评估速度跟踪策略（GUI 可视化）..."
 	@if [ -n "$(CHECKPOINT)" ]; then \
 		echo "使用指定检查点: $(CHECKPOINT)"; \
-		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+		$(PYTHON_RUN) isaaclab_rl/scripts/play.py $(APP_ARGS) \
 			--task velocity \
 			--checkpoint $(CHECKPOINT) \
 			--num_envs $(NUM_ENVS) $(ARGS); \
 	else \
 		echo "自动加载最新检查点"; \
-		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+		$(PYTHON_RUN) isaaclab_rl/scripts/play.py $(APP_ARGS) \
 			--task velocity \
 			--num_envs $(NUM_ENVS) $(ARGS); \
 	fi
@@ -165,13 +265,13 @@ play-standing: check-isaaclab
 	@echo "评估站立平衡策略（GUI 可视化）..."
 	@if [ -n "$(CHECKPOINT)" ]; then \
 		echo "使用指定检查点: $(CHECKPOINT)"; \
-		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+		$(PYTHON_RUN) isaaclab_rl/scripts/play.py $(APP_ARGS) \
 			--task standing \
 			--checkpoint $(CHECKPOINT) \
 			--num_envs $(NUM_ENVS) $(ARGS); \
 	else \
 		echo "自动加载最新检查点"; \
-		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+		$(PYTHON_RUN) isaaclab_rl/scripts/play.py $(APP_ARGS) \
 			--task standing \
 			--num_envs $(NUM_ENVS) $(ARGS); \
 	fi
@@ -181,13 +281,13 @@ play-walking: check-isaaclab
 	@echo "评估行走步态策略（GUI 可视化）..."
 	@if [ -n "$(CHECKPOINT)" ]; then \
 		echo "使用指定检查点: $(CHECKPOINT)"; \
-		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+		$(PYTHON_RUN) isaaclab_rl/scripts/play.py $(APP_ARGS) \
 			--task walking \
 			--checkpoint $(CHECKPOINT) \
 			--num_envs $(NUM_ENVS) $(ARGS); \
 	else \
 		echo "自动加载最新检查点"; \
-		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+		$(PYTHON_RUN) isaaclab_rl/scripts/play.py $(APP_ARGS) \
 			--task walking \
 			--num_envs $(NUM_ENVS) $(ARGS); \
 	fi
@@ -200,14 +300,14 @@ play-video-velocity: check-isaaclab
 	@echo "录制速度跟踪视频（$(VIDEO_LENGTH) 步）..."
 	@if [ -n "$(CHECKPOINT)" ]; then \
 		echo "使用指定检查点: $(CHECKPOINT)"; \
-		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+		$(PYTHON_RUN) isaaclab_rl/scripts/play.py $(APP_ARGS) \
 			--task velocity \
 			--checkpoint $(CHECKPOINT) \
 			--video --video_length $(VIDEO_LENGTH) \
 			--num_envs 1 $(ARGS); \
 	else \
 		echo "自动加载最新检查点"; \
-		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+		$(PYTHON_RUN) isaaclab_rl/scripts/play.py $(APP_ARGS) \
 			--task velocity \
 			--video --video_length $(VIDEO_LENGTH) \
 			--num_envs 1 $(ARGS); \
@@ -219,14 +319,14 @@ play-video-standing: check-isaaclab
 	@echo "录制站立平衡视频（$(VIDEO_LENGTH) 步）..."
 	@if [ -n "$(CHECKPOINT)" ]; then \
 		echo "使用指定检查点: $(CHECKPOINT)"; \
-		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+		$(PYTHON_RUN) isaaclab_rl/scripts/play.py $(APP_ARGS) \
 			--task standing \
 			--checkpoint $(CHECKPOINT) \
 			--video --video_length $(VIDEO_LENGTH) \
 			--num_envs 1 $(ARGS); \
 	else \
 		echo "自动加载最新检查点"; \
-		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+		$(PYTHON_RUN) isaaclab_rl/scripts/play.py $(APP_ARGS) \
 			--task standing \
 			--video --video_length $(VIDEO_LENGTH) \
 			--num_envs 1 $(ARGS); \
@@ -238,14 +338,14 @@ play-video-walking: check-isaaclab
 	@echo "录制行走步态视频（$(VIDEO_LENGTH) 步）..."
 	@if [ -n "$(CHECKPOINT)" ]; then \
 		echo "使用指定检查点: $(CHECKPOINT)"; \
-		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+		$(PYTHON_RUN) isaaclab_rl/scripts/play.py $(APP_ARGS) \
 			--task walking \
 			--checkpoint $(CHECKPOINT) \
 			--video --video_length $(VIDEO_LENGTH) \
 			--num_envs 1 $(ARGS); \
 	else \
 		echo "自动加载最新检查点"; \
-		$(ISAACLAB_PYTHON) isaaclab_rl/scripts/play.py \
+		$(PYTHON_RUN) isaaclab_rl/scripts/play.py $(APP_ARGS) \
 			--task walking \
 			--video --video_length $(VIDEO_LENGTH) \
 			--num_envs 1 $(ARGS); \
@@ -284,7 +384,7 @@ clean:
 
 clean-logs:
 	@echo "清理日志文件..."
-	
+	rm -rf logs/* 2>/dev/null || true
 	@echo "✓ 日志清理完成！"
 
 # ==============================================================================
@@ -292,13 +392,13 @@ clean-logs:
 # ==============================================================================
 
 # 格式化代码（需要安装 dev 依赖）
-format: check-isaaclab
+format: check-runner
 	@echo "格式化代码..."
-	$(ISAACLAB_PYTHON) -m black isaaclab_rl/jiyuan_tasks/ isaaclab_rl/scripts/ --line-length 120
+	$(PYTHON_RUN) -m black isaaclab_rl/jiyuan_tasks/ isaaclab_rl/scripts/ --line-length 120
 	@echo "✓ 代码格式化完成！"
 
 # 运行测试（需要安装 dev 依赖）
-test: check-isaaclab
+test: check-runner
 	@echo "运行测试..."
-	$(ISAACLAB_PYTHON) -m pytest isaaclab_rl/tests/ -v
+	PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 $(PYTHON_RUN) -m pytest -p pytest_cov isaaclab_rl/tests/ -v
 	@echo "✓ 测试完成！"

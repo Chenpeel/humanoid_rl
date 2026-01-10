@@ -15,14 +15,21 @@
 - 返回值: torch.Tensor，形状: (num_envs,) 或 (num_envs, dim)
 """
 
-from . import rewards
-from . import walking_rewards
-from . import terminations
-from . import commands
+from __future__ import annotations
 
 __all__ = [
+    "observations",
     "rewards",
     "walking_rewards",
     "terminations",
     "commands",
 ]
+
+
+def __getattr__(name: str):
+    # 避免在 import jiyuan_tasks.managers 时立即导入 torch/isaaclab 相关重模块。
+    if name in __all__:
+        import importlib
+
+        return importlib.import_module(f"{__name__}.{name}")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

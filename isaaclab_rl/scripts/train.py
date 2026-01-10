@@ -62,6 +62,54 @@ app_launcher_parser = argparse.ArgumentParser(add_help=False)
 AppLauncher.add_app_launcher_args(app_launcher_parser)
 app_launcher_args, remaining_args = app_launcher_parser.parse_known_args()
 
+# ----------------------------------------------------------------------------
+# 基于 YAML 配置的 AppLauncher 预设（headless/device）
+# 目的：避免必须依赖 Makefile 注入 --headless/--device，提升脚本可用性。
+# ----------------------------------------------------------------------------
+
+
+def _peek_config_path(argv: list[str]) -> str | None:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--config", type=str, default=None)
+    ns, _ = parser.parse_known_args(argv)
+    return ns.config
+
+
+def _load_applauncher_overrides_from_yaml(config_path: str | None) -> tuple[bool | None, str | None]:
+    if not config_path:
+        return None, None
+    try:
+        import yaml
+    except ModuleNotFoundError:
+        return None, None
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+    except OSError:
+        return None, None
+
+    env_cfg = cfg.get("environment", {}) if isinstance(cfg, dict) else {}
+    ppo_cfg = cfg.get("ppo", {}) if isinstance(cfg, dict) else {}
+    runner_cfg = ppo_cfg.get("runner", {}) if isinstance(ppo_cfg, dict) else {}
+
+    headless = env_cfg.get("headless") if isinstance(env_cfg, dict) else None
+    device = runner_cfg.get("device") if isinstance(runner_cfg, dict) else None
+
+    headless = headless if isinstance(headless, bool) else None
+    device = device if isinstance(device, str) else None
+    return headless, device
+
+
+_config_path_for_app = _peek_config_path(remaining_args)
+_headless_from_cfg, _device_from_cfg = _load_applauncher_overrides_from_yaml(_config_path_for_app)
+
+if _headless_from_cfg is True and "--headless" not in sys.argv and "HEADLESS" not in os.environ:
+    os.environ["HEADLESS"] = "1"
+
+if _device_from_cfg and "--device" not in sys.argv and hasattr(app_launcher_args, "device"):
+    app_launcher_args.device = _device_from_cfg
+
 # 启动 Isaac Sim 应用
 app_launcher = AppLauncher(app_launcher_args)
 simulation_app = app_launcher.app
@@ -91,6 +139,7 @@ from jiyuan_tasks.utils.config_loader import (
     get_default_config_path,
     ConfigDict,
 )
+from jiyuan_tasks.utils.env_cfg_applier import apply_config_to_env_cfg
 from agents.rsl_rl import (
     VELOCITY_TRACKING_PPO_CFG,
     STANDING_PPO_CFG,
@@ -544,6 +593,9 @@ def main():
     # 应用命令行参数覆盖环境配置
     env_cfg.scene.num_envs = config.environment.num_envs
     env_cfg.episode_length_s = config.environment.get("episode_length_s", env_cfg.episode_length_s)
+
+    # 将 YAML 配置“落地”到 env_cfg（奖励权重/终止阈值/领域随机化等）
+    apply_config_to_env_cfg(env_cfg, config)
 
     # 创建环境
     print(f"\n[INFO] 创建环境: {TASK_ENV_MAP[config.task]}")

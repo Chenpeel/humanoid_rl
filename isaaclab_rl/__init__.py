@@ -1,23 +1,16 @@
 """
-Isaac Lab RL - Jiyuan ̳:h�:f`y�
+Isaac Lab RL（Jiyuan）
 
-,+( Isaac Lab + PyTorch + RSL_RL �� Jiyuan ̳:h���t��
+本包为 Jiyuan 双足机器人提供基于 Isaac Lab + PyTorch + RSL_RL 的训练/评估入口与任务实现。
 
-;�!W:
-- jiyuan_tasks: ���I�Mn
-- agents: RL ��MnRSL_RL	
-- scripts: �Ì�0,
-- tools: ���wlb���	
+注意:
+- 为了让 `pytest` 等纯 Python 工具在无 Isaac Sim 运行时的环境里也能导入，本模块不在 import 时主动加载
+  `jiyuan_tasks` / `agents` 等子模块（这些子模块可能依赖 Isaac Lab）。
 """
 
-__version__ = "0.1.0"
-__author__ = "Jiyuan Robotics Team"
-
-# �e8�!W
-from . import jiyuan_tasks
-from . import agents
+__version__ = "0.3.0"
 
 __all__ = [
-    "jiyuan_tasks",
     "agents",
+    "jiyuan_tasks",
 ]

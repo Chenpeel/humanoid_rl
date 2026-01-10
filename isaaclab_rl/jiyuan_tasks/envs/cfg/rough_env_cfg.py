@@ -40,9 +40,8 @@ import isaaclab.envs.mdp as mdp
 # 导入地形训练的MDP函数（课程学习）
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp_locomotion
 
-# 导入自定义奖励函数
-from jiyuan_tasks.managers import rewards
-from jiyuan_tasks.managers import terminations
+# 导入自定义管理器函数
+from jiyuan_tasks.managers import commands, observations, rewards, terminations
 
 
 ##
@@ -60,7 +59,7 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
     # 场景配置
     # num_envs 在运行时由 train.py 从配置文件或命令行参数设置
     # 默认值仅用于未指定时的后备
-    scene: JiyuanSceneCfg = JiyuanSceneCfg(num_envs=2048, env_spacing=2.5)
+    scene: JiyuanSceneCfg = JiyuanSceneCfg(num_envs=512, env_spacing=2.5)
 
     # 基础设置
     decimation = 4
@@ -71,7 +70,7 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
     class CommandsCfg:
         """命令生成器配置"""
 
-        base_velocity = mdp.UniformVelocityCommandCfg(
+        base_velocity = commands.CorrectedUniformVelocityCommandCfg(
             asset_name="robot",
             resampling_time_range=(10.0, 10.0),
             rel_standing_envs=0.02,
@@ -97,9 +96,11 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
             """策略观测"""
 
             # 基础状态
-            base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))
-            base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
-            projected_gravity = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05))
+            base_lin_vel = ObsTerm(func=observations.base_lin_vel_corrected, noise=Unoise(n_min=-0.1, n_max=0.1))
+            base_ang_vel = ObsTerm(func=observations.base_ang_vel_corrected, noise=Unoise(n_min=-0.2, n_max=0.2))
+            projected_gravity = ObsTerm(
+                func=observations.projected_gravity_corrected, noise=Unoise(n_min=-0.05, n_max=0.05)
+            )
 
             # 速度命令
             velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
@@ -142,12 +143,16 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
 
         # 主要目标：速度跟踪
         track_lin_vel_xy = RewTerm(
-            func=mdp.track_lin_vel_xy_exp,
+            func=rewards.track_lin_vel_xy_yaw_frame_exp,
             weight=1.5,
-            params={"command_name": "base_velocity", "std": 0.5},
+            params={
+                "command_name": "base_velocity",
+                "std": 0.5,
+                "base_quat_correction": rewards.DEFAULT_BASE_QUAT_CORRECTION_WXYZ,
+            },
         )
         track_ang_vel_z = RewTerm(
-            func=mdp.track_ang_vel_z_exp,
+            func=rewards.track_ang_vel_z_world_exp,
             weight=0.75,
             params={"command_name": "base_velocity", "std": 0.5},
         )
@@ -156,15 +161,74 @@ class JiyuanRoughEnvCfg(ManagerBasedRLEnvCfg):
         orientation = RewTerm(
             func=rewards.orientation_reward,
             weight=0.5,
-            params={"tolerance": 0.3},
+            params={"tolerance": 0.3, "base_quat_correction": rewards.DEFAULT_BASE_QUAT_CORRECTION_WXYZ},
+        )
+
+        # 步态相关（默认权重由 YAML 决定）
+        feet_air_time = RewTerm(
+            func=mdp_locomotion.feet_air_time_positive_biped,
+            weight=0.0,
+            params={
+                "command_name": "base_velocity",
+                "threshold": 0.5,
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot_link"),
+            },
+        )
+
+        undesired_contacts = RewTerm(
+            func=mdp.undesired_contacts,
+            weight=0.0,
+            params={
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*thigh_link|.*hip_.*_link|base_link"),
+                "threshold": 1.0,
+            },
+        )
+
+        feet_slide = RewTerm(
+            func=rewards.feet_slide_penalty,
+            weight=0.0,
+            params={
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot_link"),
+                "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot_link"),
+                "threshold": 1.0,
+            },
         )
 
         # 惩罚项
-        lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
-        ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+        lin_vel_z_l2 = RewTerm(
+            func=rewards.lin_vel_z_l2_corrected,
+            weight=-2.0,
+            params={"base_quat_correction": rewards.DEFAULT_BASE_QUAT_CORRECTION_WXYZ},
+        )
+        ang_vel_xy_l2 = RewTerm(
+            func=rewards.ang_vel_xy_l2_corrected,
+            weight=-0.05,
+            params={"base_quat_correction": rewards.DEFAULT_BASE_QUAT_CORRECTION_WXYZ},
+        )
         action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
+
+        stand_still_joint_deviation = RewTerm(
+            func=mdp_locomotion.stand_still_joint_deviation_l1,
+            weight=0.0,
+            params={"command_name": "base_velocity", "command_threshold": 0.06, "asset_cfg": SceneEntityCfg("robot")},
+        )
+
         joint_powers = RewTerm(func=rewards.joint_powers_l1, weight=-2.0e-5)
-        joint_accel_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+        joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+
+        # Sim2Real：脚踝工作空间软约束（默认权重为0，由 YAML 决定是否启用）
+        ankle_workspace = RewTerm(
+            func=rewards.ankle_workspace_penalty,
+            weight=0.0,
+            params={
+                "asset_cfg": SceneEntityCfg(
+                    "robot",
+                    joint_names=".*ankle_cube_joint|.*ankle_axle_joint|.*foot_joint",
+                ),
+                "max_angle": 0.5235987755982988,  # pi/6
+                "margin": 0.1,
+            },
+        )
 
         # 存活奖励（借鉴Humanoid配置）
         alive = RewTerm(func=mdp.is_alive, weight=2.0)
