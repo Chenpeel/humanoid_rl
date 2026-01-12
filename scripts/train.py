@@ -14,12 +14,108 @@ from pathlib import Path
 import yaml
 
 # ============================================================================================
+# ===================== 早期参数解析（必须在导入 jax 前设置环境变量）===========================
+# ============================================================================================
+
+
+def _safe_load_yaml_config(config_path: str) -> dict:
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        return data or {}
+    except Exception:
+        return {}
+
+
+def _parse_early_args(argv):
+    early_parser = argparse.ArgumentParser(add_help=False)
+    early_parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/train/train.yaml",
+        help="YAML配置文件路径（用于早期读取render/JAX显存配置）",
+    )
+    early_parser.add_argument(
+        "--render",
+        type=int,
+        default=None,
+        help="训练时启动MuJoCo窗口（用于早期调整JAX显存占用，避免viewer OOM）",
+    )
+    early_parser.add_argument(
+        "--no-jax-prealloc",
+        action="store_true",
+        help="禁用JAX预分配显存（需在导入jax前设置）",
+    )
+    early_parser.add_argument(
+        "--jax-mem-fraction",
+        type=float,
+        default=None,
+        help="设置JAX显存占用比例(0~1)，例如0.7（需在导入jax前设置）",
+    )
+    cmd_buffer_group = early_parser.add_mutually_exclusive_group()
+    cmd_buffer_group.add_argument(
+        "--disable-command-buffer",
+        action="store_true",
+        help="禁用XLA command buffer/CUDA graph（降低OOM风险，可能变慢；需在导入jax前设置）",
+    )
+    cmd_buffer_group.add_argument(
+        "--enable-command-buffer",
+        action="store_true",
+        help="启用XLA command buffer/CUDA graph（覆盖脚本默认设置；需在导入jax前设置）",
+    )
+    early_args, _ = early_parser.parse_known_args(argv)
+    return early_args
+
+
+_EARLY_ARGS = _parse_early_args(sys.argv[1:])
+_EARLY_YAML_CONFIG = _safe_load_yaml_config(_EARLY_ARGS.config)
+_EARLY_RENDER = (
+    int(_EARLY_ARGS.render)
+    if _EARLY_ARGS.render is not None
+    else int(_EARLY_YAML_CONFIG.get("render", 0) or 0)
+)
+_EARLY_RENDER_ENABLED = _EARLY_RENDER > 0
+
+if _EARLY_ARGS.enable_command_buffer:
+    os.environ["JRL_ENABLE_XLA_COMMAND_BUFFER"] = "1"
+elif _EARLY_ARGS.disable_command_buffer:
+    os.environ["JRL_ENABLE_XLA_COMMAND_BUFFER"] = "0"
+
+_AUTO_APPLIED_JAX_MEM_FRACTION = None
+if _EARLY_ARGS.jax_mem_fraction is not None:
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(_EARLY_ARGS.jax_mem_fraction)
+elif os.environ.get("XLA_PYTHON_CLIENT_MEM_FRACTION") is None:
+    _AUTO_APPLIED_JAX_MEM_FRACTION = "0.70" if _EARLY_RENDER_ENABLED else "0.80"
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = _AUTO_APPLIED_JAX_MEM_FRACTION
+
+_AUTO_DISABLED_JAX_PREALLOC = False
+if _EARLY_ARGS.no_jax_prealloc:
+    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+elif _EARLY_RENDER_ENABLED and os.environ.get("XLA_PYTHON_CLIENT_PREALLOCATE") is None:
+    # 训练时开启 MuJoCo viewer 需要额外图形/driver 显存，禁用预分配更稳。
+    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+    _AUTO_DISABLED_JAX_PREALLOC = True
+else:
+    os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "true")
+
+_JAX_STARTUP_HINTS = []
+if _EARLY_RENDER_ENABLED and _AUTO_DISABLED_JAX_PREALLOC:
+    _JAX_STARTUP_HINTS.append(
+        "检测到 render>0，自动设置 XLA_PYTHON_CLIENT_PREALLOCATE=false 以预留 OpenGL/driver 显存"
+    )
+if _EARLY_RENDER_ENABLED and _AUTO_APPLIED_JAX_MEM_FRACTION is not None:
+    _JAX_STARTUP_HINTS.append(
+        f"检测到 render>0，自动设置 XLA_PYTHON_CLIENT_MEM_FRACTION={_AUTO_APPLIED_JAX_MEM_FRACTION}"
+    )
+_JAX_STARTUP_HINT = "；".join(_JAX_STARTUP_HINTS) if _JAX_STARTUP_HINTS else ""
+
+# ============================================================================================
 # ======================================= JAX环境配置 =========================================
 # ============================================================================================
 
 # 🔧 指定使用 GPU device:0
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ.setdefault("CUDA_DEVICE_ORDER", "PCI_BUS_ID")
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 # 启用JAX编译缓存
 cache_path = os.path.abspath(
@@ -33,9 +129,9 @@ os.environ["JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES"] = "0"
 os.environ["JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS"] = "0"
 
 # 最大化显存使用
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
+os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "true")
 # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.90"
+os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.80")
 
 # 设置 CUDA 数据目录 (Triton)
 
@@ -57,6 +153,16 @@ os.environ["XLA_FLAGS"] = (
     + " --xla_gpu_deterministic_ops=false"
     + " --xla_gpu_unsafe_fallback_to_driver_on_ptxas_not_found=true"
 )
+
+if (
+    os.environ.get("JRL_ENABLE_XLA_COMMAND_BUFFER", "").lower()
+    not in {"1", "true", "yes", "on"}
+    and "xla_gpu_enable_command_buffer" not in os.environ.get("XLA_FLAGS", "")
+):
+    os.environ["XLA_FLAGS"] = (
+        os.environ.get("XLA_FLAGS", "")
+        + " --xla_gpu_enable_command_buffer="
+    )
 
 # 忽略警告
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -185,7 +291,7 @@ def _record_training_video(
         video_rng = jax.random.fold_in(train_state.rng, update)
 
         for frame_idx in range(num_frames):
-            single_mjx_data = jax.tree_map(
+            single_mjx_data = jax.tree_util.tree_map(
                 lambda x: x[env_idx], current_full_state.pipeline_state
             )
 
@@ -228,7 +334,7 @@ def _record_training_video(
             mean, log_std, value = network.apply(train_state.params, obs)
             action = mean[0]
 
-            single_state = jax.tree_map(
+            single_state = jax.tree_util.tree_map(
                 lambda x: x[env_idx], current_full_state)
             new_single_state = env.step(single_state, action)
 
@@ -236,7 +342,7 @@ def _record_training_video(
                 video_rng, reset_rng = jax.random.split(video_rng)
                 new_single_state = env.reset(reset_rng)
 
-            current_full_state = jax.tree_map(
+            current_full_state = jax.tree_util.tree_map(
                 lambda full_arr, single_val: (
                     full_arr.at[env_idx].set(single_val)
                     if hasattr(full_arr, "at")
@@ -327,7 +433,8 @@ def main():
     parser.add_argument(
         "--num-epochs",
         type=int,
-        default=yaml_config.get("num_epochs", yaml_config.get("num-epochs", 4)),
+        default=yaml_config.get(
+            "num_epochs", yaml_config.get("num-epochs", 4)),
     )
     parser.add_argument(
         "--num-minibatches", type=int, default=yaml_config.get("num_minibatches", 4)
@@ -397,11 +504,21 @@ def main():
     )
 
     # 视频录制
-    parser.add_argument(
+    video_group = parser.add_mutually_exclusive_group()
+    video_group.add_argument(
         "--enable-video",
+        dest="enable_video",
         action="store_true",
-        default=yaml_config.get("enable_video", False),
+        help="开启训练视频录制",
     )
+    video_group.add_argument(
+        "--disable-video",
+        dest="enable_video",
+        action="store_false",
+        help="关闭训练视频录制（覆盖YAML）",
+    )
+    parser.set_defaults(enable_video=bool(
+        yaml_config.get("enable_video", False)))
     parser.add_argument(
         "--video-interval", type=int, default=yaml_config.get("video_interval", 200)
     )
@@ -411,6 +528,35 @@ def main():
     parser.add_argument(
         "--video-camera", type=str, default=yaml_config.get("video_camera", "track")
     )
+    parser.add_argument(
+        "--video-width", type=int, default=yaml_config.get("video_width", 1920)
+    )
+    parser.add_argument(
+        "--video-height", type=int, default=yaml_config.get("video_height", 1080)
+    )
+    parser.add_argument(
+        "--video-fps", type=int, default=yaml_config.get("video_fps", 60)
+    )
+
+    # 训练实时可视化（MuJoCo窗口）
+    parser.add_argument(
+        "--render",
+        type=int,
+        default=int(yaml_config.get("render", 0) or 0),
+        help="训练时启动MuJoCo窗口（0=关闭，N=每N步渲染一次；会显著降低训练速度）",
+    )
+    parser.add_argument(
+        "--viewer-sleep",
+        type=float,
+        default=float(yaml_config.get("viewer_sleep", 0.0) or 0.0),
+        help="每次渲染后sleep秒数（用于限速；默认0=尽快渲染）",
+    )
+    parser.add_argument(
+        "--render-steps",
+        type=int,
+        default=yaml_config.get("render_steps", None),
+        help="每个训练update额外可视化的环境步数（默认=num_steps）",
+    )
 
     args = parser.parse_args()
 
@@ -419,7 +565,7 @@ def main():
             f"[bold green]PPO 训练[/bold green]\n"
             f"[dim]JAX + MJX + Flax实现[/dim]\n"
             f"[yellow]场景: {args.scene}[/yellow]\n"
-            f"[dim]配置: {pre_args.config}[/dim",
+            f"[dim]配置: {pre_args.config}[/dim]",
             border_style="green",
         )
     )
@@ -488,9 +634,11 @@ def main():
         env_create_time = time.time() - t0
         console.print(f"✓ StandingEnv 创建完成 (耗时: {env_create_time:.2f}s)")
     else:
-        env = create_velocity_tracking_env(xml_path=xml_path, robot_name=robot_name)
+        env = create_velocity_tracking_env(
+            xml_path=xml_path, robot_name=robot_name)
         env_create_time = time.time() - t0
-        console.print(f"✓ VelocityTrackingEnv 创建完成 (耗时: {env_create_time:.2f}s)")
+        console.print(
+            f"✓ VelocityTrackingEnv 创建完成 (耗时: {env_create_time:.2f}s)")
 
     # 应用 YAML env_config（对standing/velocity尤其重要；walking 后续可能被 curriculum 覆盖）
     env_config = yaml_config.get("env_config", {})
@@ -724,9 +872,105 @@ def main():
     trainer_init_time = time.time() - t0
     console.print(f"✓ 训练器创建完成 (耗时: {trainer_init_time:.2f}s)")
 
+    viewer = None
+    viewer_mj_data = None
+    viewer_state = None
+    viewer_rng = None
+    viewer_step_fn = None
+    viewer_config = None
+    viewer_compiled = False
+
+    if args.render and args.render > 0:
+        console.print("\n[bold cyan]11. 启动训练可视化窗口[/bold cyan]")
+        try:
+            import mujoco
+
+            from rl.utils import InteractiveViewer
+
+            mj_model = env.mj_model
+            viewer_mj_data = mujoco.MjData(mj_model)
+            # 使用 Live 显示实时启动计时（某些环境下创建 OpenGL 上下文会卡住）
+            from rich.live import Live
+            from rich.text import Text
+            import threading
+
+            t_viewer = time.time()
+            stop_viewer_timer = threading.Event()
+
+            def _viewer_timer_text():
+                elapsed = time.time() - t_viewer
+                return Text(f"启动 MuJoCo viewer... 已用时: {elapsed:.1f}s", style="bold cyan")
+
+            with Live(_viewer_timer_text(), console=console, refresh_per_second=10) as live:
+                def _update_viewer_timer():
+                    while not stop_viewer_timer.is_set():
+                        live.update(_viewer_timer_text())
+                        time.sleep(0.1)
+
+                timer_thread = threading.Thread(
+                    target=_update_viewer_timer, daemon=True
+                )
+                timer_thread.start()
+                try:
+                    viewer = InteractiveViewer(mj_model, viewer_mj_data)
+                finally:
+                    stop_viewer_timer.set()
+                    timer_thread.join(timeout=0.5)
+
+            viewer_start_time = time.time() - t_viewer
+            console.print(
+                f"[dim]MuJoCo viewer 已启动（耗时: {viewer_start_time:.2f}s；首次可视化步进可能触发JIT编译）[/dim]"
+            )
+
+            viewer_rng = jax.random.fold_in(train_state.rng, 12345)
+            # 直接复用批量环境的第0个环境作为可视化初始状态，避免额外 reset 的单独编译开销
+            viewer_state = jax.tree_util.tree_map(lambda x: x[0], env_state)
+
+            steps_per_update = (
+                int(args.render_steps) if args.render_steps is not None else int(
+                    args.num_steps)
+            )
+            steps_per_update = max(1, steps_per_update)
+
+            viewer_config = {
+                "render_interval": int(args.render),
+                "steps_per_update": steps_per_update,
+                "viewer_sleep": float(args.viewer_sleep),
+            }
+
+            def _viewer_step(params, state, rng_key):
+                mean, _, _ = network.apply(params, state.obs)
+                action = mean
+                next_state = env.step(state, action)
+                rng_key, reset_key = jax.random.split(rng_key)
+                next_state = jax.lax.cond(
+                    next_state.done,
+                    lambda _: env.reset(reset_key),
+                    lambda _: next_state,
+                    operand=None,
+                )
+                return next_state, rng_key
+
+            viewer_step_fn = jax.jit(_viewer_step)
+            viewer_compiled = False
+
+            console.print(
+                f"[green]✓ 可视化窗口已启动[/green] (render={viewer_config['render_interval']}, "
+                f"steps/update={viewer_config['steps_per_update']})"
+            )
+        except Exception as e:
+            console.print(f"[yellow]警告: 可视化窗口启动失败: {e}[/yellow]")
+            viewer = None
+            viewer_mj_data = None
+            viewer_state = None
+            viewer_rng = None
+            viewer_step_fn = None
+            viewer_config = None
+
     video_recorder = None
     if args.enable_video:
-        console.print("\n[bold cyan]11. 创建视频录制器[/bold cyan]")
+        step_number = "12" if viewer is not None else "11"
+        console.print(f"\n[bold cyan]{step_number}. 创建视频录制器[/bold cyan]")
         from rl.utils.renderer import VideoRecorder
 
         try:
@@ -734,9 +978,9 @@ def main():
             video_recorder = VideoRecorder(
                 mujoco_model=env.mj_model,
                 output_dir=f"{log_dir}/videos",
-                width=1920,
-                height=1080,
-                fps=60,
+                width=args.video_width,
+                height=args.video_height,
+                fps=args.video_fps,
                 camera_name=args.video_camera,
             )
             video_recorder_init_time = time.time() - t0
@@ -746,7 +990,9 @@ def main():
             video_recorder = None
 
     # -------------------------------- 7. JIT编译 --------------------------------
-    step_number = "12" if args.enable_video else "11"
+    step_number = "13" if (viewer is not None and args.enable_video) else (
+        "12" if (viewer is not None or args.enable_video) else "11"
+    )
     console.print(f"\n[bold cyan]{step_number}. JIT编译[/bold cyan]")
 
     train_step_fn = create_train_step_fn(
@@ -806,7 +1052,7 @@ def main():
         video_recorder=None,
         video_config=None,
     ):
-        nonlocal train_step_jit
+        nonlocal train_step_jit, viewer_state, viewer_rng, viewer_compiled
         metrics_logger.log_dict(info)
         if update_callback:
             update_callback(0, info)
@@ -839,7 +1085,8 @@ def main():
 
             if update == 1:
                 # 首次迭代通常包含额外编译/缓存开销；避免创建额外 Live，防止与训练进度 UI 冲突
-                train_state, env_state, info = train_step_jit(train_state, env_state)
+                train_state, env_state, info = train_step_jit(
+                    train_state, env_state)
                 jax.block_until_ready(train_state)
             else:
                 # 正常迭代
@@ -890,6 +1137,52 @@ def main():
                         num_frames=video_config["frames"],
                         network=network,
                     )
+
+            # 训练可视化窗口（实时MuJoCo viewer）
+            if (
+                viewer
+                and viewer_config
+                and viewer_step_fn
+                and viewer_mj_data is not None
+                and viewer_state is not None
+                and viewer_rng is not None
+                and viewer_config.get("render_interval", 0) > 0
+            ):
+                if not viewer.is_alive():
+                    console.print(
+                        "[yellow]提示: MuJoCo窗口已关闭，后续将继续训练但不再渲染[/yellow]"
+                    )
+                    viewer_config["render_interval"] = 0
+                else:
+                    for vis_step in range(int(viewer_config["steps_per_update"])):
+                        if not viewer_compiled:
+                            console.print(
+                                "[dim]可视化 step_fn 首次JIT编译中（只会发生一次）...[/dim]")
+                            t_vis_compile = time.time()
+                        viewer_state, viewer_rng = viewer_step_fn(
+                            train_state.params, viewer_state, viewer_rng
+                        )
+                        if not viewer_compiled:
+                            jax.block_until_ready(viewer_state.reward)
+                            viewer_compiled = True
+                            console.print(
+                                f"[dim]可视化 JIT 编译完成 (耗时: {time.time() - t_vis_compile:.2f}s)[/dim]"
+                            )
+                        if (vis_step + 1) % int(viewer_config["render_interval"]) != 0:
+                            continue
+                        qpos_np, qvel_np, ctrl_np = jax.device_get(
+                            (
+                                viewer_state.pipeline_state.qpos,
+                                viewer_state.pipeline_state.qvel,
+                                viewer_state.pipeline_state.ctrl,
+                            )
+                        )
+                        viewer_mj_data.qpos[:] = qpos_np
+                        viewer_mj_data.qvel[:] = qvel_np
+                        viewer_mj_data.ctrl[:] = ctrl_np
+                        viewer.update(viewer_mj_data)
+                        if viewer_config.get("viewer_sleep", 0.0) > 0:
+                            time.sleep(float(viewer_config["viewer_sleep"]))
 
             # 日志记录
             if (update + 1) % config.log_interval == 0:
@@ -976,6 +1269,11 @@ def main():
         logger.close()
         if video_recorder:
             video_recorder.close()
+        if viewer:
+            try:
+                viewer.close()
+            except Exception:
+                pass
         console.print("\n[dim]日志已保存[/dim]")
 
 
