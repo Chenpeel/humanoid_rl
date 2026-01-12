@@ -562,23 +562,6 @@ def compute_landing_impact_reward(
 # ---------------------------------------------------------------------------------------------
 
 
-def compute_stability_reward(
-    torso_z: jax.Array,
-    base_quat: jax.Array,
-    base_linvel: jax.Array,
-    base_angvel: jax.Array,
-    target_height: float = 0.78,
-    height_tolerance: float = 0.05,
-) -> jax.Array:
-    """综合稳定性奖励"""
-    height_reward = jp.exp(-jp.abs(torso_z - target_height) / height_tolerance)
-    ang_vel_reward = jp.exp(-jp.linalg.norm(base_angvel, axis=-1))
-    return (height_reward + ang_vel_reward) / 2.0
-
-
-# ---------------------------------------------------------------------------------------------
-
-
 # =============================================================================================
 # ===================================== END: 约束与惩罚项 =======================================
 # =============================================================================================
