@@ -751,12 +751,38 @@ def _walking_knee_bend(ctx: _WalkingRewardContext) -> jax.Array:
 
 
 def _walking_double_support(ctx: _WalkingRewardContext) -> jax.Array:
+    # Prefer "foot-only" contacts (not toe) when 4 touch sensors are available:
+    # [right_foot, right_toe, left_foot, left_toe].
+    # Use a short grace window via `contact_history` to avoid penalizing brief recovery steps.
+    if ctx.contact_history is not None and getattr(ctx.contact_history, "shape", None) is not None:
+        hist = jp.asarray(ctx.contact_history)
+        if hist.shape[-1] == 4:
+            right_foot = hist[..., 0]
+            left_foot = hist[..., 2]
+            right_any = (jp.max(right_foot, axis=-2) > 0.5).astype(jp.float32)
+            left_any = (jp.max(left_foot, axis=-2) > 0.5).astype(jp.float32)
+            return right_any * left_any
+
+    if ctx.contact_sensors is not None:
+        sensors = jp.asarray(ctx.contact_sensors)
+        if sensors.shape[-1] == 4:
+            right = (sensors[..., 0] > 1.0).astype(jp.float32)
+            left = (sensors[..., 2] > 1.0).astype(jp.float32)
+            return right * left
+
     right = ctx.contacts[..., 0].astype(jp.float32)
     left = ctx.contacts[..., 1].astype(jp.float32)
     return right * left
 
 
 def _walking_toe_only(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.contact_history is not None and getattr(ctx.contact_history, "shape", None) is not None:
+        hist = jp.asarray(ctx.contact_history)
+        if hist.shape[-1] == 4:
+            # Penalize toe-only support within the grace window (mean over window).
+            toe_only = compute_toe_only_contact_penalty(hist, threshold=0.5)
+            return jp.mean(toe_only, axis=-1)
+
     if ctx.contact_sensors is None:
         return _zeros_like_reward(ctx)
     return compute_toe_only_contact_penalty(ctx.contact_sensors)
