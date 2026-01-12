@@ -1,15 +1,22 @@
 # Makefile for JRL - JAX Reinforcement Learning Training
 # 用于管理机器人训练（自动课程学习）
 
-.PHONY: help install train train-long train-test train-stand train-quick eval play clean clean-cache clean-logs clean-train clean-makelog clean-all
+.PHONY: help install train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-quick eval play clean clean-cache clean-logs clean-train clean-makelog clean-all
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
 # ==================== 配置变量 ====================
 
-# 优先使用当前激活的conda环境中的python
-# 如果没有激活conda环境，则使用系统的python
-PYTHON := python
+# Python 解释器：优先使用绝对路径（减少对 conda activate 的依赖）
+# 1) 当前激活环境：$CONDA_PREFIX/bin/python
+# 2) 默认环境：~/.miniconda3/envs/jrl/bin/python
+# 3) 回退：which python3 / python
+PYTHON ?= $(shell \
+	if [ -n "$$CONDA_PREFIX" ] && [ -x "$$CONDA_PREFIX/bin/python" ]; then echo "$$CONDA_PREFIX/bin/python"; \
+	elif [ -x "$$HOME/.miniconda3/envs/jrl/bin/python" ]; then echo "$$HOME/.miniconda3/envs/jrl/bin/python"; \
+	elif command -v python3 >/dev/null 2>&1; then command -v python3; \
+	else command -v python; fi)
+MUJOCO_GL_IS_CMDLINE := $(filter command line,$(origin MUJOCO_GL))
 PROJECT_ROOT := $(shell pwd)
 LOG_DIR := $(PROJECT_ROOT)/logs
 # Make命令执行日志固定写入项目根目录下的logs/makelog，
@@ -44,9 +51,17 @@ help:
 	@echo "  make train-long           长时间训练（4096 envs，500M steps，约24-48小时）"
 	@echo "  make train-test           测试训练（256 envs，16M steps，约3-5小时）"
 	@echo "  make train-stand          站立专训（walking env + 站立奖励，20M steps）"
+	@echo "  make train-vis            标准训练 + MuJoCo窗口实时可视化（更慢）"
+	@echo "  make train-long-vis       长时间训练 + MuJoCo窗口实时可视化（更慢）"
+	@echo "  make train-test-vis       测试训练 + MuJoCo窗口实时可视化（更慢）"
+	@echo "  make train-stand-vis      站立专训 + MuJoCo窗口实时可视化（更慢）"
 	@echo "  make train-test ENV_TYPE=standing          用站立环境跑快速训练"
 	@echo "  make train-custom CONFIG=... RESUME_FROM=...  从检查点继续训练"
 	@echo "  make train-custom CONFIG=path/to/config.yaml  自定义配置训练"
+	@echo "  make train RENDER=N       训练时开启MuJoCo窗口（0=不显示，N=每N步更新一次窗口）"
+	@echo "  make train RENDER=10 VIEWER_SLEEP=0.01     限速渲染（减少CPU占用/更平滑）"
+	@echo "  make train RENDER=10 RENDER_CPU=1          强制软件OpenGL渲染窗口（更慢，尽量减少GPU图形占用）"
+	@echo "  make train ENABLE_VIDEO=1 VIDEO_INTERVAL=500  周期性录制训练视频到 logs/train/.../videos"
 	@echo ""
 	@echo "课程学习机制："
 	@echo "  - 阶段1 (0-20M env steps):    站立平衡"
@@ -127,6 +142,23 @@ train:
 			CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_TRAIN)"; \
 			if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
 			if [ -n "$(RESUME_FROM)" ]; then CMD="$$CMD --resume-from $(RESUME_FROM)"; echo "恢复: $(RESUME_FROM)"; fi; \
+			if [ -n "$(ENABLE_VIDEO)" ]; then CMD="$$CMD --enable-video"; echo "训练视频: 开启"; \
+			elif [ -n "$(DISABLE_VIDEO)" ]; then CMD="$$CMD --disable-video"; echo "训练视频: 关闭"; fi; \
+			if [ -n "$(VIDEO_INTERVAL)" ]; then CMD="$$CMD --video-interval $(VIDEO_INTERVAL)"; echo "video_interval: $(VIDEO_INTERVAL)"; fi; \
+			if [ -n "$(VIDEO_FRAMES)" ]; then CMD="$$CMD --video-frames $(VIDEO_FRAMES)"; echo "video_frames: $(VIDEO_FRAMES)"; fi; \
+			if [ -n "$(VIDEO_FPS)" ]; then CMD="$$CMD --video-fps $(VIDEO_FPS)"; echo "video_fps: $(VIDEO_FPS)"; fi; \
+			if [ -n "$(RENDER_WIDTH)" ]; then CMD="$$CMD --video-width $(RENDER_WIDTH)"; echo "video_width: $(RENDER_WIDTH)"; \
+			elif [ -n "$(WIDTH)" ]; then CMD="$$CMD --video-width $(WIDTH)"; echo "video_width: $(WIDTH)"; \
+			elif [ -n "$(WEIGHT)" ]; then CMD="$$CMD --video-width $(WEIGHT)"; echo "video_width: $(WEIGHT)"; fi; \
+			if [ -n "$(RENDER_HEIGHT)" ]; then CMD="$$CMD --video-height $(RENDER_HEIGHT)"; echo "video_height: $(RENDER_HEIGHT)"; \
+			elif [ -n "$(HEIGHT)" ]; then CMD="$$CMD --video-height $(HEIGHT)"; echo "video_height: $(HEIGHT)"; fi; \
+			if [ -n "$(CAMERA_NAME)" ]; then CMD="$$CMD --video-camera $(CAMERA_NAME)"; echo "video_camera: $(CAMERA_NAME)"; fi; \
+			if [ -n "$(RENDER)" ]; then CMD="$$CMD --render $(RENDER)"; echo "render: $(RENDER)"; fi; \
+			if [ -n "$(RENDER_STEPS)" ]; then CMD="$$CMD --render-steps $(RENDER_STEPS)"; echo "render_steps: $(RENDER_STEPS)"; fi; \
+			if [ -n "$(VIEWER_SLEEP)" ]; then CMD="$$CMD --viewer-sleep $(VIEWER_SLEEP)"; echo "viewer sleep: $(VIEWER_SLEEP)s"; fi; \
+			if [ -n "$(RENDER_CPU)" ]; then CMD="LIBGL_ALWAYS_SOFTWARE=1 $$CMD"; echo "LIBGL_ALWAYS_SOFTWARE: 1"; fi; \
+			if [ -n "$(MUJOCO_GL_IS_CMDLINE)" ]; then CMD="MUJOCO_GL=$(MUJOCO_GL) $$CMD"; echo "MUJOCO_GL: $(MUJOCO_GL)"; \
+			elif [ -n "$(RENDER)" ] && [ "$(RENDER)" != "0" ]; then CMD="MUJOCO_GL=glfw $$CMD"; echo "MUJOCO_GL: glfw"; fi; \
 			eval $$CMD 2>&1; \
 			EXIT_CODE=$$?; \
 		echo ""; \
@@ -157,6 +189,23 @@ train-long:
 			CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_LONG)"; \
 			if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
 			if [ -n "$(RESUME_FROM)" ]; then CMD="$$CMD --resume-from $(RESUME_FROM)"; echo "恢复: $(RESUME_FROM)"; fi; \
+			if [ -n "$(ENABLE_VIDEO)" ]; then CMD="$$CMD --enable-video"; echo "训练视频: 开启"; \
+			elif [ -n "$(DISABLE_VIDEO)" ]; then CMD="$$CMD --disable-video"; echo "训练视频: 关闭"; fi; \
+			if [ -n "$(VIDEO_INTERVAL)" ]; then CMD="$$CMD --video-interval $(VIDEO_INTERVAL)"; echo "video_interval: $(VIDEO_INTERVAL)"; fi; \
+			if [ -n "$(VIDEO_FRAMES)" ]; then CMD="$$CMD --video-frames $(VIDEO_FRAMES)"; echo "video_frames: $(VIDEO_FRAMES)"; fi; \
+			if [ -n "$(VIDEO_FPS)" ]; then CMD="$$CMD --video-fps $(VIDEO_FPS)"; echo "video_fps: $(VIDEO_FPS)"; fi; \
+			if [ -n "$(RENDER_WIDTH)" ]; then CMD="$$CMD --video-width $(RENDER_WIDTH)"; echo "video_width: $(RENDER_WIDTH)"; \
+			elif [ -n "$(WIDTH)" ]; then CMD="$$CMD --video-width $(WIDTH)"; echo "video_width: $(WIDTH)"; \
+			elif [ -n "$(WEIGHT)" ]; then CMD="$$CMD --video-width $(WEIGHT)"; echo "video_width: $(WEIGHT)"; fi; \
+			if [ -n "$(RENDER_HEIGHT)" ]; then CMD="$$CMD --video-height $(RENDER_HEIGHT)"; echo "video_height: $(RENDER_HEIGHT)"; \
+			elif [ -n "$(HEIGHT)" ]; then CMD="$$CMD --video-height $(HEIGHT)"; echo "video_height: $(HEIGHT)"; fi; \
+			if [ -n "$(CAMERA_NAME)" ]; then CMD="$$CMD --video-camera $(CAMERA_NAME)"; echo "video_camera: $(CAMERA_NAME)"; fi; \
+			if [ -n "$(RENDER)" ]; then CMD="$$CMD --render $(RENDER)"; echo "render: $(RENDER)"; fi; \
+			if [ -n "$(RENDER_STEPS)" ]; then CMD="$$CMD --render-steps $(RENDER_STEPS)"; echo "render_steps: $(RENDER_STEPS)"; fi; \
+			if [ -n "$(VIEWER_SLEEP)" ]; then CMD="$$CMD --viewer-sleep $(VIEWER_SLEEP)"; echo "viewer sleep: $(VIEWER_SLEEP)s"; fi; \
+			if [ -n "$(RENDER_CPU)" ]; then CMD="LIBGL_ALWAYS_SOFTWARE=1 $$CMD"; echo "LIBGL_ALWAYS_SOFTWARE: 1"; fi; \
+			if [ -n "$(MUJOCO_GL_IS_CMDLINE)" ]; then CMD="MUJOCO_GL=$(MUJOCO_GL) $$CMD"; echo "MUJOCO_GL: $(MUJOCO_GL)"; \
+			elif [ -n "$(RENDER)" ] && [ "$(RENDER)" != "0" ]; then CMD="MUJOCO_GL=glfw $$CMD"; echo "MUJOCO_GL: glfw"; fi; \
 			eval $$CMD 2>&1; \
 			EXIT_CODE=$$?; \
 		echo ""; \
@@ -187,6 +236,23 @@ train-test:
 			CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_QUICK)"; \
 			if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
 			if [ -n "$(RESUME_FROM)" ]; then CMD="$$CMD --resume-from $(RESUME_FROM)"; echo "恢复: $(RESUME_FROM)"; fi; \
+			if [ -n "$(ENABLE_VIDEO)" ]; then CMD="$$CMD --enable-video"; echo "训练视频: 开启"; \
+			elif [ -n "$(DISABLE_VIDEO)" ]; then CMD="$$CMD --disable-video"; echo "训练视频: 关闭"; fi; \
+			if [ -n "$(VIDEO_INTERVAL)" ]; then CMD="$$CMD --video-interval $(VIDEO_INTERVAL)"; echo "video_interval: $(VIDEO_INTERVAL)"; fi; \
+			if [ -n "$(VIDEO_FRAMES)" ]; then CMD="$$CMD --video-frames $(VIDEO_FRAMES)"; echo "video_frames: $(VIDEO_FRAMES)"; fi; \
+			if [ -n "$(VIDEO_FPS)" ]; then CMD="$$CMD --video-fps $(VIDEO_FPS)"; echo "video_fps: $(VIDEO_FPS)"; fi; \
+			if [ -n "$(RENDER_WIDTH)" ]; then CMD="$$CMD --video-width $(RENDER_WIDTH)"; echo "video_width: $(RENDER_WIDTH)"; \
+			elif [ -n "$(WIDTH)" ]; then CMD="$$CMD --video-width $(WIDTH)"; echo "video_width: $(WIDTH)"; \
+			elif [ -n "$(WEIGHT)" ]; then CMD="$$CMD --video-width $(WEIGHT)"; echo "video_width: $(WEIGHT)"; fi; \
+			if [ -n "$(RENDER_HEIGHT)" ]; then CMD="$$CMD --video-height $(RENDER_HEIGHT)"; echo "video_height: $(RENDER_HEIGHT)"; \
+			elif [ -n "$(HEIGHT)" ]; then CMD="$$CMD --video-height $(HEIGHT)"; echo "video_height: $(HEIGHT)"; fi; \
+			if [ -n "$(CAMERA_NAME)" ]; then CMD="$$CMD --video-camera $(CAMERA_NAME)"; echo "video_camera: $(CAMERA_NAME)"; fi; \
+			if [ -n "$(RENDER)" ]; then CMD="$$CMD --render $(RENDER)"; echo "render: $(RENDER)"; fi; \
+			if [ -n "$(RENDER_STEPS)" ]; then CMD="$$CMD --render-steps $(RENDER_STEPS)"; echo "render_steps: $(RENDER_STEPS)"; fi; \
+			if [ -n "$(VIEWER_SLEEP)" ]; then CMD="$$CMD --viewer-sleep $(VIEWER_SLEEP)"; echo "viewer sleep: $(VIEWER_SLEEP)s"; fi; \
+			if [ -n "$(RENDER_CPU)" ]; then CMD="LIBGL_ALWAYS_SOFTWARE=1 $$CMD"; echo "LIBGL_ALWAYS_SOFTWARE: 1"; fi; \
+			if [ -n "$(MUJOCO_GL_IS_CMDLINE)" ]; then CMD="MUJOCO_GL=$(MUJOCO_GL) $$CMD"; echo "MUJOCO_GL: $(MUJOCO_GL)"; \
+			elif [ -n "$(RENDER)" ] && [ "$(RENDER)" != "0" ]; then CMD="MUJOCO_GL=glfw $$CMD"; echo "MUJOCO_GL: glfw"; fi; \
 			eval $$CMD 2>&1; \
 			EXIT_CODE=$$?; \
 		echo ""; \
@@ -215,6 +281,23 @@ train-stand:
 			CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG_STAND)"; \
 			if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
 			if [ -n "$(RESUME_FROM)" ]; then CMD="$$CMD --resume-from $(RESUME_FROM)"; echo "恢复: $(RESUME_FROM)"; fi; \
+			if [ -n "$(ENABLE_VIDEO)" ]; then CMD="$$CMD --enable-video"; echo "训练视频: 开启"; \
+			elif [ -n "$(DISABLE_VIDEO)" ]; then CMD="$$CMD --disable-video"; echo "训练视频: 关闭"; fi; \
+			if [ -n "$(VIDEO_INTERVAL)" ]; then CMD="$$CMD --video-interval $(VIDEO_INTERVAL)"; echo "video_interval: $(VIDEO_INTERVAL)"; fi; \
+			if [ -n "$(VIDEO_FRAMES)" ]; then CMD="$$CMD --video-frames $(VIDEO_FRAMES)"; echo "video_frames: $(VIDEO_FRAMES)"; fi; \
+			if [ -n "$(VIDEO_FPS)" ]; then CMD="$$CMD --video-fps $(VIDEO_FPS)"; echo "video_fps: $(VIDEO_FPS)"; fi; \
+			if [ -n "$(RENDER_WIDTH)" ]; then CMD="$$CMD --video-width $(RENDER_WIDTH)"; echo "video_width: $(RENDER_WIDTH)"; \
+			elif [ -n "$(WIDTH)" ]; then CMD="$$CMD --video-width $(WIDTH)"; echo "video_width: $(WIDTH)"; \
+			elif [ -n "$(WEIGHT)" ]; then CMD="$$CMD --video-width $(WEIGHT)"; echo "video_width: $(WEIGHT)"; fi; \
+			if [ -n "$(RENDER_HEIGHT)" ]; then CMD="$$CMD --video-height $(RENDER_HEIGHT)"; echo "video_height: $(RENDER_HEIGHT)"; \
+			elif [ -n "$(HEIGHT)" ]; then CMD="$$CMD --video-height $(HEIGHT)"; echo "video_height: $(HEIGHT)"; fi; \
+			if [ -n "$(CAMERA_NAME)" ]; then CMD="$$CMD --video-camera $(CAMERA_NAME)"; echo "video_camera: $(CAMERA_NAME)"; fi; \
+			if [ -n "$(RENDER)" ]; then CMD="$$CMD --render $(RENDER)"; echo "render: $(RENDER)"; fi; \
+			if [ -n "$(RENDER_STEPS)" ]; then CMD="$$CMD --render-steps $(RENDER_STEPS)"; echo "render_steps: $(RENDER_STEPS)"; fi; \
+			if [ -n "$(VIEWER_SLEEP)" ]; then CMD="$$CMD --viewer-sleep $(VIEWER_SLEEP)"; echo "viewer sleep: $(VIEWER_SLEEP)s"; fi; \
+			if [ -n "$(RENDER_CPU)" ]; then CMD="LIBGL_ALWAYS_SOFTWARE=1 $$CMD"; echo "LIBGL_ALWAYS_SOFTWARE: 1"; fi; \
+			if [ -n "$(MUJOCO_GL_IS_CMDLINE)" ]; then CMD="MUJOCO_GL=$(MUJOCO_GL) $$CMD"; echo "MUJOCO_GL: $(MUJOCO_GL)"; \
+			elif [ -n "$(RENDER)" ] && [ "$(RENDER)" != "0" ]; then CMD="MUJOCO_GL=glfw $$CMD"; echo "MUJOCO_GL: glfw"; fi; \
 			# 使用 script 分配 pseudo-TTY，确保 Rich Live 进度条在日志模式(tee)下也能实时刷新 \
 			script -q -e -c "$$CMD" /dev/null 2>&1; \
 			EXIT_CODE=$$?; \
@@ -252,6 +335,23 @@ train-custom:
 			CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_SCRIPT) --config $(CONFIG)"; \
 			if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
 			if [ -n "$(RESUME_FROM)" ]; then CMD="$$CMD --resume-from $(RESUME_FROM)"; echo "恢复: $(RESUME_FROM)"; fi; \
+			if [ -n "$(ENABLE_VIDEO)" ]; then CMD="$$CMD --enable-video"; echo "训练视频: 开启"; \
+			elif [ -n "$(DISABLE_VIDEO)" ]; then CMD="$$CMD --disable-video"; echo "训练视频: 关闭"; fi; \
+			if [ -n "$(VIDEO_INTERVAL)" ]; then CMD="$$CMD --video-interval $(VIDEO_INTERVAL)"; echo "video_interval: $(VIDEO_INTERVAL)"; fi; \
+			if [ -n "$(VIDEO_FRAMES)" ]; then CMD="$$CMD --video-frames $(VIDEO_FRAMES)"; echo "video_frames: $(VIDEO_FRAMES)"; fi; \
+			if [ -n "$(VIDEO_FPS)" ]; then CMD="$$CMD --video-fps $(VIDEO_FPS)"; echo "video_fps: $(VIDEO_FPS)"; fi; \
+			if [ -n "$(RENDER_WIDTH)" ]; then CMD="$$CMD --video-width $(RENDER_WIDTH)"; echo "video_width: $(RENDER_WIDTH)"; \
+			elif [ -n "$(WIDTH)" ]; then CMD="$$CMD --video-width $(WIDTH)"; echo "video_width: $(WIDTH)"; \
+			elif [ -n "$(WEIGHT)" ]; then CMD="$$CMD --video-width $(WEIGHT)"; echo "video_width: $(WEIGHT)"; fi; \
+			if [ -n "$(RENDER_HEIGHT)" ]; then CMD="$$CMD --video-height $(RENDER_HEIGHT)"; echo "video_height: $(RENDER_HEIGHT)"; \
+			elif [ -n "$(HEIGHT)" ]; then CMD="$$CMD --video-height $(HEIGHT)"; echo "video_height: $(HEIGHT)"; fi; \
+			if [ -n "$(CAMERA_NAME)" ]; then CMD="$$CMD --video-camera $(CAMERA_NAME)"; echo "video_camera: $(CAMERA_NAME)"; fi; \
+			if [ -n "$(RENDER)" ]; then CMD="$$CMD --render $(RENDER)"; echo "render: $(RENDER)"; fi; \
+			if [ -n "$(RENDER_STEPS)" ]; then CMD="$$CMD --render-steps $(RENDER_STEPS)"; echo "render_steps: $(RENDER_STEPS)"; fi; \
+			if [ -n "$(VIEWER_SLEEP)" ]; then CMD="$$CMD --viewer-sleep $(VIEWER_SLEEP)"; echo "viewer sleep: $(VIEWER_SLEEP)s"; fi; \
+			if [ -n "$(RENDER_CPU)" ]; then CMD="LIBGL_ALWAYS_SOFTWARE=1 $$CMD"; echo "LIBGL_ALWAYS_SOFTWARE: 1"; fi; \
+			if [ -n "$(MUJOCO_GL_IS_CMDLINE)" ]; then CMD="MUJOCO_GL=$(MUJOCO_GL) $$CMD"; echo "MUJOCO_GL: $(MUJOCO_GL)"; \
+			elif [ -n "$(RENDER)" ] && [ "$(RENDER)" != "0" ]; then CMD="MUJOCO_GL=glfw $$CMD"; echo "MUJOCO_GL: glfw"; fi; \
 			eval $$CMD 2>&1; \
 			EXIT_CODE=$$?; \
 		echo ""; \
@@ -261,6 +361,21 @@ train-custom:
 	} 2>&1 | tee "$$LOGFILE"; \
 	echo ""; \
 	echo "=== 训练完成 ==="
+
+train-vis:
+	@$(MAKE) train RENDER=1
+
+train-long-vis:
+	@$(MAKE) train-long RENDER=1
+
+train-test-vis:
+	@$(MAKE) train-test RENDER=1
+
+train-stand-vis:
+	@$(MAKE) train-stand RENDER=1
+
+train-custom-vis:
+	@$(MAKE) train-custom RENDER=1
 
 validate-config:
 	@echo "=== 验证配置文件 ==="
@@ -478,7 +593,7 @@ format:
 
 test:
 	@echo "=== 运行测试 ==="
-	pytest tests/ -v 2>/dev/null || python -m pytest tests/ -v
+	pytest tests/ -v 2>/dev/null || $(PYTHON) -m pytest tests/ -v
 
 # ==================== 信息相关 ====================
 

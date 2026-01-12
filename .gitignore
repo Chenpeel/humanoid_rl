@@ -32,13 +32,14 @@ env/
 *.mp4
 .DS_Store
 *.egg-info
-.abandoned/
+plays/
 
 # cython编译文件
 build/
 *.html
 *.cpp
 *.so
+
 # Agent
 CLAUDE.md
 .claude/

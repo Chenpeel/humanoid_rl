@@ -1,3 +1,3 @@
 [submodule "models"]
 	path = models
-	url = git@github.com:ACpeel/jax_drl_pt.git
+	url = git@github.com:ACpeel/jrl_ckpt.git
