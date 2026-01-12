@@ -1,7 +1,7 @@
 # Makefile for JRL - JAX Reinforcement Learning Training
 # 用于管理机器人训练（自动课程学习）
 
-.PHONY: help install train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-quick eval play clean clean-cache clean-logs clean-train clean-makelog clean-all
+.PHONY: help install submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-quick eval play clean clean-cache clean-logs clean-train clean-makelog clean-all
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
@@ -45,6 +45,7 @@ help:
 	@echo "  make install              安装JAX依赖"
 	@echo "  make install-dev          安装开发依赖"
 	@echo "  make check-env            检查JAX/CUDA环境"
+	@echo "  make submodule-update     初始化/更新子模块（models）"
 	@echo ""
 	@echo "训练命令（自动课程学习）："
 	@echo "  make train                标准训练（2048 envs，200M steps，约8-12小时）"
@@ -120,6 +121,14 @@ check-env:
 	@echo "JAX后端: $$($(PYTHON) -c 'import jax; print(jax.default_backend())')"
 	@echo "可用设备:"
 	@$(PYTHON) -c 'import jax; [print(f"  - {d}") for d in jax.devices()]'
+
+# ==================== Git 子模块 ====================
+
+submodule-update:
+	@echo "=== 更新子模块 ==="
+	git submodule sync --recursive
+	git submodule update --init --recursive
+	@echo "✓ 子模块更新完成"
 
 # ==================== 训练相关 ====================
 
