@@ -602,15 +602,19 @@ def main():
         config.total_timesteps = required_timesteps
         total_updates = config.num_updates
 
-    warmup_steps = max(10, total_updates // 20)
+    steps_per_update = config.num_epochs * config.num_minibatches
+    total_optimizer_steps = max(1, total_updates * steps_per_update)
+    warmup_steps = max(10, total_optimizer_steps // 20)
     optimizer = create_ppo_optimizer_cosine(
         learning_rate=args.learning_rate,
-        total_steps=total_updates,
+        total_steps=total_optimizer_steps,
         warmup_steps=warmup_steps,
         max_grad_norm=config.max_grad_norm,
         final_lr_fraction=args.final_lr_fraction,
     )
-    console.print(f"✓ 优化器创建完成 (Warmup: {warmup_steps:,})")
+    console.print(
+        f"✓ 优化器创建完成 (Warmup: {warmup_steps:,} / Total opt steps: {total_optimizer_steps:,})"
+    )
 
     # -------------------------------- 5. 初始化状态 --------------------------------
     console.print("\n[bold cyan]6. 初始化训练状态[/bold cyan]")
@@ -848,16 +852,17 @@ def main():
             info.update(perf_metrics)
 
             # 计算学习率
-            current_step = update
+            current_step = int(jax.device_get(train_state.step))
+            peak_lr = args.learning_rate
+            end_lr = args.learning_rate * args.final_lr_fraction
             if current_step < warmup_steps:
-                current_lr = args.learning_rate * \
-                    (current_step / max(1, warmup_steps))
+                current_lr = peak_lr * (current_step / max(1, warmup_steps))
             else:
-                denominator = max(1, total_updates - warmup_steps)
-                progress_ratio = (current_step - warmup_steps) / denominator
-                current_lr = (
-                    0.5 * args.learning_rate *
-                    (1 + jp.cos(jp.pi * progress_ratio))
+                decay_steps = max(1, total_optimizer_steps - warmup_steps)
+                progress_ratio = (current_step - warmup_steps) / decay_steps
+                progress_ratio = float(min(1.0, max(0.0, progress_ratio)))
+                current_lr = end_lr + (peak_lr - end_lr) * (
+                    0.5 * (1 + jp.cos(jp.pi * progress_ratio))
                 )
             info["learning_rate"] = float(current_lr)
 
