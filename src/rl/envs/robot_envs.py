@@ -994,6 +994,11 @@ class WalkingEnv(MJXBaseEnv):
         cmd_yaw_range: tuple = (-1.0, 1.0),
         height_threshold: float = 0.25,
         upright_threshold: float = 0.5,
+        # 扰动（推力）随机化：用于提高髋/踝抗扰动能力
+        enable_random_pushes: bool = False,
+        push_force_range: tuple = (0.0, 0.0),  # N, magnitude in xy plane
+        push_duration_steps_range: tuple = (0, 0),  # control steps
+        push_wait_steps_range: tuple = (0, 0),  # control steps between pushes
         target_height: Optional[float] = None,
         # 奖励权重
         reward_weights: Dict[str, float] = None,
@@ -1013,6 +1018,10 @@ class WalkingEnv(MJXBaseEnv):
             cmd_yaw_range: yaw角速度命令范围
             height_threshold: 摔倒高度阈值（越高越严格）
             upright_threshold: 摔倒直立度阈值（越高越严格）
+            enable_random_pushes: 是否开启随机推力扰动
+            push_force_range: 推力幅值范围（N，作用在xy平面，均匀采样）
+            push_duration_steps_range: 推力持续步数范围（以 control step 为单位）
+            push_wait_steps_range: 两次推力之间的等待步数范围（以 control step 为单位）
             target_height: 目标高度（如果为None，则使用机器人配置中的nominal_height）
             reward_weights: 奖励权重字典
         """
@@ -1033,6 +1042,10 @@ class WalkingEnv(MJXBaseEnv):
         self.cmd_yaw_range = cmd_yaw_range
         self.height_threshold = height_threshold
         self.upright_threshold = upright_threshold
+        self.enable_random_pushes = enable_random_pushes
+        self.push_force_range = push_force_range
+        self.push_duration_steps_range = push_duration_steps_range
+        self.push_wait_steps_range = push_wait_steps_range
         self.target_height = target_height if target_height is not None else self.robot_config.nominal_height
 
         if reward_weights is None:
@@ -1101,6 +1114,8 @@ class WalkingEnv(MJXBaseEnv):
         self.left_foot_body_id = mujoco.mj_name2id(
             model, mujoco.mjtObj.mjOBJ_BODY, "left_foot_link"
         )
+        base_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "base_link")
+        self.base_body_id = base_id if base_id >= 0 else 1
 
         self.default_qpos = jp.array(model.qpos0)
         try:
@@ -1144,14 +1159,34 @@ class WalkingEnv(MJXBaseEnv):
         state = super().reset(rng)
 
         # 采样速度命令
-        rng, cmd_rng = jax.random.split(state.rng)
+        rng, cmd_rng, push_rng = jax.random.split(state.rng, 3)
         command = self._sample_command(cmd_rng)
+
+        def _sample_push_wait(rng_in: jax.Array) -> jax.Array:
+            lo, hi = self.push_wait_steps_range
+            lo = int(lo)
+            hi = int(hi)
+            hi = max(hi, lo)
+            return jax.random.randint(rng_in, (), minval=lo, maxval=hi + 1).astype(
+                jp.int32
+            )
+
+        enable_pushes = jp.array(bool(getattr(self, "enable_random_pushes", False)))
+        push_wait_steps = jax.lax.cond(
+            enable_pushes,
+            _sample_push_wait,
+            lambda _: jp.array(0, dtype=jp.int32),
+            push_rng,
+        )
 
         # 初始化info字典,包含环境信息
         info = {
             "command": command,
             "actual_velocity": jp.zeros(3),
             "contact_history": jp.zeros((10, 4)),
+            "push_force": jp.zeros(3),
+            "push_steps_left": jp.array(0, dtype=jp.int32),
+            "push_wait_steps": push_wait_steps,
         }
 
         # 确保pytree结构保持一致
@@ -1496,11 +1531,106 @@ class WalkingEnv(MJXBaseEnv):
 
     # --------------------------------------------------------------------------------------------
 
+    def _apply_external_push(self, pipeline_state: Any, force_xyz: jax.Array) -> Any:
+        """Apply an external force to the base body (if supported by mjx.Data)."""
+        if hasattr(pipeline_state, "xfrc_applied"):
+            xfrc = jp.zeros_like(pipeline_state.xfrc_applied)
+            xfrc = xfrc.at[self.base_body_id, :3].set(force_xyz)
+            return pipeline_state.replace(xfrc_applied=xfrc)
+        return pipeline_state
+
+    # --------------------------------------------------------------------------------------------
+
     def step(self, state: EnvState, action: jax.Array) -> EnvState:
         """执行一步"""
         action = jp.clip(action, -1.0, 1.0)
+        rng = state.rng
+
+        push_force = state.info.get("push_force", jp.zeros(3))
+        push_steps_left = state.info.get("push_steps_left", jp.array(0, dtype=jp.int32))
+        push_wait_steps = state.info.get("push_wait_steps", jp.array(0, dtype=jp.int32))
+
+        enable_pushes = jp.array(bool(getattr(self, "enable_random_pushes", False)))
+        f_lo, f_hi = self.push_force_range
+        d_lo, d_hi = self.push_duration_steps_range
+        w_lo, w_hi = self.push_wait_steps_range
+        f_lo = float(f_lo)
+        f_hi = float(f_hi)
+        d_lo = int(d_lo)
+        d_hi = int(d_hi)
+        w_lo = int(w_lo)
+        w_hi = int(w_hi)
+        d_hi = max(d_hi, d_lo)
+        w_hi = max(w_hi, w_lo)
+
+        def _sample_new_push(rng_in: jax.Array):
+            rng_out, k_mag, k_ang, k_dur, k_wait = jax.random.split(rng_in, 5)
+            mag = jax.random.uniform(k_mag, (), minval=f_lo, maxval=f_hi)
+            ang = jax.random.uniform(k_ang, (), minval=-jp.pi, maxval=jp.pi)
+            force = jp.array([mag * jp.cos(ang), mag * jp.sin(ang), 0.0])
+            dur = jax.random.randint(k_dur, (), minval=d_lo, maxval=d_hi + 1).astype(
+                jp.int32
+            )
+            wait = jax.random.randint(
+                k_wait, (), minval=w_lo, maxval=w_hi + 1
+            ).astype(jp.int32)
+            return rng_out, force, dur, wait
+
+        def _update_push(args):
+            rng_in, force_in, steps_left_in, wait_in = args
+
+            def _active_branch(args2):
+                rng_a, f_a, steps_a, wait_a = args2
+                return rng_a, f_a, jp.maximum(steps_a - 1, 0).astype(jp.int32), wait_a, f_a
+
+            def _inactive_branch(args2):
+                rng_a, f_a, steps_a, wait_a = args2
+
+                def _wait_branch(rng_b):
+                    return (
+                        rng_b,
+                        jp.zeros(3),
+                        jp.array(0, dtype=jp.int32),
+                        jp.maximum(wait_a - 1, 0).astype(jp.int32),
+                        jp.zeros(3),
+                    )
+
+                def _sample_branch(rng_b):
+                    rng_c, f_c, dur_c, wait_c = _sample_new_push(rng_b)
+                    # Apply now; store steps_left for subsequent control steps.
+                    return (
+                        rng_c,
+                        f_c,
+                        jp.maximum(dur_c - 1, 0).astype(jp.int32),
+                        wait_c,
+                        f_c,
+                    )
+
+                return jax.lax.cond(wait_a > 0, _wait_branch, _sample_branch, rng_a)
+
+            return jax.lax.cond(
+                steps_left_in > 0,
+                _active_branch,
+                _inactive_branch,
+                (rng_in, force_in, steps_left_in, wait_in),
+            )
+
+        rng, push_force, push_steps_left, push_wait_steps, applied_force = jax.lax.cond(
+            enable_pushes,
+            _update_push,
+            lambda args: (
+                args[0],
+                jp.zeros(3),
+                jp.array(0, dtype=jp.int32),
+                jp.array(0, dtype=jp.int32),
+                jp.zeros(3),
+            ),
+            (rng, push_force, push_steps_left, push_wait_steps),
+        )
+
         pipeline_state = state.pipeline_state
         for _ in range(self.frame_skip):
+            pipeline_state = self._apply_external_push(pipeline_state, applied_force)
             pipeline_state = self._step_pipeline(pipeline_state, action)
 
         obs = self._get_obs(pipeline_state, action)
@@ -1534,6 +1664,9 @@ class WalkingEnv(MJXBaseEnv):
 
         info = self._get_info(state, action, pipeline_state)
         info.update(reward_info)
+        info["push_force"] = push_force
+        info["push_steps_left"] = push_steps_left
+        info["push_wait_steps"] = push_wait_steps
 
         return EnvState(
             pipeline_state=pipeline_state,
@@ -1541,7 +1674,7 @@ class WalkingEnv(MJXBaseEnv):
             reward=reward,
             done=done,
             step=step,
-            rng=state.rng,
+            rng=rng,
             last_action=action,
             info=info,
         )
