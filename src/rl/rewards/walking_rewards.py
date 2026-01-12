@@ -17,7 +17,8 @@ import jax.numpy as jp
 
 from .components import (compute_action_rate_penalty, compute_ang_vel_penalty,
                          compute_joint_deviation_penalty as _compute_joint_deviation_penalty,
-                         compute_lin_vel_xy_penalty, compute_torque_penalty,
+                         compute_knee_bend_reward, compute_lin_vel_xy_penalty,
+                         compute_toe_only_contact_penalty, compute_torque_penalty,
                          normalize_quaternion, quat_to_euler, wrap_to_pi)
 
 # ============================================================================================
@@ -575,6 +576,9 @@ def compute_stability_reward(
     return (height_reward + ang_vel_reward) / 2.0
 
 
+# ---------------------------------------------------------------------------------------------
+
+
 # =============================================================================================
 # ===================================== END: 约束与惩罚项 =======================================
 # =============================================================================================
@@ -740,6 +744,24 @@ def _walking_stability(ctx: _WalkingRewardContext) -> jax.Array:
     )
 
 
+def _walking_knee_bend(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.joint_pos is None:
+        return _zeros_like_reward(ctx)
+    return compute_knee_bend_reward(ctx.joint_pos)
+
+
+def _walking_double_support(ctx: _WalkingRewardContext) -> jax.Array:
+    right = ctx.contacts[..., 0].astype(jp.float32)
+    left = ctx.contacts[..., 1].astype(jp.float32)
+    return right * left
+
+
+def _walking_toe_only(ctx: _WalkingRewardContext) -> jax.Array:
+    if ctx.contact_sensors is None:
+        return _zeros_like_reward(ctx)
+    return compute_toe_only_contact_penalty(ctx.contact_sensors)
+
+
 def _walking_energy_efficiency(ctx: _WalkingRewardContext) -> jax.Array:
     if ctx.torques is None or ctx.joint_vel is None:
         return _zeros_like_reward(ctx)
@@ -752,6 +774,9 @@ WALKING_REWARD_REGISTRY: Dict[str, Callable[[_WalkingRewardContext], jax.Array]]
     "orientation": _walking_orientation,
     "upright_bonus": _walking_upright_bonus,
     "stability": _walking_stability,
+    "knee_bend": _walking_knee_bend,
+    "double_support": _walking_double_support,
+    "toe_only": _walking_toe_only,
     # gait quality
     "gait_symmetry": _walking_gait_symmetry,
     "foot_clearance": _walking_foot_clearance,
