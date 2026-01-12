@@ -13,110 +13,14 @@ from pathlib import Path
 
 import yaml
 
-# ============================================================================================
-# ===================== 早期参数解析（必须在导入 jax 前设置环境变量）===========================
-# ============================================================================================
-
-
-def _safe_load_yaml_config(config_path: str) -> dict:
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        return data or {}
-    except Exception:
-        return {}
-
-
-def _parse_early_args(argv):
-    early_parser = argparse.ArgumentParser(add_help=False)
-    early_parser.add_argument(
-        "--config",
-        type=str,
-        default="configs/train/train.yaml",
-        help="YAML配置文件路径（用于早期读取render/JAX显存配置）",
-    )
-    early_parser.add_argument(
-        "--render",
-        type=int,
-        default=None,
-        help="训练时启动MuJoCo窗口（用于早期调整JAX显存占用，避免viewer OOM）",
-    )
-    early_parser.add_argument(
-        "--no-jax-prealloc",
-        action="store_true",
-        help="禁用JAX预分配显存（需在导入jax前设置）",
-    )
-    early_parser.add_argument(
-        "--jax-mem-fraction",
-        type=float,
-        default=None,
-        help="设置JAX显存占用比例(0~1)，例如0.7（需在导入jax前设置）",
-    )
-    cmd_buffer_group = early_parser.add_mutually_exclusive_group()
-    cmd_buffer_group.add_argument(
-        "--disable-command-buffer",
-        action="store_true",
-        help="禁用XLA command buffer/CUDA graph（降低OOM风险，可能变慢；需在导入jax前设置）",
-    )
-    cmd_buffer_group.add_argument(
-        "--enable-command-buffer",
-        action="store_true",
-        help="启用XLA command buffer/CUDA graph（覆盖脚本默认设置；需在导入jax前设置）",
-    )
-    early_args, _ = early_parser.parse_known_args(argv)
-    return early_args
-
-
-_EARLY_ARGS = _parse_early_args(sys.argv[1:])
-_EARLY_YAML_CONFIG = _safe_load_yaml_config(_EARLY_ARGS.config)
-_EARLY_RENDER = (
-    int(_EARLY_ARGS.render)
-    if _EARLY_ARGS.render is not None
-    else int(_EARLY_YAML_CONFIG.get("render", 0) or 0)
-)
-_EARLY_RENDER_ENABLED = _EARLY_RENDER > 0
-
-if _EARLY_ARGS.enable_command_buffer:
-    os.environ["JRL_ENABLE_XLA_COMMAND_BUFFER"] = "1"
-elif _EARLY_ARGS.disable_command_buffer:
-    os.environ["JRL_ENABLE_XLA_COMMAND_BUFFER"] = "0"
-
-_AUTO_APPLIED_JAX_MEM_FRACTION = None
-if _EARLY_ARGS.jax_mem_fraction is not None:
-    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(_EARLY_ARGS.jax_mem_fraction)
-elif os.environ.get("XLA_PYTHON_CLIENT_MEM_FRACTION") is None:
-    _AUTO_APPLIED_JAX_MEM_FRACTION = "0.70" if _EARLY_RENDER_ENABLED else "0.80"
-    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = _AUTO_APPLIED_JAX_MEM_FRACTION
-
-_AUTO_DISABLED_JAX_PREALLOC = False
-if _EARLY_ARGS.no_jax_prealloc:
-    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-elif _EARLY_RENDER_ENABLED and os.environ.get("XLA_PYTHON_CLIENT_PREALLOCATE") is None:
-    # 训练时开启 MuJoCo viewer 需要额外图形/driver 显存，禁用预分配更稳。
-    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-    _AUTO_DISABLED_JAX_PREALLOC = True
-else:
-    os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "true")
-
-_JAX_STARTUP_HINTS = []
-if _EARLY_RENDER_ENABLED and _AUTO_DISABLED_JAX_PREALLOC:
-    _JAX_STARTUP_HINTS.append(
-        "检测到 render>0，自动设置 XLA_PYTHON_CLIENT_PREALLOCATE=false 以预留 OpenGL/driver 显存"
-    )
-if _EARLY_RENDER_ENABLED and _AUTO_APPLIED_JAX_MEM_FRACTION is not None:
-    _JAX_STARTUP_HINTS.append(
-        f"检测到 render>0，自动设置 XLA_PYTHON_CLIENT_MEM_FRACTION={_AUTO_APPLIED_JAX_MEM_FRACTION}"
-    )
-_JAX_STARTUP_HINT = "；".join(_JAX_STARTUP_HINTS) if _JAX_STARTUP_HINTS else ""
 
 # ============================================================================================
 # ======================================= JAX环境配置 =========================================
 # ============================================================================================
 
 # 🔧 指定使用 GPU device:0
-os.environ.setdefault("CUDA_DEVICE_ORDER", "PCI_BUS_ID")
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
-
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # 启用JAX编译缓存
 cache_path = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", ".jax_cache")
@@ -129,9 +33,9 @@ os.environ["JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES"] = "0"
 os.environ["JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS"] = "0"
 
 # 最大化显存使用
-os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "true")
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.80")
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.80"
 
 # 设置 CUDA 数据目录 (Triton)
 
@@ -154,15 +58,6 @@ os.environ["XLA_FLAGS"] = (
     + " --xla_gpu_unsafe_fallback_to_driver_on_ptxas_not_found=true"
 )
 
-if (
-    os.environ.get("JRL_ENABLE_XLA_COMMAND_BUFFER", "").lower()
-    not in {"1", "true", "yes", "on"}
-    and "xla_gpu_enable_command_buffer" not in os.environ.get("XLA_FLAGS", "")
-):
-    os.environ["XLA_FLAGS"] = (
-        os.environ.get("XLA_FLAGS", "")
-        + " --xla_gpu_enable_command_buffer="
-    )
 
 # 忽略警告
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
