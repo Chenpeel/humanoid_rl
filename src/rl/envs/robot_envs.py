@@ -992,6 +992,8 @@ class WalkingEnv(MJXBaseEnv):
         cmd_x_range: tuple = (-0.2, 0.8),
         cmd_y_range: tuple = (-0.3, 0.3),
         cmd_yaw_range: tuple = (-1.0, 1.0),
+        height_threshold: float = 0.25,
+        upright_threshold: float = 0.5,
         target_height: Optional[float] = None,
         # 奖励权重
         reward_weights: Dict[str, float] = None,
@@ -1009,6 +1011,8 @@ class WalkingEnv(MJXBaseEnv):
             cmd_x_range: x方向速度命令范围
             cmd_y_range: y方向速度命令范围
             cmd_yaw_range: yaw角速度命令范围
+            height_threshold: 摔倒高度阈值（越高越严格）
+            upright_threshold: 摔倒直立度阈值（越高越严格）
             target_height: 目标高度（如果为None，则使用机器人配置中的nominal_height）
             reward_weights: 奖励权重字典
         """
@@ -1027,6 +1031,8 @@ class WalkingEnv(MJXBaseEnv):
         self.cmd_x_range = cmd_x_range
         self.cmd_y_range = cmd_y_range
         self.cmd_yaw_range = cmd_yaw_range
+        self.height_threshold = height_threshold
+        self.upright_threshold = upright_threshold
         self.target_height = target_height if target_height is not None else self.robot_config.nominal_height
 
         if reward_weights is None:
@@ -1044,6 +1050,9 @@ class WalkingEnv(MJXBaseEnv):
             console.print(f"  目标高度: {target_height}m")
             console.print(
                 f"  命令范围: x={cmd_x_range}, y={cmd_y_range}, yaw={cmd_yaw_range}"
+            )
+            console.print(
+                f"  Termination阈值: height<{self.height_threshold}, upright<{self.upright_threshold}"
             )
 
     # --------------------------------------------------------------------------------------------
@@ -1436,7 +1445,12 @@ class WalkingEnv(MJXBaseEnv):
             ]
             fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
-            return check_walking_termination(torso_z, base_quat)
+            return check_walking_termination(
+                torso_z,
+                base_quat,
+                height_threshold=float(getattr(self, "height_threshold", 0.25)),
+                upright_threshold=float(getattr(self, "upright_threshold", 0.5)),
+            )
         return jp.array(False)
 
     # --------------------------------------------------------------------------------------------
