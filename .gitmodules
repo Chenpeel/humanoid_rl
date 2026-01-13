@@ -1,3 +1,6 @@
 [submodule "models"]
 	path = models
 	url = git@github.com:ACpeel/jrl_ckpt.git
+[submodule "dep/ksim"]
+	path = dep/ksim
+	url = https://github.com/kscalelabs/ksim.git
