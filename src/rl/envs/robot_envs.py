@@ -852,6 +852,9 @@ class StandingEnv(MJXBaseEnv):
             base_quat = qpos[
                 self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
+            # 坐标系校正：确保奖励使用与观测一致的 Z-up 四元数
+            fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
+            base_quat = quaternion_multiply(fix_quat, base_quat)
         else:
             torso_z = self.target_height
             base_quat = jp.array([1.0, 0.0, 0.0, 0.0])
@@ -1443,6 +1446,7 @@ class WalkingEnv(MJXBaseEnv):
         command = prev_state.info.get(
             "command", jp.array([self.target_velocity, 0.0, 0.0])
         )
+        actual_velocity = jp.array([base_linvel[0], base_linvel[1], base_angvel[2]])
         target_vel = command[0]
 
         return compute_walking_reward(
@@ -1461,6 +1465,8 @@ class WalkingEnv(MJXBaseEnv):
             joint_pos_default=joint_pos_default,
             joint_limits=joint_limits,
             contact_history=contact_history,
+            command=command,
+            actual_velocity=actual_velocity,
             target_velocity=target_vel,
             target_height=self.target_height,
             reward_weights=self.reward_weights,
