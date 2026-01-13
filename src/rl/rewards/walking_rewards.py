@@ -128,6 +128,8 @@ class WalkingRewardContext(NamedTuple):
     base_angvel: jax.Array
     contact_sensors: jax.Array
     contacts: jax.Array
+    toe_quat: Optional[jax.Array]
+    knee_quat: Optional[jax.Array]
     feet_positions: Optional[jax.Array]
     action: Optional[jax.Array]
     last_action: Optional[jax.Array]
@@ -145,6 +147,7 @@ class WalkingRewardContext(NamedTuple):
 
 
 _HIP_INDICES = jp.array([0, 1, 2, 8, 9, 10])
+_HIP_PITCH_YAW_INDICES = jp.array([0, 1, 8, 9])
 
 
 # =============================================================================================
@@ -304,6 +307,24 @@ class WalkingRewards(BaseRewards):
         upper_violation = jp.maximum(0.0, jp.asarray(ctx.joint_pos) - jp.asarray(upper_limits))
         return jp.sum(jp.square(lower_violation) + jp.square(upper_violation), axis=-1)
 
+    def _reward_hip_pitch_yaw_limits(self, ctx: WalkingRewardContext) -> jax.Array:
+        """髋关节 pitch/yaw 的软限制惩罚（接近 joint range 边界时逐渐增大）。"""
+        if ctx.joint_pos is None or ctx.joint_limits is None:
+            return self.zeros_like(ctx)
+        lower_limits, upper_limits = ctx.joint_limits
+        q = jp.asarray(ctx.joint_pos)[..., _HIP_PITCH_YAW_INDICES]
+        lower = jp.asarray(lower_limits)[..., _HIP_PITCH_YAW_INDICES]
+        upper = jp.asarray(upper_limits)[..., _HIP_PITCH_YAW_INDICES]
+
+        span = jp.maximum(upper - lower, 1e-6)
+        margin = 0.10 * span
+
+        dist_to_lower = q - lower
+        dist_to_upper = upper - q
+        near_lower = jp.clip(margin - dist_to_lower, a_min=0.0) / margin
+        near_upper = jp.clip(margin - dist_to_upper, a_min=0.0) / margin
+        return jp.sum(jp.square(near_lower) + jp.square(near_upper), axis=-1)
+
     def _reward_trunk_lin_vel_z(self, ctx: WalkingRewardContext) -> jax.Array:
         return jp.square(ctx.base_linvel[..., 2])
 
@@ -329,6 +350,28 @@ class WalkingRewards(BaseRewards):
             return self.zeros_like(ctx)
         return math_funcs.compute_energy_efficiency_reward(ctx.torques, ctx.joint_vel)
 
+    def _reward_toe_heading_mismatch(self, ctx: WalkingRewardContext) -> jax.Array:
+        """脚尖（toe link）heading 与 baselink heading 不一致的惩罚。"""
+        if ctx.toe_quat is None:
+            return self.zeros_like(ctx)
+        base_heading = math_funcs.quat_heading(ctx.base_quat)
+        toe_heading = math_funcs.quat_heading(ctx.toe_quat)
+        err = math_funcs.wrap_to_pi(toe_heading - base_heading[..., None])
+        w = ctx.contacts.astype(jp.float32)
+        denom = jp.sum(w, axis=-1) + 1e-6
+        return jp.sum(w * jp.square(err), axis=-1) / denom
+
+    def _reward_knee_heading_mismatch(self, ctx: WalkingRewardContext) -> jax.Array:
+        """膝盖（默认用 shin link heading 近似）与 baselink heading 不一致的惩罚。"""
+        if ctx.knee_quat is None:
+            return self.zeros_like(ctx)
+        base_heading = math_funcs.quat_heading(ctx.base_quat)
+        knee_heading = math_funcs.quat_heading(ctx.knee_quat)
+        err = math_funcs.wrap_to_pi(knee_heading - base_heading[..., None])
+        w = ctx.contacts.astype(jp.float32)
+        denom = jp.sum(w, axis=-1) + 1e-6
+        return jp.sum(w * jp.square(err), axis=-1) / denom
+
 
 _WALKING_REWARDS = WalkingRewards()
 
@@ -339,6 +382,8 @@ def compute_walking_reward(
     base_linvel: jax.Array,
     base_angvel: jax.Array,
     contact_sensors: jax.Array,
+    toe_quat: Optional[jax.Array] = None,
+    knee_quat: Optional[jax.Array] = None,
     feet_positions: Optional[jax.Array] = None,
     action: Optional[jax.Array] = None,
     last_action: Optional[jax.Array] = None,
@@ -367,6 +412,8 @@ def compute_walking_reward(
         base_angvel=base_angvel,
         contact_sensors=contact_sensors,
         contacts=contacts,
+        toe_quat=toe_quat,
+        knee_quat=knee_quat,
         feet_positions=feet_positions,
         action=action,
         last_action=last_action,

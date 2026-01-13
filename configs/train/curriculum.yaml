@@ -28,6 +28,9 @@ stages:
       action_rate: -0.02
       torques: -0.0002
       joint_limits: -0.2
+      hip_pitch_yaw_limits: -0.05
+      toe_heading_mismatch: -0.02
+      knee_heading_mismatch: -0.02
       hip_deviation: -0.05
       joint_deviation: -0.01
       # 禁用项
@@ -67,6 +70,9 @@ stages:
       action_rate: -0.01
       torques: -0.0001
       joint_symmetry: 0.2
+      hip_pitch_yaw_limits: -0.05
+      toe_heading_mismatch: -0.05
+      knee_heading_mismatch: -0.05
       hip_deviation: -0.02
       joint_deviation: -0.005
       stumbling: -0.5
@@ -105,6 +111,9 @@ stages:
       energy_efficiency: 0.001
       joint_symmetry: 0.15
       joint_limits: -0.1
+      hip_pitch_yaw_limits: -0.05
+      toe_heading_mismatch: -0.03
+      knee_heading_mismatch: -0.03
       hip_deviation: -0.01
       joint_deviation: -0.002
       landing_impact: 0.2

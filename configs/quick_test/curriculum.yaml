@@ -21,6 +21,9 @@ ang_vel: -0.5         # 抑制角速度（roll/pitch/yaw）
 action_rate: -0.02   # 鼓励平滑动作
 torques: -0.0002     # 限制扭矩
 joint_limits: -0.2   # 防止关节超限
+hip_pitch_yaw_limits: -0.05 # 髋 pitch/yaw 软限位惩罚（接近关节范围边界）
+toe_heading_mismatch: -0.02 # 脚尖 heading 与 baselink 不一致惩罚
+knee_heading_mismatch: -0.02 # 膝盖/小腿 heading 与 baselink 不一致惩罚
 hip_deviation: -0.05 # 抑制髋部偏置/歪斜（相对home pose）
 joint_deviation: -0.01 # 抑制整体关节姿态漂移（相对home pose）
 

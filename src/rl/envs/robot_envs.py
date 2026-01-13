@@ -1117,6 +1117,18 @@ class WalkingEnv(MJXBaseEnv):
         self.left_foot_body_id = mujoco.mj_name2id(
             model, mujoco.mjtObj.mjOBJ_BODY, "left_foot_link"
         )
+        self.right_toe_body_id = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_BODY, "right_toe_link"
+        )
+        self.left_toe_body_id = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_BODY, "left_toe_link"
+        )
+        self.right_shin_body_id = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_BODY, "right_shin_link"
+        )
+        self.left_shin_body_id = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_BODY, "left_shin_link"
+        )
         base_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "base_link")
         self.base_body_id = base_id if base_id >= 0 else 1
 
@@ -1374,12 +1386,12 @@ class WalkingEnv(MJXBaseEnv):
         qvel = pipeline_state.qvel
         sensordata = pipeline_state.sensordata
 
+        fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
         if self.floating_base_qpos_addr is not None:
             torso_z = qpos[self.floating_base_qpos_addr + 2]
             base_quat = qpos[
                 self.floating_base_qpos_addr + 3: self.floating_base_qpos_addr + 7
             ]
-            fix_quat = jp.array([0.70710678, -0.70710678, 0.0, 0.0])
             base_quat = quaternion_multiply(fix_quat, base_quat)
         else:
             torso_z = self.target_height
@@ -1411,6 +1423,35 @@ class WalkingEnv(MJXBaseEnv):
             feet_velocities = self._get_feet_velocities(pipeline_state)
         except Exception:
             feet_velocities = None
+
+        toe_quat = None
+        knee_quat = None
+        if hasattr(pipeline_state, "xquat"):
+            try:
+                if self.right_toe_body_id >= 0 and self.left_toe_body_id >= 0:
+                    toe_quat = jp.stack(
+                        [
+                            pipeline_state.xquat[self.right_toe_body_id],
+                            pipeline_state.xquat[self.left_toe_body_id],
+                        ],
+                        axis=0,
+                    )
+                    toe_quat = quaternion_multiply(fix_quat, toe_quat)
+            except Exception:
+                toe_quat = None
+
+            try:
+                if self.right_shin_body_id >= 0 and self.left_shin_body_id >= 0:
+                    knee_quat = jp.stack(
+                        [
+                            pipeline_state.xquat[self.right_shin_body_id],
+                            pipeline_state.xquat[self.left_shin_body_id],
+                        ],
+                        axis=0,
+                    )
+                    knee_quat = quaternion_multiply(fix_quat, knee_quat)
+            except Exception:
+                knee_quat = None
 
         qpos_indices = jp.array(self.actuator_qpos_indices)
         qvel_indices = jp.array(self.actuator_qvel_indices)
@@ -1455,6 +1496,8 @@ class WalkingEnv(MJXBaseEnv):
             base_linvel=base_linvel,
             base_angvel=base_angvel,
             contact_sensors=contact_sensors,
+            toe_quat=toe_quat,
+            knee_quat=knee_quat,
             feet_positions=feet_positions,
             action=action,
             last_action=prev_state.last_action,
