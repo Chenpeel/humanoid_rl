@@ -379,8 +379,8 @@ def compute_walking_reward(
         contact_history=contact_history,
         command=command,
         actual_velocity=actual_velocity,
-        target_velocity=float(target_velocity),
-        target_height=float(target_height),
+        target_velocity=jp.asarray(target_velocity),
+        target_height=jp.asarray(target_height),
     )
 
     return _WALKING_REWARDS.compute(ctx, weights)

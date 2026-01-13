@@ -128,7 +128,7 @@ def compute_standing_reward(
         action=action,
         last_action=last_action,
         torques=torques,
-        target_height=float(target_height),
+        target_height=jp.asarray(target_height),
         joint_pos=joint_pos,
         joint_pos_default=joint_pos_default,
     )
