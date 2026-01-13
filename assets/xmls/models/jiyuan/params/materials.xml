@@ -1,9 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<mujoco>
-  <!-- Materials -->
-  <asset>
-    <material name="ground" rgba="1 1 1 1" />
-    <material name="default_material" rgba="0.7 0.7 0.7 1" />
-    <material name="collision_material" rgba="1.0 0.28 0.1 0.9" />
-  </asset>
-</mujoco>
