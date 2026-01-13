@@ -598,21 +598,21 @@
       ctrlrange="-8 8" forcerange="-8 8" />
 
     <!-- 左腿 -->
-    <motor name="left_hip_pitch_joint_ctrl" joint="left_hip_cube_joint" class="motor"
+    <motor name="left_hip_pitch_joint_ctrl" joint="left_hip_cube_joint" class="motor" gear="-1"
       ctrlrange="-2.5 2.5" forcerange="-2.5 2.5" />
-    <motor name="left_hip_yaw_joint_ctrl" joint="left_thigh_joint" class="motor"
+    <motor name="left_hip_yaw_joint_ctrl" joint="left_thigh_joint" class="motor" gear="-1"
       ctrlrange="-8 8" forcerange="-8 8" />
-    <motor name="left_hip_roll_joint_ctrl" joint="left_hip_roll_joint" class="motor"
+    <motor name="left_hip_roll_joint_ctrl" joint="left_hip_roll_joint" class="motor" gear="-1"
       ctrlrange="-8 8" forcerange="-8 8" />
-    <motor name="left_knee_joint_ctrl" joint="left_knee_joint" class="motor"
+    <motor name="left_knee_joint_ctrl" joint="left_knee_joint" class="motor" gear="-1"
       ctrlrange="-8 8" forcerange="-8 8" />
-    <motor name="left_ankle_pitch_ctrl" joint="left_ankle_cube_joint" class="motor"
+    <motor name="left_ankle_pitch_ctrl" joint="left_ankle_cube_joint" class="motor" gear="-1"
       ctrlrange="-2.5 2.5" forcerange="-2.5 2.5" />
-    <motor name="left_ankle_roll_ctrl" joint="left_ankle_axle_joint" class="motor"
+    <motor name="left_ankle_roll_ctrl" joint="left_ankle_axle_joint" class="motor" gear="-1"
       ctrlrange="-2.5 2.5" forcerange="-2.5 2.5" />
-    <motor name="left_ankle_yaw_ctrl" joint="left_foot_joint" class="motor"
+    <motor name="left_ankle_yaw_ctrl" joint="left_foot_joint" class="motor" gear="-1"
       ctrlrange="-2.5 2.5" forcerange="-2.5 2.5" />
-    <motor name="left_toe_joint_ctrl" joint="left_toe_joint" class="motor"
+    <motor name="left_toe_joint_ctrl" joint="left_toe_joint" class="motor" gear="-1"
       ctrlrange="-8 8" forcerange="-8 8" />
   </actuator>
   <sensor>
