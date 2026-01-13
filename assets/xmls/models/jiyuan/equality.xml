@@ -1,14 +1,3 @@
-<?xml version='1.0' encoding='utf-8'?>
-<mujoco>
-  <!-- Equality constraints -->
-  <equality>
-    <joint joint1="right_hip_pitch_engine_joint" joint2="right_hip_cube_joint" polycoef="0 1 0 0 0"
-      class="thigh_equality" />
-    <joint joint1="right_hip_yaw_engine_joint" joint2="right_thigh_joint" polycoef="0 1 0 0 0"
-      class="thigh_equality" />
-    <joint joint1="left_hip_pitch_engine_joint" joint2="left_hip_cube_joint" polycoef="0 1 0 0 0"
-      class="thigh_equality" />
-    <joint joint1="left_hip_yaw_engine_joint" joint2="left_thigh_joint" polycoef="0 1 0 0 0"
-      class="thigh_equality" />
-  </equality>
-</mujoco>
+version https://git-lfs.github.com/spec/v1
+oid sha256:590b6b5d7aa3b3242e69b62b115e9914bb6b0b055baa39694e010c429720f9cf
+size 630

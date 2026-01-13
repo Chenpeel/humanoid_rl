@@ -1,9 +1,3 @@
-<?xml version='1.0' encoding='utf-8'?>
-<mujoco>
-  <!-- World environment -->
-  <worldbody>
-    <light diffuse="0.8 0.8 0.8" pos="0 0 4" dir="0 0 -1" />
-    <geom name="ground" type="plane" size="0 0 0.05" material="ground" condim="3"
-      friction="1 0.01 0.01" />
-  </worldbody>
-</mujoco>
+version https://git-lfs.github.com/spec/v1
+oid sha256:2842d084843be43254bad24c4b3dc371f0503aab25902dc0f904e7e6f95d7463
+size 290

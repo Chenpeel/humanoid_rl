@@ -1,25 +1,3 @@
-cmake_minimum_required(VERSION 3.5)
-project(assets)
-
-# Default to C99
-if(NOT CMAKE_C_STANDARD)
-  set(CMAKE_C_STANDARD 99)
-endif()
-
-# Default to C++14
-if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
-endif()
-
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
-
-find_package(ament_cmake REQUIRED)
-
-# Install directories
-install(DIRECTORY config launch meshes urdf
-  DESTINATION share/${PROJECT_NAME}
-)
-
-ament_package()
+version https://git-lfs.github.com/spec/v1
+oid sha256:0a9da9c8022c2ed1e1751be3ceb24999e3f520131c853537a63bb725036bcbd4
+size 499

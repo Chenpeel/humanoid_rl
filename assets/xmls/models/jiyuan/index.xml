@@ -1,18 +1,3 @@
-<?xml version='1.0' encoding='utf-8'?>
-<mujoco model="assets">
-  <compiler angle="radian" />
-  <!-- === Parameters === -->
-  <include file="params/default_classes.xml" />
-  <include file="params/materials.xml" />
-  <!-- === Geometry === -->
-  <include file="geometry/meshes.xml" />
-  <!-- Note: world.xml removed - Isaac Lab creates ground in scene config -->
-  <include file="geometry/robot.xml" />
-  <!-- === Constraints === -->
-  <include file="equality.xml" />
-  <include file="tendon.xml" />
-  <!-- === Modules === -->
-  <include file="actuators.xml" />
-  <include file="sensors.xml" />
-  <include file="contact_exclude.xml" />
-</mujoco>
+version https://git-lfs.github.com/spec/v1
+oid sha256:0e0ede3e419d39dcf7addf7576468eb088651490c86311e9cc51a1b6b79fab28
+size 642
