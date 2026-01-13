@@ -20,7 +20,6 @@ class WalkingCurriculum(ConfigurableCurriculum):
 
     def __init__(self):
         # 确定配置文件路径
-        # 假设当前工作目录是项目根目录
         config_path = os.path.join("configs", "train", "curriculum.yaml")
 
         if not os.path.exists(config_path):
