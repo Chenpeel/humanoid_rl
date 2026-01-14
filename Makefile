@@ -10,7 +10,14 @@ SHELL := /bin/bash
 PROJECT_ROOT := $(shell pwd)
 
 # uv：用于依赖管理/锁文件（替代 pip install）
-UV ?= uv
+# 允许用户通过 `make ... UV=/path/to/uv` 覆盖；若 UV 为空则自动探测。
+UV ?=
+ifeq ($(strip $(UV)),)
+UV := $(shell \
+	if command -v uv >/dev/null 2>&1; then command -v uv; \
+	elif [ -x "$$HOME/.local/bin/uv" ]; then echo "$$HOME/.local/bin/uv"; \
+	else echo uv; fi)
+endif
 UV_DEFAULT_INDEX ?= https://pypi.tuna.tsinghua.edu.cn/simple
 UV_INDEX_STRATEGY ?= unsafe-first-match
 # 可选：额外 index（逗号分隔 URL）

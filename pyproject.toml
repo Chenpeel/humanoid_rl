@@ -14,13 +14,14 @@ dependencies = [
 
     # JAX CUDA 插件（GPU 加速）
     # 包含 CUDA 运行时库，无需系统安装 CUDA
-    "jax-cuda12-plugin==0.8.1",
+    "jax-cuda12-plugin[with-cuda]==0.8.1",
     "jax-cuda12-pjrt==0.8.1",
 
     # CUDA 运行时库（通过 pip 安装，无需系统 CUDA）
     "nvidia-cuda-runtime-cu12>=12.1.0",
     "nvidia-cuda-nvcc-cu12>=12.1.0",
     "nvidia-cublas-cu12>=12.1.0",
+    "nvidia-cufft-cu12>=11.0.0",
     "nvidia-cudnn-cu12>=8.9.0",
 
     # 物理仿真
@@ -50,11 +51,7 @@ dev = [
     "mypy>=1.5.0",
 ]
 ksim = [
-    "ksim",
-    "xax",
-    "equinox>=0.11.0",
-    "jaxtyping>=0.2.20",
-    "attrs>=23.2.0",
+    "ksim>=0.2.0",
 ]
 tensorboard = [
     "tensorboard>=2.12.0",  # 用于 TensorBoard 日志写入/可视化
