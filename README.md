@@ -28,8 +28,6 @@
 
 ## 快速开始
 
-<<<<<<< Updated upstream
-=======
 ### ksim 训练（uv，推荐）
 
 ```bash
@@ -45,7 +43,6 @@ make train-ksim-walk
 
 配置文件见 `configs/ksim/`，训练入口脚本为 `scripts/train_ksim.py`。
 
->>>>>>> Stashed changes
 ### 安装依赖
 
 ```bash

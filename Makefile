@@ -1,11 +1,7 @@
 # Makefile for JRL - JAX Reinforcement Learning Training
 # 用于管理机器人训练（自动课程学习）
 
-<<<<<<< Updated upstream
-.PHONY: help install submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-quick eval play clean clean-cache clean-logs clean-train clean-makelog clean-all
-=======
 .PHONY: help sync sync-ksim lock install install-dev submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-ksim train-ksim-stand train-ksim-walk eval play clean clean-cache clean-logs clean-train clean-makelog clean-all
->>>>>>> Stashed changes
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
@@ -46,18 +42,12 @@ help:
 	@echo "JRL 训练系统 - Makefile 命令（自动课程学习）"
 	@echo ""
 	@echo "环境配置："
-<<<<<<< Updated upstream
-	@echo "  make install              安装JAX依赖"
-	@echo "  make install-dev          安装开发依赖"
-	@echo "  make check-env            检查JAX/CUDA环境"
-=======
 	@echo "  make sync                 使用 uv 同步基础依赖"
 	@echo "  make sync-ksim            使用 uv 同步依赖（含 ksim extra）"
 	@echo "  make lock                 生成/更新 uv.lock（可复现）"
 	@echo "  make install              = make sync"
 	@echo "  make install-dev          = make sync + 可选依赖（dev/tensorboard）"
 	@echo "  make check-env            检查 JAX/CUDA/ksim 环境"
->>>>>>> Stashed changes
 	@echo "  make submodule-update     初始化/更新子模块（models）"
 	@echo ""
 	@echo "训练命令（自动课程学习）："
@@ -116,12 +106,6 @@ help:
 
 # ==================== 安装相关 ====================
 
-<<<<<<< Updated upstream
-install:
-	@echo "=== 安装JAX和依赖 ==="
-	$(PYTHON) -m pip install -e . --upgrade
-	@echo "✓ 安装完成"
-=======
 sync:
 	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
 	$(UV_ENV) $(UV) sync
@@ -136,7 +120,6 @@ lock:
 
 install: sync
 	@echo "✓ 依赖已通过 uv 同步完成"
->>>>>>> Stashed changes
 
 install-dev:
 	@echo "=== 安装开发依赖 ==="
@@ -149,10 +132,7 @@ check-env:
 	@echo "Python版本: $$($(PYTHON) --version)"
 	@echo "JAX版本: $$($(PYTHON) -c 'import jax; print(jax.__version__)')"
 	@echo "JAX后端: $$($(PYTHON) -c 'import jax; print(jax.default_backend())')"
-<<<<<<< Updated upstream
-=======
 	@$(PYTHON) -c 'import ksim; print("ksim版本:", getattr(ksim, "__version__", "unknown"))' 2>/dev/null || echo "ksim: 未安装（请先 make sync-ksim）"
->>>>>>> Stashed changes
 	@echo "可用设备:"
 	@$(PYTHON) -c 'import jax; [print(f"  - {d}") for d in jax.devices()]'
 
@@ -420,8 +400,6 @@ train-stand-vis:
 train-custom-vis:
 	@$(MAKE) train-custom RENDER=1
 
-<<<<<<< Updated upstream
-=======
 # ==================== ksim 训练相关 ====================
 
 train-ksim-stand: sync-ksim
@@ -476,7 +454,6 @@ train-ksim-walk: sync-ksim
 
 train-ksim: train-ksim-walk
 
->>>>>>> Stashed changes
 validate-config:
 	@echo "=== 验证配置文件 ==="
 	@$(PYTHON) -c "import yaml, sys; configs = ['$(CONFIG_TRAIN)', '$(CONFIG_LONG)', '$(CONFIG_QUICK)', '$(CONFIG_STAND)']; [yaml.safe_load(open(c)) or print(f'✓ {c}') for c in configs]; print('✓ 所有配置文件有效')"
