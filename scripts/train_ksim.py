@@ -27,6 +27,10 @@ def _setup_jax_runtime() -> None:
     os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES", "0")
     os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", "0")
 
+    logs_dir = project_root / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("RUN_DIR", str(logs_dir / "ksim_train"))
+
     # 1080Ti(11GB) 默认不要把显存吃满；用户可在外部覆盖。
     os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "true")
     os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.80")
