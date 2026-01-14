@@ -3,6 +3,7 @@
 
 说明：
 - 坐标系：gaoda_jiyuan 的 base 存在 90° 旋转偏置，必须做 Z-up 逆旋转校正。
+- 优化器：使用统一的优化器配置，支持多种学习率调度策略。
 """
 
 from __future__ import annotations
@@ -44,6 +45,14 @@ if True:
     import xax
     import yaml
     from jaxtyping import Array, PRNGKeyArray, PyTree
+
+    # 导入统一优化器
+    from rl.training.optimizer import (
+        OptimizerConfig,
+        ScheduleType,
+        create_ksim_optimizer,
+        create_optimizer_from_config,
+    )
 
 
 FIX_QUAT_ZUP = (0.70710678, -0.70710678, 0.0, 0.0)
@@ -279,6 +288,16 @@ class GaodaJiyuanConfig(ksim.PPOConfig):
     learning_rate: float = xax.field(value=3e-4, help="Adam 学习率")
     grad_clip: float = xax.field(value=1.0, help="梯度裁剪")
 
+    # 训练控制
+    max_steps: int | None = xax.field(
+        value=None,
+        help="最大训练步数（None表示无限训练）"
+    )
+    warmup_steps: int = xax.field(
+        value=0,
+        help="学习率预热步数（仅当max_steps不为None时有效）"
+    )
+
     def __post_init__(self) -> None:
         self.cmd_x_range = tuple(self.cmd_x_range)
         self.cmd_y_range = tuple(self.cmd_y_range)
@@ -316,12 +335,27 @@ ConfigT = TypeVar("ConfigT", bound=GaodaJiyuanConfig)
 
 class GaodaJiyuanTask(ksim.PPOTask[ConfigT]):
     def get_optimizer(self) -> optax.GradientTransformation:
-        return optax.chain(
-            optax.zero_nans(),
-            optax.clip_by_global_norm(self.config.grad_clip),
-            optax.scale_by_adam(),
-            optax.scale(-self.config.learning_rate),
+        """使用统一优化器配置
+
+        支持多种学习率调度策略，包括：
+        - 常数学习率（默认）
+        - 预热+余弦退火（推荐）
+        - 预热+线性衰减
+        - 指数衰减
+        - 阶梯衰减
+        """
+        # 计算总优化步数（如果配置了max_steps）
+        total_steps = getattr(self.config, 'max_steps', None)
+
+        # 使用统一优化器
+        optimizer = create_ksim_optimizer(
+            learning_rate=self.config.learning_rate,
+            grad_clip=self.config.grad_clip,
+            total_steps=total_steps,
+            warmup_steps=getattr(self.config, 'warmup_steps', 0),
         )
+
+        return optimizer
 
     # pyright: ignore[reportAttributeAccessIssue]
     def get_mujoco_model(self) -> mujoco.MjModel:
