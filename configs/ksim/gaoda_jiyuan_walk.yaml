@@ -57,8 +57,8 @@ w_alive: 100.0
 w_upright: 2.0
 w_height: 1.5
 w_vel_track: 2.0
-w_action_rate: 0.01
-w_torque: 0.001
+w_action_rate: -0.01
+w_torque: -0.001
 
 # ==================== Reward kernels ====================
 upright_kernel_scale: 0.25
