@@ -42,6 +42,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ksim = [
+    "ksim",
+    "xax",
+    "equinox>=0.11.0",
+    "jaxtyping>=0.2.20",
+    "attrs>=23.2.0",
+]
 tensorboard = [
     "tensorboard>=2.12.0",  # 用于 TensorBoard 日志写入/可视化
 ]
