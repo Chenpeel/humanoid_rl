@@ -87,7 +87,7 @@ help:
 	@echo "  make train RENDER=N       训练时开启MuJoCo窗口（0=不显示，N=每N步更新一次窗口）"
 	@echo "  make train RENDER=10 VIEWER_SLEEP=0.01     限速渲染（减少CPU占用/更平滑）"
 	@echo "  make train RENDER=10 RENDER_CPU=1          强制软件OpenGL渲染窗口（更慢，尽量减少GPU图形占用）"
-	@echo "  make train ENABLE_VIDEO=1 VIDEO_INTERVAL=500  周期性录制训练视频到 logs/train/.../videos"
+	@echo "  make train ENABLE_VIDEO=1 VIDEO_INTERVAL=500  周期性录制训练视频到 logs/diy_train/.../videos"
 	@echo ""
 	@echo "ksim 训练（gaoda_jiyuan）："
 	@echo "  make train-ksim-stand      ksim 站立专训（自动执行 sync-ksim）"
@@ -126,7 +126,7 @@ help:
 	@echo "  make clean-all            清理所有（保留训练日志，仅删除缓存+make日志+临时文件）"
 	@echo ""
 	@echo "日志说明："
-	@echo "  训练日志: logs/train/ppo_[时间戳]/ (包含TensorBoard、检查点、视频等)"
+	@echo "  训练日志: logs/diy_train/ppo_[时间戳]/ (包含TensorBoard、检查点、视频等)"
 	@echo "  Make日志: logs/makelog/[命令]_[时间戳].log (make命令执行记录)"
 	@echo "  实时终端输出和日志文件内容完全一致（使用tee实现）"
 
@@ -599,7 +599,7 @@ tensorboard:
 	if [ ! -e "$$TB_SEARCH" ]; then \
 		echo "错误: 指定的LOG_DIR不存在: $$TB_INPUT"; \
 		echo "示例: make tensorboard LOG_DIR=logs  # 监控全部训练"; \
-		echo "示例: make tensorboard LOG_DIR=logs/train/ppo_YYYYMMDD_HHMMSS  # 监控单次run"; \
+		echo "示例: make tensorboard LOG_DIR=logs/diy_train/ppo_YYYYMMDD_HHMMSS  # 监控单次run"; \
 		exit 1; \
 	fi; \
 	if [ -f "$$TB_SEARCH" ]; then TB_SEARCH="$$(dirname "$$TB_SEARCH")"; fi; \
@@ -647,7 +647,7 @@ clean-train:
 	@read -p "确认删除? [y/N] " -n 1 -r; \
 	echo ""; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		rm -rf $(LOG_DIR)/train/*; \
+			rm -rf $(LOG_DIR)/diy_train/*; \
 		echo "✓ 训练日志已清空"; \
 	else \
 		echo "✗ 已取消"; \
@@ -707,7 +707,7 @@ info:
 	@echo ""
 	@echo "项目根目录: $(PROJECT_ROOT)"
 	@echo "日志根目录: $(LOG_DIR)"
-	@echo "  训练日志: $(LOG_DIR)/train/"
+	@echo "  训练日志: $(LOG_DIR)/diy_train/"
 	@echo "  Make日志: $(MAKELOG_DIR)"
 	@echo "缓存目录: $(CACHE_DIR)"
 	@echo ""
