@@ -211,9 +211,7 @@ class NormalizedTorqueActuators(ksim.Actuators):
     def get_ctrl(
         self,
         action: Array,
-        qpos: Array,
-        qvel: Array,
-        curriculum_level: Array,
+        physics_data: ksim.PhysicsData,
         rng: PRNGKeyArray,
     ) -> Array:
         action = jnp.clip(action, -1.0, 1.0)
@@ -525,7 +523,6 @@ class GaodaJiyuanTask(ksim.PPOTask[ConfigT]):
         physics_state: ksim.PhysicsState,
         observations: xax.FrozenDict[str, PyTree],
         commands: xax.FrozenDict[str, PyTree],
-        curriculum_level: Array,
         rng: PRNGKeyArray,
         argmax: bool,
     ) -> ksim.Action:
