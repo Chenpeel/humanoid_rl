@@ -72,7 +72,7 @@ make tensorboard
 ### 评估模型
 
 ```bash
-make eval CKPT=logs/train/ppo_*/checkpoints/best_model
+make eval CKPT=logs/diy_train/ppo_*/checkpoints/best_model
 make eval CKPT=... RENDER=0                 # 不渲染（最快）
 make eval CKPT=... RENDER=10                # 每10步渲染（加速）
 make eval CKPT=... SAVE_VIDEO=1 VIDEO_PATH=eval.mp4  # 保存视频（较慢）
@@ -81,9 +81,9 @@ make eval CKPT=... SAVE_VIDEO=1 VIDEO_PATH=eval.mp4  # 保存视频（较慢）
 ### 仅可视化播放（不评估）
 
 ```bash
-make play CKPT=logs/train/ppo_*/checkpoints/best_model
+make play CKPT=logs/diy_train/ppo_*/checkpoints/best_model
 # 或直接运行:
-python scripts/play.py --checkpoint logs/train/ppo_*/checkpoints/best_model --render 1 --realtime
+python scripts/play.py --checkpoint logs/diy_train/ppo_*/checkpoints/best_model --render 1 --realtime
 
 # 保存视频（可选）
 make play CKPT=... SAVE_VIDEO=1 VIDEO_PATH=play.mp4 VIDEO_FPS=50
@@ -110,7 +110,8 @@ jrl/
 │   ├── train.py                # 主训练脚本（集成课程学习）
 │   └── eval.py                 # 评估脚本
 ├── logs/                       # 日志目录
-│   ├── train/                  # 训练日志（TensorBoard、检查点、视频等）
+│   ├── diy_train/              # 训练日志（TensorBoard、检查点、视频等）
+│   ├── ksim_train/             # ksim 训练输出（xax/ksim 默认 run_dir）
 │   └── makelog/                # Make命令执行日志
 ├── assets/                     # 机器人资源
 ├── docs/                       # 项目文档
@@ -120,11 +121,13 @@ jrl/
 
 ## 日志结构
 
-- **训练日志**: `logs/train/ppo_[时间戳]/`
+- **训练日志**: `logs/diy_train/ppo_[时间戳]/`
   - `events.out.tfevents.*` - TensorBoard事件文件
   - `checkpoints/` - 模型检查点
   - `videos/` - 训练过程视频
   - `config.yaml` - 训练配置快照
+
+- **ksim 训练输出**: `logs/ksim_train/gaoda_jiyuan_task/run_###/`
 
 - **Make执行日志**: `logs/makelog/[命令]_[时间戳].log`
   - 完整记录所有make命令的执行过程
