@@ -21,7 +21,7 @@ from rich.table import Table
 from src.rl.models.networks import (ActorCriticNetwork, ActorNetwork,
                                     CriticNetwork, count_parameters,
                                     create_actor_critic)
-from src.rl.models.optimizer import create_ppo_optimizer
+from src.rl.training.optimizer import create_ppo_optimizer
 from src.rl.models.ppo import (PPOBatch, compute_gae_scan, ppo_loss,
                                prepare_ppo_batch)
 
