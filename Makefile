@@ -1,29 +1,49 @@
 # Makefile for JRL - JAX Reinforcement Learning Training
 # 用于管理机器人训练（自动课程学习）
 
-.PHONY: help install submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-quick eval play clean clean-cache clean-logs clean-train clean-makelog clean-all
+.PHONY: help sync sync-ksim lock install install-dev submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-ksim train-ksim-stand train-ksim-walk eval play clean clean-cache clean-logs clean-train clean-makelog clean-all
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
 # ==================== 配置变量 ====================
 
-# Python 解释器：优先使用绝对路径（减少对 conda activate 的依赖）
-# 1) 当前激活环境：$CONDA_PREFIX/bin/python
-# 2) 默认环境：~/.miniconda3/envs/jrl/bin/python
-# 3) 回退：which python3 / python
+PROJECT_ROOT := $(shell pwd)
+
+# uv：用于依赖管理/锁文件（替代 pip install）
+# 允许用户通过 `make ... UV=/path/to/uv` 覆盖；若 UV 为空则自动探测。
+UV ?=
+ifeq ($(strip $(UV)),)
+UV := $(shell \
+	if command -v uv >/dev/null 2>&1; then command -v uv; \
+	elif [ -x "$$HOME/.local/bin/uv" ]; then echo "$$HOME/.local/bin/uv"; \
+	else echo uv; fi)
+endif
+UV_DEFAULT_INDEX ?= https://pypi.tuna.tsinghua.edu.cn/simple
+UV_INDEX_STRATEGY ?= unsafe-first-match
+# 可选：额外 index（逗号分隔 URL）
+UV_INDEX ?=
+UV_ENV ?= UV_DEFAULT_INDEX=$(UV_DEFAULT_INDEX) UV_INDEX_STRATEGY=$(UV_INDEX_STRATEGY) $(if $(UV_INDEX),UV_INDEX=$(UV_INDEX),)
+
+# Python 解释器：优先使用绝对路径（减少对环境激活的依赖）
+# 1) 项目 uv venv：$(PROJECT_ROOT)/.venv/bin/python
+# 2) 当前激活环境：$CONDA_PREFIX/bin/python
+# 3) 默认环境：~/.miniconda3/envs/jrl/bin/python
+# 4) 回退：which python3 / python
 PYTHON ?= $(shell \
-	if [ -n "$$CONDA_PREFIX" ] && [ -x "$$CONDA_PREFIX/bin/python" ]; then echo "$$CONDA_PREFIX/bin/python"; \
+	if [ -x "$(PROJECT_ROOT)/.venv/bin/python" ]; then echo "$(PROJECT_ROOT)/.venv/bin/python"; \
+	elif [ -n "$$CONDA_PREFIX" ] && [ -x "$$CONDA_PREFIX/bin/python" ]; then echo "$$CONDA_PREFIX/bin/python"; \
 	elif [ -x "$$HOME/.miniconda3/envs/jrl/bin/python" ]; then echo "$$HOME/.miniconda3/envs/jrl/bin/python"; \
 	elif command -v python3 >/dev/null 2>&1; then command -v python3; \
 	else command -v python; fi)
+
 MUJOCO_GL_IS_CMDLINE := $(filter command line,$(origin MUJOCO_GL))
-PROJECT_ROOT := $(shell pwd)
 LOG_DIR := $(PROJECT_ROOT)/logs
 # Make命令执行日志固定写入项目根目录下的logs/makelog，
 # 避免用户覆写LOG_DIR（如指定某次训练run目录/某个checkpoint文件）导致日志目录解析失败。
 MAKELOG_DIR := $(PROJECT_ROOT)/logs/makelog
 CACHE_DIR := $(PROJECT_ROOT)/.jax_cache
 TRAIN_SCRIPT := scripts/train.py
+TRAIN_KSIM_SCRIPT := scripts/train_ksim.py
 EVAL_SCRIPT := scripts/eval.py
 
 # 配置文件路径
@@ -31,6 +51,8 @@ CONFIG_TRAIN := configs/train/train.yaml
 CONFIG_LONG := configs/train-10h/train.yaml
 CONFIG_QUICK := configs/quick_test/train.yaml
 CONFIG_STAND := configs/train-stand/train.yaml
+CONFIG_KSIM_STAND := configs/ksim/gaoda_jiyuan_stand.yaml
+CONFIG_KSIM_WALK := configs/ksim/gaoda_jiyuan_walk.yaml
 
 # 日志时间戳生成函数
 TIMESTAMP := $(shell date '+%Y%m%d_%H%M%S')
@@ -42,9 +64,12 @@ help:
 	@echo "JRL 训练系统 - Makefile 命令（自动课程学习）"
 	@echo ""
 	@echo "环境配置："
-	@echo "  make install              安装JAX依赖"
-	@echo "  make install-dev          安装开发依赖"
-	@echo "  make check-env            检查JAX/CUDA环境"
+	@echo "  make sync                 使用 uv 同步基础依赖"
+	@echo "  make sync-ksim            使用 uv 同步依赖（含 ksim extra）"
+	@echo "  make lock                 生成/更新 uv.lock（可复现）"
+	@echo "  make install              = make sync"
+	@echo "  make install-dev          = make sync + 可选依赖（dev/tensorboard）"
+	@echo "  make check-env            检查 JAX/CUDA/ksim 环境"
 	@echo "  make submodule-update     初始化/更新子模块（models）"
 	@echo ""
 	@echo "训练命令（自动课程学习）："
@@ -63,6 +88,10 @@ help:
 	@echo "  make train RENDER=10 VIEWER_SLEEP=0.01     限速渲染（减少CPU占用/更平滑）"
 	@echo "  make train RENDER=10 RENDER_CPU=1          强制软件OpenGL渲染窗口（更慢，尽量减少GPU图形占用）"
 	@echo "  make train ENABLE_VIDEO=1 VIDEO_INTERVAL=500  周期性录制训练视频到 logs/train/.../videos"
+	@echo ""
+	@echo "ksim 训练（gaoda_jiyuan）："
+	@echo "  make train-ksim-stand      ksim 站立专训（自动执行 sync-ksim）"
+	@echo "  make train-ksim-walk       ksim 行走训练（自动执行 sync-ksim）"
 	@echo ""
 	@echo "课程学习机制："
 	@echo "  - 阶段1 (0-20M env steps):    站立平衡"
@@ -103,22 +132,33 @@ help:
 
 # ==================== 安装相关 ====================
 
-install:
-	@echo "=== 安装JAX和依赖 ==="
-	$(PYTHON) -m pip install -e . --upgrade
-	@echo "✓ 安装完成"
+sync:
+	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
+	$(UV_ENV) $(UV) sync
+
+sync-ksim:
+	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
+	$(UV_ENV) $(UV) sync --extra ksim
+
+lock:
+	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
+	$(UV_ENV) $(UV) lock
+
+install: sync
+	@echo "✓ 依赖已通过 uv 同步完成"
 
 install-dev:
-	@echo "=== 安装开发依赖 ==="
-	$(PYTHON) -m pip install -e ".[tensorboard]" --upgrade
-	$(PYTHON) -m pip install pytest pytest-cov black isort mypy --upgrade
-	@echo "✓ 开发依赖安装完成"
+	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
+	@echo "=== 安装开发依赖（dev/tensorboard）==="
+	$(UV_ENV) $(UV) sync --extra tensorboard --extra dev
+	@echo "✓ 开发依赖已通过 uv 同步完成"
 
 check-env:
 	@echo "=== 检查环境 ==="
 	@echo "Python版本: $$($(PYTHON) --version)"
 	@echo "JAX版本: $$($(PYTHON) -c 'import jax; print(jax.__version__)')"
 	@echo "JAX后端: $$($(PYTHON) -c 'import jax; print(jax.default_backend())')"
+	@$(PYTHON) -c 'import ksim; print("ksim版本:", getattr(ksim, "__version__", "unknown"))' 2>/dev/null || echo "ksim: 未安装（请先 make sync-ksim）"
 	@echo "可用设备:"
 	@$(PYTHON) -c 'import jax; [print(f"  - {d}") for d in jax.devices()]'
 
@@ -386,9 +426,63 @@ train-stand-vis:
 train-custom-vis:
 	@$(MAKE) train-custom RENDER=1
 
+# ==================== ksim 训练相关 ====================
+
+train-ksim-stand: sync-ksim
+	@LOGFILE="$(call MAKELOG_FILE,train-ksim-stand)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
+	echo "=== ksim 站立专训 ==="; \
+	echo "配置: $(CONFIG_KSIM_STAND)"; \
+	echo "开始时间: $$(date)"; \
+	echo "日志文件: $$LOGFILE"; \
+	echo ""; \
+	{ \
+		echo "=== 训练日志 ==="; \
+		echo "命令: make train-ksim-stand"; \
+		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "配置文件: $(CONFIG_KSIM_STAND)"; \
+		echo ""; \
+		CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_KSIM_SCRIPT) --config $(CONFIG_KSIM_STAND)"; \
+		eval $$CMD 2>&1; \
+		EXIT_CODE=$$?; \
+		echo ""; \
+		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "退出码: $$EXIT_CODE"; \
+		exit $$EXIT_CODE; \
+	} 2>&1 | tee "$$LOGFILE"; \
+	echo ""; \
+	echo "=== 训练完成 ==="
+
+train-ksim-walk: sync-ksim
+	@LOGFILE="$(call MAKELOG_FILE,train-ksim-walk)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
+	echo "=== ksim 行走训练 ==="; \
+	echo "配置: $(CONFIG_KSIM_WALK)"; \
+	echo "开始时间: $$(date)"; \
+	echo "日志文件: $$LOGFILE"; \
+	echo ""; \
+	{ \
+		echo "=== 训练日志 ==="; \
+		echo "命令: make train-ksim-walk"; \
+		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "配置文件: $(CONFIG_KSIM_WALK)"; \
+		echo ""; \
+		CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_KSIM_SCRIPT) --config $(CONFIG_KSIM_WALK)"; \
+		eval $$CMD 2>&1; \
+		EXIT_CODE=$$?; \
+		echo ""; \
+		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "退出码: $$EXIT_CODE"; \
+		exit $$EXIT_CODE; \
+	} 2>&1 | tee "$$LOGFILE"; \
+	echo ""; \
+	echo "=== 训练完成 ==="
+
+train-ksim: train-ksim-walk
+
 validate-config:
 	@echo "=== 验证配置文件 ==="
-	@$(PYTHON) -c "import yaml, sys; configs = ['$(CONFIG_TRAIN)', '$(CONFIG_LONG)', '$(CONFIG_QUICK)', '$(CONFIG_STAND)']; [yaml.safe_load(open(c)) or print(f'✓ {c}') for c in configs]; print('✓ 所有配置文件有效')"
+	@$(PYTHON) -c "import yaml, sys; configs = ['$(CONFIG_TRAIN)', '$(CONFIG_LONG)', '$(CONFIG_QUICK)', '$(CONFIG_STAND)', '$(CONFIG_KSIM_STAND)', '$(CONFIG_KSIM_WALK)']; [yaml.safe_load(open(c)) or print(f'✓ {c}') for c in configs]; print('✓ 所有配置文件有效')"
 
 # ==================== 评估相关 ====================
 
@@ -525,7 +619,8 @@ tensorboard:
 		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "监控目录: $$TB_LOGDIR/"; \
 		echo ""; \
-		FORCE_COLOR=1 tensorboard --logdir="$$TB_LOGDIR" --host=127.0.0.1 --port=6006 2>&1; \
+		$(PYTHON) -m tensorboard.main --version >/dev/null 2>&1 || (echo "❌ tensorboard 未安装，请先运行: make install-dev"; exit 1); \
+		FORCE_COLOR=1 $(PYTHON) -m tensorboard.main --logdir="$$TB_LOGDIR" --host=127.0.0.1 --port=6006 2>&1; \
 		EXIT_CODE=$$?; \
 		echo ""; \
 		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
@@ -590,10 +685,10 @@ clean-all:
 format:
 	@echo "=== 格式化代码（与 VSCode 保持一致）==="
 	@echo "  使用 black (line-length=100) + isort (profile=black)"
-	@which black > /dev/null 2>&1 || (echo "❌ black 未安装，请运行: pip install black"; exit 1)
-	@which isort > /dev/null 2>&1 || (echo "❌ isort 未安装，请运行: pip install isort"; exit 1)
-	black --line-length=100 src/ scripts/ tests/ utils/ 2>/dev/null || true
-	isort --profile=black --line-length=100 src/ scripts/ tests/ utils/ 2>/dev/null || true
+	@$(PYTHON) -m black --version >/dev/null 2>&1 || (echo "❌ black 未安装，请先运行: make install-dev"; exit 1)
+	@$(PYTHON) -m isort --version >/dev/null 2>&1 || (echo "❌ isort 未安装，请先运行: make install-dev"; exit 1)
+	$(PYTHON) -m black --line-length=100 src/ scripts/ tests/ utils/ 2>/dev/null || true
+	$(PYTHON) -m isort --profile=black --line-length=100 src/ scripts/ tests/ utils/ 2>/dev/null || true
 	@echo "✓ 格式化完成"
 	@echo ""
 	@echo "格式化配置来源: pyproject.toml"
@@ -602,7 +697,8 @@ format:
 
 test:
 	@echo "=== 运行测试 ==="
-	pytest tests/ -v 2>/dev/null || $(PYTHON) -m pytest tests/ -v
+	@$(PYTHON) -m pytest --version >/dev/null 2>&1 || (echo "❌ pytest 未安装，请先运行: make install-dev"; exit 1)
+	$(PYTHON) -m pytest tests/ -v
 
 # ==================== 信息相关 ====================
 

@@ -2,9 +2,9 @@
 PPO训练主脚本
 """
 
-import site
 import argparse
 import os
+import site
 import sys
 import time
 import warnings
@@ -12,7 +12,6 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
-
 
 # ============================================================================================
 # ======================================= JAX环境配置 =========================================
@@ -92,11 +91,14 @@ if True:
         create_walking_env,
     )
     from rl.models.networks import ActorCriticNetwork, count_parameters
-    from rl.models.optimizer import create_ppo_optimizer_cosine
-    from rl.training.logger import (Logger, MetricsLogger,
-                                    create_training_display, print_summary)
-    from rl.training.ppo_trainer import (PPOConfig, PPOTrainer,
-                                         create_train_step_fn)
+    from rl.training.logger import (
+        Logger,
+        MetricsLogger,
+        create_training_display,
+        print_summary,
+    )
+    from rl.training.optimizer import ScheduleType, create_ppo_optimizer
+    from rl.training.ppo_trainer import PPOConfig, PPOTrainer, create_train_step_fn
     from rl.training.train_state import create_train_state
     from rl.utils.checkpoint import create_checkpoint_manager
     from rl.utils.performance_monitor import PerformanceMonitor
@@ -648,11 +650,12 @@ def main():
     steps_per_update = config.num_epochs * config.num_minibatches
     total_optimizer_steps = max(1, total_updates * steps_per_update)
     warmup_steps = max(10, total_optimizer_steps // 20)
-    optimizer = create_ppo_optimizer_cosine(
+    optimizer = create_ppo_optimizer(
         learning_rate=args.learning_rate,
         total_steps=total_optimizer_steps,
         warmup_steps=warmup_steps,
         max_grad_norm=config.max_grad_norm,
+        schedule_type=ScheduleType.WARMUP_COSINE,
         final_lr_fraction=args.final_lr_fraction,
     )
     console.print(
@@ -785,9 +788,10 @@ def main():
             mj_model = env.mj_model
             viewer_mj_data = mujoco.MjData(mj_model)
             # 使用 Live 显示实时启动计时（某些环境下创建 OpenGL 上下文会卡住）
+            import threading
+
             from rich.live import Live
             from rich.text import Text
-            import threading
 
             t_viewer = time.time()
             stop_viewer_timer = threading.Event()
@@ -901,9 +905,10 @@ def main():
     console.print("[dim]正在编译 JAX 计算图...[/dim]")
 
     # 使用 Live 显示实时更新的编译计时
+    import threading
+
     from rich.live import Live
     from rich.text import Text
-    import threading
 
     t0 = time.time()
     stop_timer = threading.Event()

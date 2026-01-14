@@ -1,0 +1,74 @@
+# gaoda_jiyuan：站立专训（ksim）
+
+# ==================== MJCF ====================
+xml_path: robots/gaoda_jiyuan/scene.xml
+
+# ==================== Engine ====================
+dt: 0.002
+ctrl_dt: 0.02
+iterations: 8
+ls_iterations: 8
+solver: newton
+integrator: implicitfast
+
+# ==================== PPO / Train ====================
+run_mode: train
+num_envs: 512
+batch_size: 128
+rollout_length_seconds: 2.0
+num_passes: 2
+
+learning_rate: 3.0e-4
+grad_clip: 1.0
+
+gamma: 0.99
+lam: 0.95
+clip_param: 0.2
+value_loss_coef: 0.5
+entropy_coef: 0.01
+kl_coef: 1.0e-3
+normalize_advantages: true
+
+# ==================== 训练控制 ====================
+max_steps: 1000000 # 最大训练步数（None表示无限训练）
+warmup_steps: 10000 # 学习率预热步数
+
+# ==================== Commands (world frame) ====================
+# (vx, vy, wz) 全部置 0：纯站立
+cmd_x_range: [0.0, 0.0]
+cmd_y_range: [0.0, 0.0]
+cmd_yaw_range: [0.0, 0.0]
+cmd_switch_prob: 0.0
+cmd_zero_prob: 0.0
+
+# ==================== Posture ====================
+target_height: 0.92
+
+# ==================== Reset randomization ====================
+reset_joint_pos_scale: 0.05
+reset_joint_vel_scale: 0.5
+reset_pitch_range: [-0.15, 0.15]
+reset_roll_range: [-0.15, 0.15]
+
+# ==================== Termination ====================
+terminate_min_z: 0.65
+terminate_max_z: 1.50
+terminate_max_tilt_radians: 1.0
+
+# ==================== Reward weights ====================
+w_alive: 100.0
+w_upright: 5.0
+w_height: 2.0
+w_vel_track: 1.0
+w_action_rate: -0.02
+w_torque: -0.002
+
+# ==================== Reward kernels ====================
+upright_kernel_scale: 0.25
+height_kernel_scale: 0.20
+vel_kernel_scale: 0.25
+yaw_kernel_scale: 0.25
+
+# ==================== Network ====================
+hidden_sizes: [512, 512, 256]
+init_log_std: -0.5
