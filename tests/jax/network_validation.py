@@ -9,6 +9,12 @@ import sys
 import time
 from pathlib import Path
 
+# 添加项目路径（确保可直接运行本脚本）
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# 先用CPU测试（需在 import jax 之前设置）
+os.environ.setdefault("JAX_PLATFORMS", "cpu")
+
 import jax
 import jax.numpy as jp
 from rich import box
@@ -24,12 +30,6 @@ from src.rl.models.networks import (ActorCriticNetwork, ActorNetwork,
 from src.rl.training.optimizer import create_ppo_optimizer
 from src.rl.models.ppo import (PPOBatch, compute_gae_scan, ppo_loss,
                                prepare_ppo_batch)
-
-os.environ["JAX_PLATFORMS"] = "cpu"  # 先用CPU测试
-
-
-# 添加项目路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 console = Console()
