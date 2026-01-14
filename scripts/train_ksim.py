@@ -2,8 +2,6 @@
 使用 ksim 训练 gaoda_jiyuan 的直立/行走策略（MJX + PPO）。
 
 说明：
-- 本脚本是本仓库的 ksim 训练入口（与 `scripts/train.py` 的 JRL 训练流程独立）。
-- 依赖通过 uv 安装（先运行 `make sync-ksim`；会从 pip 安装 `ksim`）。
 - 坐标系：gaoda_jiyuan 的 base 存在 90° 旋转偏置，必须做 Z-up 逆旋转校正。
 """
 
@@ -40,13 +38,12 @@ if True:
     import equinox as eqx
     import jax
     import jax.numpy as jnp
+    import ksim
     import mujoco
     import optax
     import xax
     import yaml
     from jaxtyping import Array, PRNGKeyArray, PyTree
-
-    import ksim
 
 
 FIX_QUAT_ZUP = (0.70710678, -0.70710678, 0.0, 0.0)
@@ -285,7 +282,6 @@ class GaodaJiyuanConfig(ksim.PPOConfig):
     grad_clip: float = xax.field(value=1.0, help="梯度裁剪")
 
     def __post_init__(self) -> None:
-        super().__post_init__()
         self.cmd_x_range = tuple(self.cmd_x_range)
         self.cmd_y_range = tuple(self.cmd_y_range)
         self.cmd_yaw_range = tuple(self.cmd_yaw_range)
@@ -422,7 +418,9 @@ class GaodaJiyuanTask(ksim.PPOTask[ConfigT]):
             "height": ksim.BaseHeightReward(
                 scale=self.config.w_height,
                 height_target=self.config.target_height,
-                kernel_scale=self.config.height_kernel_scale,
+                norm="l2",
+                monotonic_fn="exp",
+                temp=2.0 * (self.config.height_kernel_scale**2),
             ),
             "vel_track": WorldVelocityTrackingReward(
                 scale=self.config.w_vel_track,
@@ -431,7 +429,7 @@ class GaodaJiyuanTask(ksim.PPOTask[ConfigT]):
                 yaw_kernel_scale=self.config.yaw_kernel_scale,
             ),
             "action_rate": ksim.ActionVelocityPenalty(scale=self.config.w_action_rate),
-            "torque": ksim.TorquePenalty.create(physics_model, scale=self.config.w_torque),
+            "torque": ksim.CtrlPenalty.create(physics_model, scale=self.config.w_torque),
         }
 
     def get_terminations(self, physics_model: ksim.PhysicsModel) -> Mapping[str, ksim.Termination]:
