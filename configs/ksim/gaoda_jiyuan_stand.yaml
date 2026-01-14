@@ -29,6 +29,10 @@ entropy_coef: 0.01
 kl_coef: 1.0e-3
 normalize_advantages: true
 
+# ==================== 训练控制 ====================
+max_steps: 1000000 # 最大训练步数（None表示无限训练）
+warmup_steps: 10000 # 学习率预热步数
+
 # ==================== Commands (world frame) ====================
 # (vx, vy, wz) 全部置 0：纯站立
 cmd_x_range: [0.0, 0.0]
