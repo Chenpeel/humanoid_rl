@@ -746,7 +746,7 @@ def main():
     console.print("\n[bold cyan]8. 创建日志系统[/bold cyan]")
     t0 = time.time()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_dir = f"logs/train/ppo_{timestamp}"
+    log_dir = f"logs/diy_train/ppo_{timestamp}"
     logger = Logger(log_dir=log_dir, use_tensorboard=True, use_rich=True)
     logger_init_time = time.time() - t0
     console.print(f"✓ 日志系统创建完成 ({log_dir}, 耗时: {logger_init_time:.2f}s)")
