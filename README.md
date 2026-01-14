@@ -28,6 +28,21 @@
 
 ## 快速开始
 
+### ksim 训练（uv，推荐）
+
+```bash
+# 1) 同步依赖（包含 ksim extra）
+make sync-ksim
+
+# 2) 站立专训（先把 upright/height 练稳）
+make train-ksim-stand
+
+# 3) 行走训练（世界系速度命令 vx, vy, wz）
+make train-ksim-walk
+```
+
+配置文件见 `configs/ksim/`，训练入口脚本为 `scripts/train_ksim.py`。
+
 ### 安装依赖
 
 ```bash
