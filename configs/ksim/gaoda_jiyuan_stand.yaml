@@ -15,7 +15,9 @@ integrator: implicitfast
 run_mode: train
 num_envs: 512
 batch_size: 128
-rollout_length_seconds: 2.0
+# rollout_length_seconds 在 ksim 内部会按 seconds/dt 转成帧数（这里 dt=0.002 会导致 2s=1000 帧≈20s rollout）
+# 站立任务建议直接用 rollout_length_frames（单位：ctrl step；这里 ctrl_dt=0.02，100 帧≈2s）
+rollout_length_frames: 100
 num_passes: 2
 
 learning_rate: 3.0e-4
@@ -30,8 +32,10 @@ kl_coef: 1.0e-3
 normalize_advantages: true
 
 # ==================== 训练控制 ====================
-max_steps: 1000000 # 最大训练步数（None表示无限训练）
-warmup_steps: 10000 # 学习率预热步数
+# 站立训练不建议用超长 warmup（会导致一夜几乎学不动）；默认用常数学习率即可
+max_steps: null # 最大训练步数（null 表示无限训练）
+warmup_steps: 0 # 学习率预热步数（max_steps=null 时无效）
+valid_every_n_seconds: 600.0 # 降低完整 valid（渲染+作图）频率，提升有效训练吞吐
 
 # ==================== Commands (world frame) ====================
 # (vx, vy, wz) 全部置 0：纯站立
@@ -46,7 +50,7 @@ target_height: 0.92
 
 # ==================== Reset randomization ====================
 reset_joint_pos_scale: 0.05
-reset_joint_vel_scale: 0.5
+reset_joint_vel_scale: 0.2
 reset_pitch_range: [-0.15, 0.15]
 reset_roll_range: [-0.15, 0.15]
 
