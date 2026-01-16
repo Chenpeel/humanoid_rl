@@ -260,11 +260,16 @@ def main() -> int:
     ):
         obs_n = task._build_obs(observations, commands["cmd"])  # noqa: SLF001
         obs_host = np.asarray(jax.device_get(obs_n), dtype=np.float32)
-        if obs_host.ndim < 2:
-            raise ValueError(f"观测维度错误：期望至少 2D([... , obs_dim])，实际 shape={obs_host.shape}")
-        obs_dim = int(obs_host.shape[-1])
-        lead_shape = tuple(int(x) for x in obs_host.shape[:-1])
-        obs_flat = obs_host.reshape((-1, obs_dim))
+        if obs_host.ndim == 0:
+            raise ValueError(f"观测维度错误：期望至少 1D(obs_dim)，实际 shape={obs_host.shape}")
+        if obs_host.ndim == 1:
+            obs_dim = int(obs_host.shape[0])
+            lead_shape = ()
+            obs_flat = obs_host.reshape((1, obs_dim))
+        else:
+            obs_dim = int(obs_host.shape[-1])
+            lead_shape = tuple(int(x) for x in obs_host.shape[:-1])
+            obs_flat = obs_host.reshape((-1, obs_dim))
 
         act_flat = session.run([output_name], {input_name: obs_flat})[0]
         act_flat = np.asarray(act_flat, dtype=np.float32)
