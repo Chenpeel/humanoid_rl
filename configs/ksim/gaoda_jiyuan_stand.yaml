@@ -78,5 +78,5 @@ vel_kernel_scale: 0.25
 yaw_kernel_scale: 0.25
 
 # ==================== Network ====================
-hidden_sizes: [512, 512, 256]
+hidden_sizes: [512, 512, 512]
 init_log_std: -0.5
