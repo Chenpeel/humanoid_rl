@@ -18,6 +18,9 @@ checkpoints/
 *.ckpt
 # 导出模型
 exported_models/
+**/*.onnx
+**/*.tflite
+**/*.pb
 
 # IDE
 .vscode/
