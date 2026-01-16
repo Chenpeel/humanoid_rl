@@ -738,6 +738,7 @@ infer-ksim-onnx:
 		CMD="FORCE_COLOR=1 $(PYTHON) $(INFER_KSIM_SCRIPT) --model $(MODEL)"; \
 		if [ -n "$(CKPT)" ]; then CMD="$$CMD --checkpoint $(CKPT)"; echo "checkpoint: $(CKPT)"; fi; \
 		if [ -n "$(CONFIG)" ]; then CMD="$$CMD --config $(CONFIG)"; echo "config: $(CONFIG)"; fi; \
+		if [ -n "$(SEED)" ]; then CMD="$$CMD --seed $(SEED)"; echo "seed: $(SEED)"; fi; \
 		if [ -n "$(NUM_ENVS)" ]; then CMD="$$CMD --num-envs $(NUM_ENVS)"; echo "num-envs: $(NUM_ENVS)"; fi; \
 		if [ -n "$(MAX_STEPS)" ]; then CMD="$$CMD --num-steps $(MAX_STEPS)"; echo "num-steps: $(MAX_STEPS)"; fi; \
 		if [ -n "$(SAVE_VIDEO)" ]; then CMD="$$CMD --save-video"; echo "保存视频: 是"; fi; \
