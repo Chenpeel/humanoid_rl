@@ -53,6 +53,11 @@ dev = [
 ksim = [
     "ksim>=0.2.0",
 ]
+onnx = [
+    # 模型导出/推理：scripts/export.py / scripts/infer_onnx.py
+    "onnx>=1.16.0",
+    "onnxruntime>=1.17.0",
+]
 tensorboard = [
     "tensorboard>=2.12.0",  # 用于 TensorBoard 日志写入/可视化
 ]
