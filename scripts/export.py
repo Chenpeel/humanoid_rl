@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from rl.models.networks import ActorCriticNetwork
 from rl.utils.checkpoint import CheckpointManager
 
+from checkpoint_compat import CheckpointFormat, get_default_xax_task_cls, resolve_checkpoint
+
 # ============================================================================================
 # ======================================= 导出逻辑 ============================================
 # ============================================================================================
@@ -406,6 +408,163 @@ def export_to_msgpack(
 
 
 # ============================================================================================
+# =============================== xax(ksim) -> ONNX 导出 ======================================
+# ============================================================================================
+
+
+def _extract_eqx_mlp_layers(mlp) -> list[tuple[np.ndarray, np.ndarray]]:
+    layers = getattr(mlp, "layers", None)
+    if not isinstance(layers, (list, tuple)) or not layers:
+        raise ValueError("不支持的 Equinox MLP 结构：未找到 mlp.layers")
+
+    out: list[tuple[np.ndarray, np.ndarray]] = []
+    for i, layer in enumerate(layers):
+        weight = getattr(layer, "weight", None)
+        bias = getattr(layer, "bias", None)
+        if weight is None or bias is None:
+            raise ValueError(f"不支持的 layer[{i}]：缺少 weight/bias")
+        out.append((np.asarray(weight), np.asarray(bias)))
+    return out
+
+
+def export_to_onnx_manual_eqx_mlp(
+    *,
+    layers: list[tuple[np.ndarray, np.ndarray]],
+    output_path: str,
+    input_name: str = "observation",
+    output_name: str = "action",
+) -> bool:
+    """手工构建 ONNX 图：Equinox MLP(Linear+Tanh) -> action mean。
+
+    约定：
+    - 每层 Linear 采用 weight(out,in), bias(out,)（Equinox 默认）
+    - ONNX 里使用 MatMul(input, W.T) + Add(bias)，隐藏层用 Tanh，最后一层不激活
+    """
+    try:
+        import onnx
+        from onnx import TensorProto, helper, numpy_helper
+    except ImportError as e:
+        print(f"错误: 导出 xax ONNX 需要 onnx - {e}")
+        print("请安装: pip install onnx")
+        return False
+
+    if not layers:
+        raise ValueError("layers 不能为空")
+
+    in_dim = int(layers[0][0].shape[1])
+    out_dim = int(layers[-1][0].shape[0])
+
+    nodes = []
+    initializers = []
+
+    x_name = input_name
+    current_in = in_dim
+
+    for i, (w_out_in, b_out) in enumerate(layers):
+        if w_out_in.ndim != 2:
+            raise ValueError(f"layer[{i}] weight 维度错误: {w_out_in.shape}")
+        if b_out.ndim != 1:
+            raise ValueError(f"layer[{i}] bias 维度错误: {b_out.shape}")
+
+        out_size, in_size = int(w_out_in.shape[0]), int(w_out_in.shape[1])
+        if in_size != current_in:
+            raise ValueError(f"layer[{i}] in_dim 不匹配: 期望 {current_in}, 实际 {in_size}")
+        if int(b_out.shape[0]) != out_size:
+            raise ValueError(f"layer[{i}] bias 不匹配: 期望 {out_size}, 实际 {b_out.shape[0]}")
+
+        w_name = f"W{i}"
+        b_name = f"b{i}"
+        mm_name = f"mm{i}"
+        z_name = f"z{i}"
+        a_name = f"a{i}"
+
+        # ONNX MatMul 需要 (in,out)；Equinox weight 是 (out,in)
+        w_in_out = np.asarray(w_out_in.T, dtype=np.float32)
+        b_out_f = np.asarray(b_out, dtype=np.float32)
+
+        initializers.append(numpy_helper.from_array(w_in_out, name=w_name))
+        initializers.append(numpy_helper.from_array(b_out_f, name=b_name))
+
+        nodes.append(helper.make_node("MatMul", inputs=[x_name, w_name], outputs=[mm_name]))
+        nodes.append(helper.make_node("Add", inputs=[mm_name, b_name], outputs=[z_name]))
+
+        is_last = i == (len(layers) - 1)
+        if not is_last:
+            nodes.append(helper.make_node("Tanh", inputs=[z_name], outputs=[a_name]))
+            x_name = a_name
+        else:
+            x_name = z_name
+
+        current_in = out_size
+
+    graph = helper.make_graph(
+        nodes=nodes,
+        name="xax_policy_mlp",
+        inputs=[helper.make_tensor_value_info(input_name, TensorProto.FLOAT, ["batch", in_dim])],
+        outputs=[helper.make_tensor_value_info(output_name, TensorProto.FLOAT, ["batch", out_dim])],
+        initializer=initializers,
+    )
+
+    model = helper.make_model(
+        graph,
+        producer_name="jrl.export_model.xax",
+        opset_imports=[helper.make_operatorsetid("", 13)],
+    )
+    onnx.checker.check_model(model)
+    onnx.save(model, output_path)
+    print(f"✓ xax 模型已导出为ONNX: {output_path}")
+    print(f"  输入: {input_name} shape=[batch,{in_dim}] -> 输出: {output_name} shape=[batch,{out_dim}]")
+    return True
+
+
+def export_xax_checkpoint_to_onnx(
+    ckpt_path: Path,
+    output_path: Path,
+) -> bool:
+    try:
+        from xax.task.mixins.checkpointing import load_ckpt
+        from ksim.task.rl import InitParams as KInitParams
+    except ModuleNotFoundError as e:
+        print(f"错误: 导出 xax checkpoint 需要 ksim/xax - {e}")
+        print("建议使用包含 ksim/xax 的 Python（例如项目 .venv）运行 export.py")
+        return False
+
+    task_cls = get_default_xax_task_cls()
+
+    cfg = load_ckpt(ckpt_path, part="config")
+    state = load_ckpt(ckpt_path, part="state")
+
+    project_root = Path(__file__).resolve().parent.parent
+    cache_dir = project_root / ".jax_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    # 导出不需要 multiprocessing；同时把 cache_dir 固定到项目内，避免权限/环境差异。
+    overrides = {
+        "disable_multiprocessing": True,
+        "compile": {"cache_dir": str(cache_dir)},
+    }
+    config = task_cls.get_config(cfg, overrides, use_cli=False)
+    task = task_cls(config)
+
+    mj_model = task.get_mujoco_model()
+
+    rng = jax.random.PRNGKey(0)
+    model_template = task.get_model(KInitParams(key=rng, physics_model=mj_model))
+    models = load_ckpt(ckpt_path, part="model", model_templates=[model_template])
+
+    model = models[0]
+    actor = getattr(model, "actor", None)
+    if actor is None or getattr(actor, "mlp", None) is None:
+        raise ValueError("不支持的 xax 模型结构：未找到 model.actor.mlp")
+
+    layers = _extract_eqx_mlp_layers(actor.mlp)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"xax ckpt: {ckpt_path} | num_steps={int(state.num_steps)} | num_samples={int(state.num_samples)}")
+    return export_to_onnx_manual_eqx_mlp(layers=layers, output_path=str(output_path))
+
+
+# ============================================================================================
 # ===================================== END: 导出逻辑 ==========================================
 # ============================================================================================
 
@@ -458,7 +617,21 @@ def main():
     print("=" * 60)
 
     print("\n[1/3] 加载检查点...")
-    checkpoint_path = Path(args.checkpoint_path)
+    resolved = resolve_checkpoint(args.checkpoint_path)
+    checkpoint_path = resolved.path
+
+    if resolved.format == CheckpointFormat.XAX_TAR:
+        # xax/ksim checkpoint：仅支持导出 policy mean 为 ONNX（当前脚本网络/环境与 JRL 不同）
+        if args.format not in ("onnx", "all"):
+            print("提示: 检测到 xax checkpoint，目前仅支持 --format onnx（其他格式将跳过）")
+
+        onnx_path = output_dir / "policy_mean_xax.onnx"
+        ok = export_xax_checkpoint_to_onnx(checkpoint_path, onnx_path)
+        print("=" * 60)
+        print(f"导出完成: {'成功' if ok else '失败'}")
+        print(f"输出目录: {output_dir.absolute()}")
+        print("=" * 60)
+        return
 
     if checkpoint_path.is_dir():
         ckpt_manager = CheckpointManager(
