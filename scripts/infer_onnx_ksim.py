@@ -121,6 +121,7 @@ def main() -> int:
     parser.add_argument("--save-video", action="store_true", help="保存视频（默认不开启）")
     parser.add_argument("--video-path", type=str, default="plays/xax_onnx.mp4", help="输出视频路径")
     parser.add_argument("--target-fps", type=int, default=None, help="目标视频 FPS（默认由 task.render_trajectory_video 决定）")
+    parser.add_argument("--stop-on-done", action="store_true", help="遇到 done 后提前结束 rollout（默认不中断，行为与 ksim viewer 更一致）")
 
     parser.add_argument("--render-width", type=int, default=1280, help="渲染宽度")
     parser.add_argument("--render-height", type=int, default=720, help="渲染高度")
@@ -389,13 +390,14 @@ def main() -> int:
             )
             transitions.append(transition)
 
-            done = getattr(transition, "done", None)
-            if done is not None:
-                try:
-                    if bool(jax.device_get(done).all()):
-                        break
-                except Exception:
-                    pass
+            if args.stop_on_done:
+                done = getattr(transition, "done", None)
+                if done is not None:
+                    try:
+                        if bool(jax.device_get(done).all()):
+                            break
+                    except Exception:
+                        pass
 
         if not transitions:
             console.print("[red]✗ rollout 为空（未产生任何 transition）[/red]")
