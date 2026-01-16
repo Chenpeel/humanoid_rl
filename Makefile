@@ -739,6 +739,9 @@ infer-ksim-onnx:
 		if [ -n "$(CKPT)" ]; then CMD="$$CMD --checkpoint $(CKPT)"; echo "checkpoint: $(CKPT)"; fi; \
 		if [ -n "$(CONFIG)" ]; then CMD="$$CMD --config $(CONFIG)"; echo "config: $(CONFIG)"; fi; \
 		if [ -n "$(SEED)" ]; then CMD="$$CMD --seed $(SEED)"; echo "seed: $(SEED)"; fi; \
+		if [ -n "$(COMPARE_JAX)" ]; then CMD="$$CMD --compare-jax"; echo "compare-jax: true"; fi; \
+		if [ -n "$(COMPARE_STEPS)" ]; then CMD="$$CMD --compare-steps $(COMPARE_STEPS)"; echo "compare-steps: $(COMPARE_STEPS)"; fi; \
+		if [ -n "$(COMPARE_TOL)" ]; then CMD="$$CMD --compare-tol $(COMPARE_TOL)"; echo "compare-tol: $(COMPARE_TOL)"; fi; \
 		if [ -n "$(NUM_ENVS)" ]; then CMD="$$CMD --num-envs $(NUM_ENVS)"; echo "num-envs: $(NUM_ENVS)"; fi; \
 		if [ -n "$(MAX_STEPS)" ]; then CMD="$$CMD --num-steps $(MAX_STEPS)"; echo "num-steps: $(MAX_STEPS)"; fi; \
 		if [ -n "$(SAVE_VIDEO)" ]; then CMD="$$CMD --save-video"; echo "保存视频: 是"; fi; \
