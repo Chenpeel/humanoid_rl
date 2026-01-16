@@ -16,6 +16,8 @@ scripts/gaoda_jiyuan_task/
 # 模型检查点
 checkpoints/
 *.ckpt
+# 导出模型
+exported_models/
 
 # IDE
 .vscode/
@@ -49,3 +51,4 @@ CLAUDE.md
 .gemini/
 .archive/
 AGENTS.md
+
