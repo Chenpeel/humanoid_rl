@@ -1,7 +1,7 @@
 # Makefile for JRL - JAX Reinforcement Learning Training
 # 用于管理机器人训练（自动课程学习）
 
-.PHONY: help sync sync-ksim lock install install-dev submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-ksim train-ksim-stand train-ksim-walk eval play clean clean-cache clean-logs clean-train clean-makelog clean-all
+.PHONY: help sync sync-ksim lock install install-dev submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-ksim train-ksim-stand train-ksim-walk eval play export infer clean clean-cache clean-logs clean-train clean-makelog clean-all
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
@@ -45,6 +45,8 @@ CACHE_DIR := $(PROJECT_ROOT)/.jax_cache
 TRAIN_SCRIPT := scripts/train.py
 TRAIN_KSIM_SCRIPT := scripts/train_ksim.py
 EVAL_SCRIPT := scripts/eval.py
+EXPORT_SCRIPT := scripts/export.py
+INFER_SCRIPT := scripts/infer_onnx.py
 
 # 配置文件路径
 CONFIG_TRAIN := configs/train/train.yaml
@@ -110,6 +112,8 @@ help:
 	@echo "  make eval CKPT=... ROBOT_NAME=unitree_h1   指定机器人模型"
 	@echo "  make play CKPT=...                         仅可视化播放（不评估）"
 	@echo "  make play CKPT=... PLAY_CONFIG=...         使用YAML配置复现env_config（如零速度命令）"
+	@echo "  make export CKPT=... FORMAT=onnx OUT_DIR=exported_models  导出模型（ONNX/TF/msgpack）"
+	@echo "  make infer MODEL=... ENV_TYPE=walking      ONNX 推理/回放（可 SAVE_VIDEO=1 录制）"
 	@echo ""
 	@echo "开发工具："
 	@echo "  make tensorboard          启动TensorBoard"
@@ -514,6 +518,8 @@ eval:
 		if [ -n "$(NO_JAX_PREALLOC)" ]; then CMD="$$CMD --no-jax-prealloc"; echo "JAX预分配: 关闭"; fi; \
 		if [ -n "$(JAX_MEM_FRACTION)" ]; then CMD="$$CMD --jax-mem-fraction $(JAX_MEM_FRACTION)"; echo "JAX显存比例: $(JAX_MEM_FRACTION)"; fi; \
 		if [ -n "$(RENDER)" ]; then CMD="$$CMD --render $(RENDER)"; echo "渲染间隔: $(RENDER)"; fi; \
+		if [ -n "$(NUM_EPISODES)" ]; then CMD="$$CMD --num-episodes $(NUM_EPISODES)"; echo "num-episodes: $(NUM_EPISODES)"; fi; \
+		if [ -n "$(MAX_STEPS)" ]; then CMD="$$CMD --max-steps $(MAX_STEPS)"; echo "max-steps: $(MAX_STEPS)"; fi; \
 		if [ -n "$(VIEWER_SLEEP)" ]; then CMD="$$CMD --viewer-sleep $(VIEWER_SLEEP)"; echo "viewer sleep: $(VIEWER_SLEEP)s"; fi; \
 		if [ -n "$(RENDER_WIDTH)" ]; then CMD="$$CMD --render-width $(RENDER_WIDTH)"; echo "渲染宽度: $(RENDER_WIDTH)"; \
 		elif [ -n "$(WIDTH)" ]; then CMD="$$CMD --render-width $(WIDTH)"; echo "渲染宽度: $(WIDTH)"; \
@@ -582,6 +588,97 @@ play:
 		if [ -n "$(NO_JAX_PREALLOC)" ]; then CMD="$$CMD --no-jax-prealloc"; echo "JAX预分配: 关闭"; fi; \
 		if [ -n "$(JAX_MEM_FRACTION)" ]; then CMD="$$CMD --jax-mem-fraction $(JAX_MEM_FRACTION)"; echo "JAX显存比例: $(JAX_MEM_FRACTION)"; fi; \
 		if [ -n "$(ROBOT_NAME)" ]; then CMD="$$CMD --robot-name $(ROBOT_NAME)"; echo "机器人名称: $(ROBOT_NAME)"; fi; \
+		echo ""; \
+		eval $$CMD 2>&1; \
+		EXIT_CODE=$$?; \
+		echo ""; \
+		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "退出码: $$EXIT_CODE"; \
+		exit $$EXIT_CODE; \
+	} 2>&1 | tee "$$LOGFILE"
+
+export:
+	@if [ -z "$(CKPT)" ]; then \
+		echo "错误: 请指定检查点路径 CKPT=..."; \
+		echo "示例: make export CKPT=logs/ppo_*/checkpoints/best_model FORMAT=onnx"; \
+		echo "示例: make export CKPT=logs/ksim_train/gaoda_jiyuan_task/run_000 FORMAT=onnx  # xax/ksim"; \
+		echo "示例: make export CKPT=models/xxx FORMAT=all OUT_DIR=exported_models"; \
+		exit 1; \
+	fi
+	@LOGFILE="$(call MAKELOG_FILE,export)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
+	echo "=== 导出模型 ==="; \
+	echo "检查点: $(CKPT)"; \
+	echo "日志文件: $$LOGFILE"; \
+	{ \
+		echo "=== 导出日志 ==="; \
+		echo "命令: make export CKPT=$(CKPT)"; \
+		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "检查点: $(CKPT)"; \
+		CMD="FORCE_COLOR=1 $(PYTHON) $(EXPORT_SCRIPT) --checkpoint-path $(CKPT)"; \
+		if [ -n "$(OUT_DIR)" ]; then CMD="$$CMD --output-dir $(OUT_DIR)"; echo "输出目录: $(OUT_DIR)"; fi; \
+		if [ -n "$(FORMAT)" ]; then CMD="$$CMD --format $(FORMAT)"; echo "导出格式: $(FORMAT)"; fi; \
+		if [ -n "$(USE_BEST)" ]; then CMD="$$CMD --use-best"; echo "use-best: true"; fi; \
+		if [ -n "$(CPU)" ]; then CMD="JAX_PLATFORMS=cpu $$CMD"; echo "设备: CPU (JAX_PLATFORMS=cpu)"; fi; \
+		if [ -n "$(NO_JAX_PREALLOC)" ]; then CMD="XLA_PYTHON_CLIENT_PREALLOCATE=false $$CMD"; echo "JAX预分配: 关闭"; fi; \
+		if [ -n "$(JAX_MEM_FRACTION)" ]; then CMD="XLA_PYTHON_CLIENT_MEM_FRACTION=$(JAX_MEM_FRACTION) $$CMD"; echo "JAX显存比例: $(JAX_MEM_FRACTION)"; fi; \
+		echo ""; \
+		eval $$CMD 2>&1; \
+		EXIT_CODE=$$?; \
+		echo ""; \
+		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "退出码: $$EXIT_CODE"; \
+		exit $$EXIT_CODE; \
+	} 2>&1 | tee "$$LOGFILE"
+
+infer:
+	@if [ -z "$(MODEL)" ]; then \
+		echo "错误: 请指定 ONNX 模型路径 MODEL=..."; \
+		echo "示例: make infer MODEL=exported_models/policy_step123.onnx"; \
+		echo "示例: make infer MODEL=exported_models/policy_step123.onnx ENV_TYPE=standing RENDER=1"; \
+		echo "示例: make infer MODEL=... SAVE_VIDEO=1 VIDEO_PATH=infer.mp4  # 录制视频"; \
+		echo "示例: make infer MODEL=... CPU=1  # 使用CPU运行MJX环境"; \
+		exit 1; \
+	fi
+	@LOGFILE="$(call MAKELOG_FILE,infer)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
+	echo "=== ONNX 推理/回放 ==="; \
+	echo "模型: $(MODEL)"; \
+	echo "日志文件: $$LOGFILE"; \
+	{ \
+		echo "=== 推理日志 ==="; \
+		echo "命令: make infer MODEL=$(MODEL)"; \
+		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "模型: $(MODEL)"; \
+		CMD="FORCE_COLOR=1 $(PYTHON) $(INFER_SCRIPT) --model $(MODEL)"; \
+		if [ -n "$(CONFIG)" ]; then CMD="$$CMD --config $(CONFIG)"; echo "配置: $(CONFIG)"; fi; \
+		if [ -n "$(XML_PATH)" ]; then CMD="$$CMD --xml-path $(XML_PATH)"; echo "模型: $(XML_PATH)"; fi; \
+		if [ -n "$(USE_LOCAL_MJCF)" ]; then CMD="$$CMD --use-local-mjcf"; echo "模型: local mjcf"; fi; \
+		if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
+		if [ -n "$(CPU)" ]; then CMD="$$CMD --cpu"; echo "设备: CPU"; fi; \
+		if [ -n "$(RENDER)" ]; then CMD="$$CMD --render $(RENDER)"; echo "渲染间隔: $(RENDER)"; fi; \
+		if [ -n "$(VIEWER_SLEEP)" ]; then CMD="$$CMD --viewer-sleep $(VIEWER_SLEEP)"; echo "viewer sleep: $(VIEWER_SLEEP)s"; fi; \
+		if [ -n "$(STATUS_EVERY)" ]; then CMD="$$CMD --status-every $(STATUS_EVERY)"; echo "status-every: $(STATUS_EVERY)s"; fi; \
+		if [ -n "$(REALTIME)" ]; then CMD="$$CMD --realtime"; echo "播放: realtime"; fi; \
+		if [ -n "$(EPISODES)" ]; then CMD="$$CMD --episodes $(EPISODES)"; echo "episodes: $(EPISODES)"; fi; \
+		if [ -n "$(MAX_STEPS)" ]; then CMD="$$CMD --max-steps $(MAX_STEPS)"; echo "max-steps: $(MAX_STEPS)"; fi; \
+		if [ -n "$(ACTION_CLIP)" ]; then CMD="$$CMD --action-clip $(ACTION_CLIP)"; echo "action-clip: $(ACTION_CLIP)"; fi; \
+		if [ -n "$(SAVE_VIDEO)" ]; then CMD="$$CMD --save-video"; echo "保存视频: 是"; fi; \
+		if [ -n "$(VIDEO_PATH)" ]; then CMD="$$CMD --video-path $(VIDEO_PATH)"; echo "视频路径: $(VIDEO_PATH)"; fi; \
+		if [ -n "$(VIDEO_FPS)" ]; then CMD="$$CMD --video-fps $(VIDEO_FPS)"; echo "视频FPS: $(VIDEO_FPS)"; fi; \
+		if [ -n "$(RENDER_WIDTH)" ]; then CMD="$$CMD --render-width $(RENDER_WIDTH)"; echo "渲染宽度: $(RENDER_WIDTH)"; \
+		elif [ -n "$(WIDTH)" ]; then CMD="$$CMD --render-width $(WIDTH)"; echo "渲染宽度: $(WIDTH)"; \
+		elif [ -n "$(WEIGHT)" ]; then CMD="$$CMD --render-width $(WEIGHT)"; echo "渲染宽度: $(WEIGHT)"; fi; \
+		if [ -n "$(RENDER_HEIGHT)" ]; then CMD="$$CMD --render-height $(RENDER_HEIGHT)"; echo "渲染高度: $(RENDER_HEIGHT)"; \
+		elif [ -n "$(HEIGHT)" ]; then CMD="$$CMD --render-height $(HEIGHT)"; echo "渲染高度: $(HEIGHT)"; fi; \
+		if [ -n "$(CAMERA_NAME)" ]; then CMD="$$CMD --camera-name $(CAMERA_NAME)"; echo "相机: $(CAMERA_NAME)"; fi; \
+		if [ -n "$(RECORD_INTERVAL)" ]; then CMD="$$CMD --record-interval $(RECORD_INTERVAL)"; echo "录制间隔: $(RECORD_INTERVAL)"; fi; \
+		if [ -n "$(NO_JAX_PREALLOC)" ]; then CMD="$$CMD --no-jax-prealloc"; echo "JAX预分配: 关闭"; fi; \
+		if [ -n "$(JAX_MEM_FRACTION)" ]; then CMD="$$CMD --jax-mem-fraction $(JAX_MEM_FRACTION)"; echo "JAX显存比例: $(JAX_MEM_FRACTION)"; fi; \
+		if [ -n "$(ROBOT_NAME)" ]; then CMD="$$CMD --robot-name $(ROBOT_NAME)"; echo "机器人名称: $(ROBOT_NAME)"; fi; \
+		if [ -n "$(ORT_PROVIDER)" ]; then CMD="$$CMD --ort-provider $(ORT_PROVIDER)"; echo "ort-provider: $(ORT_PROVIDER)"; fi; \
+		if [ -n "$(INPUT_NAME)" ]; then CMD="$$CMD --input-name $(INPUT_NAME)"; echo "input-name: $(INPUT_NAME)"; fi; \
+		if [ -n "$(OUTPUT_NAME)" ]; then CMD="$$CMD --output-name $(OUTPUT_NAME)"; echo "output-name: $(OUTPUT_NAME)"; fi; \
 		echo ""; \
 		eval $$CMD 2>&1; \
 		EXIT_CODE=$$?; \
