@@ -15,6 +15,8 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from checkpoint_compat import CheckpointFormat, resolve_checkpoint, run_xax_viewer_from_checkpoint
+
 # 屏蔽 MuJoCo warp 警告
 _original_stderr = sys.stderr
 sys.stderr = io.StringIO()
@@ -447,6 +449,9 @@ def main():
 
     args = parser.parse_args()
 
+    resolved = resolve_checkpoint(args.checkpoint)
+    args.checkpoint = str(resolved.path)
+
     if args.no_jax_prealloc:
         os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
     if args.jax_mem_fraction is not None:
@@ -454,6 +459,61 @@ def main():
     if args.cpu:
         os.environ["JAX_PLATFORMS"] = "cpu"
         console.print("[yellow]使用 CPU 模式运行（速度较慢）[/yellow]")
+
+    if resolved.format == CheckpointFormat.XAX_TAR:
+        console.print(
+            Panel.fit(
+                "[bold green]ksim/xax checkpoint 回放[/bold green]\n"
+                "[dim]检测到 xax checkpoint（tar.gz）。eval.py 将使用 ksim viewer 进行定性回放/录制；"
+                "不输出 JRL 的数值评估表格。[/dim]",
+                border_style="green",
+            )
+        )
+
+        total_steps = int(args.max_steps) * max(1, int(args.num_episodes))
+        try:
+            outputs = run_xax_viewer_from_checkpoint(
+                resolved.path,
+                num_steps=total_steps,
+                save_renders=bool(args.save_video),
+                save_video=bool(args.save_video),
+                render_width=int(args.render_width) if args.render_width else None,
+                render_height=int(args.render_height) if args.render_height else None,
+                camera_name=args.camera_name,
+                deterministic=True,
+                cpu=bool(args.cpu),
+                no_jax_prealloc=bool(args.no_jax_prealloc),
+                jax_mem_fraction=args.jax_mem_fraction,
+            )
+        except ModuleNotFoundError as e:
+            console.print(f"[red]✗ 缺少依赖，无法回放 xax checkpoint: {e}[/red]")
+            console.print("[yellow]建议使用包含 ksim/xax 的 Python（例如项目 .venv）运行 eval.py[/yellow]")
+            return
+        except Exception as e:
+            console.print(f"[red]✗ xax viewer 运行失败: {e}[/red]")
+            msg = str(e)
+            if "Failed to open display" in msg or "gladLoadGL" in msg:
+                console.print("[yellow]提示: 离线渲染可尝试设置环境变量 `MUJOCO_GL=egl`（或 `MUJOCO_GL=osmesa`）[/yellow]")
+            return
+
+        console.print(f"[dim]xax exp_dir: {outputs.exp_dir}[/dim]")
+        if args.save_video:
+            if outputs.video_file is None:
+                console.print("[red]✗ 未找到输出视频文件（可能渲染失败或提前退出）[/red]")
+                return
+
+            out_path = Path(args.video_path).expanduser().resolve()
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                import shutil
+
+                shutil.copy2(outputs.video_file, out_path)
+            except Exception as e:
+                console.print(f"[yellow]⚠ 复制视频失败: {e}[/yellow]")
+                console.print(f"[yellow]视频仍保存在: {outputs.video_file}[/yellow]")
+            else:
+                console.print(f"[green]✓ 视频已保存: {out_path}[/green]")
+        return
 
     import jax
     from rl.envs import create_standing_env, create_velocity_tracking_env, create_walking_env
