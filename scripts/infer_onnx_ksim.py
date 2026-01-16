@@ -111,7 +111,12 @@ def main() -> int:
 
     parser.add_argument("--num-envs", type=int, default=1, help="推理使用的环境数（强烈建议 1；避免显存/渲染问题）")
     parser.add_argument("--num-steps", type=int, default=None, help="rollout 步数（ctrl step）；默认使用 task.render_length_frames()")
-    parser.add_argument("--seed", type=int, default=0, help="随机种子")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="随机种子（默认使用 task.prng_key()，与 ksim viewer 保持一致）",
+    )
 
     parser.add_argument("--save-video", action="store_true", help="保存视频（默认不开启）")
     parser.add_argument("--video-path", type=str, default="plays/xax_onnx.mp4", help="输出视频路径")
@@ -282,7 +287,7 @@ def main() -> int:
         video_path.parent.mkdir(parents=True, exist_ok=True)
 
     with task, jax.disable_jit():
-        rng = jax.random.PRNGKey(int(args.seed))
+        rng = task.prng_key() if args.seed is None else jax.random.PRNGKey(int(args.seed))
         task.set_loggers()
 
         mj_model = task.set_mujoco_model_opts(mj_model)
