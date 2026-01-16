@@ -461,6 +461,7 @@ def export_to_onnx_manual_eqx_mlp(
     current_in = in_dim
 
     for i, (w_out_in, b_out) in enumerate(layers):
+        is_last = i == (len(layers) - 1)
         if w_out_in.ndim != 2:
             raise ValueError(f"layer[{i}] weight 维度错误: {w_out_in.shape}")
         if b_out.ndim != 1:
@@ -475,7 +476,7 @@ def export_to_onnx_manual_eqx_mlp(
         w_name = f"W{i}"
         b_name = f"b{i}"
         mm_name = f"mm{i}"
-        z_name = f"z{i}"
+        z_name = output_name if is_last else f"z{i}"
         a_name = f"a{i}"
 
         # ONNX MatMul 需要 (in,out)；Equinox weight 是 (out,in)
@@ -488,7 +489,6 @@ def export_to_onnx_manual_eqx_mlp(
         nodes.append(helper.make_node("MatMul", inputs=[x_name, w_name], outputs=[mm_name]))
         nodes.append(helper.make_node("Add", inputs=[mm_name, b_name], outputs=[z_name]))
 
-        is_last = i == (len(layers) - 1)
         if not is_last:
             nodes.append(helper.make_node("Tanh", inputs=[z_name], outputs=[a_name]))
             x_name = a_name
