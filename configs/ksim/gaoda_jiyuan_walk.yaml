@@ -47,7 +47,7 @@ cmd_switch_prob: 0.02
 cmd_zero_prob: 0.1
 
 # ==================== Posture ====================
-target_height: 0.92
+target_height: 0.985
 
 # ==================== Reset randomization ====================
 reset_joint_pos_scale: 0.05
@@ -79,5 +79,5 @@ vel_kernel_scale: 0.25
 yaw_kernel_scale: 0.25
 
 # ==================== Network ====================
-hidden_sizes: [512, 512, 256]
+hidden_sizes: [512, 512, 512]
 init_log_std: -0.5
