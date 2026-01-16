@@ -517,6 +517,11 @@ eval:
 		echo "命令: make eval CKPT=$(CKPT)"; \
 		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "检查点: $(CKPT)"; \
+		CKPT_FORMAT="$$($(PYTHON) -c 'import sys; sys.path.insert(0, \"scripts\"); from checkpoint_compat import resolve_checkpoint; print(resolve_checkpoint(sys.argv[1]).format.value)' "$(CKPT)" 2>/dev/null || true)"; \
+		if [ "$$CKPT_FORMAT" = "xax_tar" ]; then \
+			echo "[deps] 检测到 xax/ksim checkpoint，自动同步 ksim extra ..."; \
+			$(UV_ENV) $(UV) sync --extra ksim || exit $$?; \
+		fi; \
 		CMD="FORCE_COLOR=1 $(PYTHON) $(EVAL_SCRIPT) --checkpoint $(CKPT)"; \
 		if [ -n "$(ENV_TYPE)" ]; then CMD="$$CMD --env-type $(ENV_TYPE)"; echo "环境类型: $(ENV_TYPE)"; fi; \
 		if [ -n "$(CPU)" ]; then CMD="$$CMD --cpu"; echo "设备: CPU"; fi; \
@@ -566,6 +571,11 @@ play:
 		echo "=== 播放日志 ==="; \
 		echo "命令: make play CKPT=$(CKPT)"; \
 			echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+			CKPT_FORMAT="$$($(PYTHON) -c 'import sys; sys.path.insert(0, \"scripts\"); from checkpoint_compat import resolve_checkpoint; print(resolve_checkpoint(sys.argv[1]).format.value)' "$(CKPT)" 2>/dev/null || true)"; \
+			if [ "$$CKPT_FORMAT" = "xax_tar" ]; then \
+				echo "[deps] 检测到 xax/ksim checkpoint，自动同步 ksim extra ..."; \
+				$(UV_ENV) $(UV) sync --extra ksim || exit $$?; \
+			fi; \
 			CMD="FORCE_COLOR=1 $(PYTHON) scripts/play.py --checkpoint $(CKPT)"; \
 			if [ -n "$(PLAY_CONFIG)" ]; then CMD="$$CMD --config $(PLAY_CONFIG)"; echo "配置: $(PLAY_CONFIG)"; fi; \
 			if [ -n "$(XML_PATH)" ]; then CMD="$$CMD --xml-path $(XML_PATH)"; echo "模型: $(XML_PATH)"; fi; \
@@ -620,6 +630,11 @@ export: sync-onnx
 		echo "命令: make export CKPT=$(CKPT)"; \
 		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "检查点: $(CKPT)"; \
+		CKPT_FORMAT="$$($(PYTHON) -c 'import sys; sys.path.insert(0, \"scripts\"); from checkpoint_compat import resolve_checkpoint; print(resolve_checkpoint(sys.argv[1]).format.value)' "$(CKPT)" 2>/dev/null || true)"; \
+		if [ "$$CKPT_FORMAT" = "xax_tar" ]; then \
+			echo "[deps] 检测到 xax/ksim checkpoint，自动同步 ksim+onnx extras ..."; \
+			$(UV_ENV) $(UV) sync --extra ksim --extra onnx || exit $$?; \
+		fi; \
 		CMD="FORCE_COLOR=1 $(PYTHON) $(EXPORT_SCRIPT) --checkpoint-path $(CKPT)"; \
 		if [ -n "$(OUT_DIR)" ]; then CMD="$$CMD --output-dir $(OUT_DIR)"; echo "输出目录: $(OUT_DIR)"; fi; \
 		if [ -n "$(FORMAT)" ]; then CMD="$$CMD --format $(FORMAT)"; echo "导出格式: $(FORMAT)"; fi; \
