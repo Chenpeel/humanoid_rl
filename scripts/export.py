@@ -631,7 +631,7 @@ def main():
         print(f"导出完成: {'成功' if ok else '失败'}")
         print(f"输出目录: {output_dir.absolute()}")
         print("=" * 60)
-        return
+        return 0 if ok else 1
 
     if checkpoint_path.is_dir():
         ckpt_manager = CheckpointManager(
@@ -735,10 +735,13 @@ def main():
             print("  MessagePack参数:")
             print("    - 保存原始JAX参数")
             print("    - 自定义转换和部署")
+        return 0
+
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
 
 # ============================================================================================
 # ===================================== END: 主函数 ============================================
