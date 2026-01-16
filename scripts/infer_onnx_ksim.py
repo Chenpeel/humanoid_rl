@@ -130,6 +130,14 @@ def main() -> int:
     parser.add_argument("--output-name", type=str, default=None, help="ONNX 输出名（默认 action）")
     parser.add_argument("--ort-provider", type=str, default="auto", help="onnxruntime provider: auto/cpu/cuda")
 
+    parser.add_argument(
+        "--compare-jax",
+        action="store_true",
+        help="对比 JAX actor(mean) 与 ONNX 输出（用于验证导出/推理是否一致）",
+    )
+    parser.add_argument("--compare-steps", type=int, default=3, help="对比输出前 N 次 sample_action")
+    parser.add_argument("--compare-tol", type=float, default=1e-4, help="对比阈值（max_abs 超过则提示）")
+
     parser.add_argument("--cpu", action="store_true", help="强制使用 CPU（JAX_PLATFORMS=cpu）")
     parser.add_argument("--no-jax-prealloc", action="store_true", help="禁用 JAX 预分配显存（XLA_PYTHON_CLIENT_PREALLOCATE=false）")
     parser.add_argument("--jax-mem-fraction", type=float, default=None, help="设置 JAX 显存占用比例（XLA_PYTHON_CLIENT_MEM_FRACTION）")
@@ -211,8 +219,8 @@ def main() -> int:
     if args.render_height:
         overrides["render_height"] = int(args.render_height)
 
-    # 如果提供 checkpoint，则把路径透传给 task（即便 action 来自 ONNX，仍可复用其 init/metadata 流程）。
-    if args.checkpoint:
+    # 默认不加载 checkpoint 的模型权重（ONNX 推理不需要）；仅在 compare-jax 时加载以便做一致性对比。
+    if args.checkpoint and args.compare_jax:
         overrides["load_from_ckpt_path"] = str(resolved.path)
 
     try:
@@ -247,6 +255,9 @@ def main() -> int:
     mj_model = task.get_mujoco_model()
 
     # 绑定 ONNX 推理到 task.sample_action（必须在 jax.disable_jit() 下运行，否则会被 JIT trace）
+    compare_remaining = int(max(0, args.compare_steps)) if args.compare_jax else 0
+    compare_tol = float(args.compare_tol)
+
     def onnx_sample_action(
         *,
         model,
@@ -283,6 +294,24 @@ def main() -> int:
         act_dim = int(act_flat.shape[-1])
         act_host = act_flat.reshape(lead_shape + (act_dim,))
         action = jnp.asarray(act_host)
+
+        nonlocal compare_remaining
+        if compare_remaining > 0:
+            try:
+                dist = model.actor(obs_n)
+                jax_action = dist.mode()
+                diff = np.asarray(jax.device_get(action - jax_action), dtype=np.float32)
+                max_abs = float(np.max(np.abs(diff)))
+                mean_abs = float(np.mean(np.abs(diff)))
+                console.print(f"[dim]compare-jax: max_abs={max_abs:.3e} mean_abs={mean_abs:.3e}[/dim]")
+                if max_abs > compare_tol:
+                    console.print(
+                        f"[yellow]⚠ compare-jax 超过阈值: max_abs={max_abs:.3e} > tol={compare_tol:.3e}[/yellow]"
+                    )
+            except Exception as e:
+                console.print(f"[yellow]⚠ compare-jax 失败: {e}[/yellow]")
+            compare_remaining -= 1
+
         return ksim.Action(action=action, carry=None)
 
     task.sample_action = onnx_sample_action  # type: ignore[assignment]
