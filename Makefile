@@ -1,7 +1,7 @@
 # Makefile for JRL - JAX Reinforcement Learning Training
 # 用于管理机器人训练（自动课程学习）
 
-.PHONY: help sync sync-ksim lock install install-dev submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-ksim train-ksim-stand train-ksim-walk eval play export infer clean clean-cache clean-logs clean-train clean-makelog clean-all
+.PHONY: help sync sync-ksim sync-onnx lock install install-dev submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-ksim train-ksim-stand train-ksim-walk eval play export infer clean clean-cache clean-logs clean-train clean-makelog clean-all
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
@@ -68,6 +68,7 @@ help:
 	@echo "环境配置："
 	@echo "  make sync                 使用 uv 同步基础依赖"
 	@echo "  make sync-ksim            使用 uv 同步依赖（含 ksim extra）"
+	@echo "  make sync-onnx            使用 uv 同步依赖（onnx/onnxruntime extra）"
 	@echo "  make lock                 生成/更新 uv.lock（可复现）"
 	@echo "  make install              = make sync"
 	@echo "  make install-dev          = make sync + 可选依赖（dev/tensorboard）"
@@ -143,6 +144,10 @@ sync:
 sync-ksim:
 	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
 	$(UV_ENV) $(UV) sync --extra ksim
+
+sync-onnx:
+	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
+	$(UV_ENV) $(UV) sync --extra onnx
 
 lock:
 	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
@@ -597,7 +602,7 @@ play:
 		exit $$EXIT_CODE; \
 	} 2>&1 | tee "$$LOGFILE"
 
-export:
+export: sync-onnx
 	@if [ -z "$(CKPT)" ]; then \
 		echo "错误: 请指定检查点路径 CKPT=..."; \
 		echo "示例: make export CKPT=logs/ppo_*/checkpoints/best_model FORMAT=onnx"; \
@@ -631,7 +636,7 @@ export:
 		exit $$EXIT_CODE; \
 	} 2>&1 | tee "$$LOGFILE"
 
-infer:
+infer: sync-onnx
 	@if [ -z "$(MODEL)" ]; then \
 		echo "错误: 请指定 ONNX 模型路径 MODEL=..."; \
 		echo "示例: make infer MODEL=exported_models/policy_step123.onnx"; \
