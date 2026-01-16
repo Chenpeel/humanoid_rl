@@ -46,11 +46,11 @@ cmd_switch_prob: 0.0
 cmd_zero_prob: 0.0
 
 # ==================== Posture ====================
-target_height: 0.92
+target_height: 0.975
 
 # ==================== Reset randomization ====================
 reset_joint_pos_scale: 0.05
-reset_joint_vel_scale: 0.2
+reset_joint_vel_scale: 0.15
 reset_pitch_range: [-0.15, 0.15]
 reset_roll_range: [-0.15, 0.15]
 
@@ -61,11 +61,15 @@ terminate_max_tilt_radians: 1.0
 
 # ==================== Reward weights ====================
 w_alive: 100.0
+# StayAliveReward: per-step=1/balance, done-fail=-1；适度降低 balance 让早期 episode 更“可活”
+alive_balance: 95.0
 w_upright: 5.0
 w_height: 2.0
 w_vel_track: 1.0
 w_action_rate: -0.02
 w_torque: -0.002
+w_ankle_deviation: -0.01
+w_foot_flat: 2.0
 
 # ==================== Reward kernels ====================
 upright_kernel_scale: 0.25

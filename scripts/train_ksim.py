@@ -60,6 +60,15 @@ if True:
 
 
 FIX_QUAT_ZUP = (0.70710678, -0.70710678, 0.0, 0.0)
+ANKLE_JOINT_NAMES = (
+    "right_ankle_cube_joint",
+    "right_ankle_axle_joint",
+    "right_foot_joint",
+    "left_ankle_cube_joint",
+    "left_ankle_axle_joint",
+    "left_foot_joint",
+)
+FOOT_BODY_NAMES = ("right_foot_link", "left_foot_link")
 
 
 def _is_git_lfs_pointer(path: Path) -> bool:
@@ -271,11 +280,17 @@ class GaodaJiyuanConfig(ksim.PPOConfig):
 
     # 奖励权重
     w_alive: float = xax.field(value=100.0, help="存活奖励权重")
+    alive_balance: float = xax.field(
+        value=100.0,
+        help="StayAliveReward 的 balance（越大则终止惩罚相对越重）",
+    )
     w_upright: float = xax.field(value=5.0, help="直立奖励权重")
     w_height: float = xax.field(value=2.0, help="高度奖励权重")
     w_vel_track: float = xax.field(value=2.0, help="速度跟踪权重")
     w_action_rate: float = xax.field(value=0.02, help="动作变化率惩罚权重")
     w_torque: float = xax.field(value=0.002, help="扭矩惩罚权重")
+    w_ankle_deviation: float = xax.field(value=0.0, help="踝关节偏转惩罚权重")
+    w_foot_flat: float = xax.field(value=0.0, help="足底平行地面奖励权重")
 
     # reward kernel
     upright_kernel_scale: float = xax.field(value=0.25, help="直立核函数尺度")
@@ -448,8 +463,8 @@ class GaodaJiyuanTask(ksim.PPOTask[ConfigT]):
         }
 
     def get_rewards(self, physics_model: ksim.PhysicsModel) -> Mapping[str, ksim.Reward]:
-        return {
-            "alive": ksim.StayAliveReward(scale=self.config.w_alive),
+        rewards: dict[str, ksim.Reward] = {
+            "alive": ksim.StayAliveReward(scale=self.config.w_alive, balance=self.config.alive_balance),
             "upright": ZUpUprightReward(scale=self.config.w_upright, kernel_scale=self.config.upright_kernel_scale),
             "height": ksim.BaseHeightReward(
                 scale=self.config.w_height,
@@ -467,6 +482,23 @@ class GaodaJiyuanTask(ksim.PPOTask[ConfigT]):
             "action_rate": ksim.ActionVelocityPenalty(scale=self.config.w_action_rate),
             "torque": ksim.CtrlPenalty.create(physics_model, scale=self.config.w_torque),
         }
+
+        if self.config.w_ankle_deviation != 0.0:
+            rewards["ankle_deviation"] = ksim.JointDeviationPenalty.create(
+                physics_model,
+                joint_names=ANKLE_JOINT_NAMES,
+                joint_targets=(0.0,) * len(ANKLE_JOINT_NAMES),
+                scale=self.config.w_ankle_deviation,
+            )
+
+        if self.config.w_foot_flat != 0.0:
+            rewards["foot_flat"] = ksim.FlatBodyReward.create(
+                physics_model,
+                body_names=FOOT_BODY_NAMES,
+                scale=self.config.w_foot_flat,
+            )
+
+        return rewards
 
     def get_terminations(self, physics_model: ksim.PhysicsModel) -> Mapping[str, ksim.Termination]:
         return {
