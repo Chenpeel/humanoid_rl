@@ -255,12 +255,23 @@ def main() -> int:
     ):
         obs_n = task._build_obs(observations, commands["cmd"])  # noqa: SLF001
         obs_host = np.asarray(jax.device_get(obs_n), dtype=np.float32)
-        if obs_host.ndim == 1:
-            obs_host = obs_host[None, :]
-        act_host = session.run([output_name], {input_name: obs_host})[0]
-        act_host = np.asarray(act_host, dtype=np.float32)
-        if act_host.ndim == 2 and act_host.shape[0] == 1:
-            act_host = act_host[0]
+        if obs_host.ndim < 2:
+            raise ValueError(f"观测维度错误：期望至少 2D([... , obs_dim])，实际 shape={obs_host.shape}")
+        obs_dim = int(obs_host.shape[-1])
+        lead_shape = tuple(int(x) for x in obs_host.shape[:-1])
+        obs_flat = obs_host.reshape((-1, obs_dim))
+
+        act_flat = session.run([output_name], {input_name: obs_flat})[0]
+        act_flat = np.asarray(act_flat, dtype=np.float32)
+        if act_flat.ndim == 1:
+            act_flat = act_flat[None, :]
+        if act_flat.shape[0] != obs_flat.shape[0]:
+            raise ValueError(
+                "ONNX 输出 batch 维度不匹配："
+                f"obs_batch={obs_flat.shape[0]} vs act_batch={act_flat.shape[0]}"
+            )
+        act_dim = int(act_flat.shape[-1])
+        act_host = act_flat.reshape(lead_shape + (act_dim,))
         action = jnp.asarray(act_host)
         return ksim.Action(action=action, carry=None)
 
