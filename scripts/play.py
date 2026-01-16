@@ -18,6 +18,12 @@ from rich.panel import Panel
 
 console = Console()
 
+from checkpoint_compat import (  # noqa: E402
+    CheckpointFormat,
+    resolve_checkpoint,
+    run_xax_viewer_from_checkpoint,
+)
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="可视化策略（仅播放，不评估）")
@@ -184,22 +190,8 @@ def main() -> int:
     robot_name = args.robot_name or config_data.get("robot_name") or "gaoda_jiyuan"
     env_config = config_data.get("env_config") or {}
 
-    ckpt_path = Path(args.checkpoint)
-    if ckpt_path.is_dir():
-        best_model_file = ckpt_path / "best_model"
-        if best_model_file.exists():
-            ckpt_path = best_model_file
-        else:
-            files = sorted([p for p in ckpt_path.iterdir() if p.is_file()])
-            if len(files) == 1:
-                ckpt_path = files[0]
-            elif files:
-                ckpt_path = max(files, key=lambda p: p.stat().st_mtime)
-            else:
-                raise FileNotFoundError(f"检查点目录为空: {ckpt_path}")
-    if not ckpt_path.exists():
-        raise FileNotFoundError(f"检查点不存在: {ckpt_path}")
-    args.checkpoint = str(ckpt_path)
+    resolved = resolve_checkpoint(args.checkpoint)
+    args.checkpoint = str(resolved.path)
 
     # Enable persistent JAX compilation cache (reduces repeated first-step compile cost).
     # Respect user-provided env vars when set.
@@ -220,6 +212,63 @@ def main() -> int:
         os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(args.jax_mem_fraction)
     if args.cpu:
         os.environ["JAX_PLATFORMS"] = "cpu"
+
+    if resolved.format == CheckpointFormat.XAX_TAR:
+        console.print(
+            Panel.fit(
+                "[bold green]ksim/xax 策略回放[/bold green]\n"
+                "[dim]检测到 xax checkpoint（tar.gz），将使用 ksim 内置 viewer 进行回放/录制。[/dim]",
+                border_style="green",
+            )
+        )
+
+        save_video = bool(args.save_video)
+        if args.render > 0 and save_video:
+            console.print("[yellow]提示: xax viewer 在 save_video 模式下为 offscreen，不会弹出交互窗口。[/yellow]")
+
+        try:
+            outputs = run_xax_viewer_from_checkpoint(
+                resolved.path,
+                num_steps=int(args.max_steps) if args.max_steps is not None else None,
+                save_renders=save_video,
+                save_video=save_video,
+                render_width=int(args.render_width) if args.render_width else None,
+                render_height=int(args.render_height) if args.render_height else None,
+                camera_name=args.camera_name,
+                deterministic=bool(args.deterministic),
+                cpu=bool(args.cpu),
+                no_jax_prealloc=bool(args.no_jax_prealloc),
+                jax_mem_fraction=args.jax_mem_fraction,
+            )
+        except ModuleNotFoundError as e:
+            console.print(f"[red]✗ 缺少依赖，无法回放 xax checkpoint: {e}[/red]")
+            console.print("[yellow]建议使用包含 ksim/xax 的 Python（例如项目 .venv）运行 play.py[/yellow]")
+            return 1
+        except Exception as e:
+            console.print(f"[red]✗ xax viewer 运行失败: {e}[/red]")
+            msg = str(e)
+            if "Failed to open display" in msg or "gladLoadGL" in msg:
+                console.print("[yellow]提示: 离线渲染可尝试设置环境变量 `MUJOCO_GL=egl`（或 `MUJOCO_GL=osmesa`）[/yellow]")
+            return 1
+
+        console.print(f"[dim]xax exp_dir: {outputs.exp_dir}[/dim]")
+        if save_video:
+            if outputs.video_file is None:
+                console.print("[red]✗ 未找到输出视频文件（可能渲染失败或提前退出）[/red]")
+                return 1
+
+            out_path = Path(args.video_path).expanduser().resolve()
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                import shutil
+
+                shutil.copy2(outputs.video_file, out_path)
+            except Exception as e:
+                console.print(f"[yellow]⚠ 复制视频失败: {e}[/yellow]")
+                console.print(f"[yellow]视频仍保存在: {outputs.video_file}[/yellow]")
+            else:
+                console.print(f"[green]✓ 视频已保存: {out_path}[/green]")
+        return 0
 
     import jax
     import numpy as np
