@@ -196,6 +196,8 @@ def main() -> int:
         "exp_dir": str(exp_dir),
         "compile": {"cache_dir": str(cache_dir)},
         "num_envs": int(max(1, args.num_envs)),
+        # ksim RLTask 要求 num_envs % batch_size == 0；推理默认用单 batch（batch_size=num_envs）。
+        "batch_size": int(max(1, args.num_envs)),
     }
     if args.camera_name:
         overrides["render_camera_name"] = args.camera_name
