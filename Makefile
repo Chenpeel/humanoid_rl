@@ -1,7 +1,7 @@
 # Makefile for JRL - JAX Reinforcement Learning Training
 # 用于管理机器人训练（自动课程学习）
 
-.PHONY: help sync sync-ksim sync-onnx lock install install-dev submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-ksim train-ksim-stand train-ksim-walk eval play export infer clean clean-cache clean-logs clean-train clean-makelog clean-all
+.PHONY: help sync sync-ksim sync-onnx lock install install-dev submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-ksim train-ksim-stand train-ksim-walk eval play export infer infer-ksim-onnx clean clean-cache clean-logs clean-train clean-makelog clean-all
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
@@ -47,6 +47,7 @@ TRAIN_KSIM_SCRIPT := scripts/train_ksim.py
 EVAL_SCRIPT := scripts/eval.py
 EXPORT_SCRIPT := scripts/export.py
 INFER_SCRIPT := scripts/infer_onnx.py
+INFER_KSIM_SCRIPT := scripts/infer_onnx_ksim.py
 
 # 配置文件路径
 CONFIG_TRAIN := configs/train/train.yaml
@@ -115,6 +116,7 @@ help:
 	@echo "  make play CKPT=... PLAY_CONFIG=...         使用YAML配置复现env_config（如零速度命令）"
 	@echo "  make export CKPT=... FORMAT=onnx OUT_DIR=exported_models  导出模型（ONNX/TF/msgpack）"
 	@echo "  make infer MODEL=... ENV_TYPE=walking      ONNX 推理/回放（可 SAVE_VIDEO=1 录制）"
+	@echo "  make infer-ksim-onnx MODEL=... CKPT=...    ksim/xax ONNX 推理回放（可 SAVE_VIDEO=1 录制）"
 	@echo ""
 	@echo "开发工具："
 	@echo "  make tensorboard          启动TensorBoard"
@@ -696,6 +698,60 @@ infer: sync-onnx
 		if [ -n "$(NO_JAX_PREALLOC)" ]; then CMD="$$CMD --no-jax-prealloc"; echo "JAX预分配: 关闭"; fi; \
 		if [ -n "$(JAX_MEM_FRACTION)" ]; then CMD="$$CMD --jax-mem-fraction $(JAX_MEM_FRACTION)"; echo "JAX显存比例: $(JAX_MEM_FRACTION)"; fi; \
 		if [ -n "$(ROBOT_NAME)" ]; then CMD="$$CMD --robot-name $(ROBOT_NAME)"; echo "机器人名称: $(ROBOT_NAME)"; fi; \
+		if [ -n "$(ORT_PROVIDER)" ]; then CMD="$$CMD --ort-provider $(ORT_PROVIDER)"; echo "ort-provider: $(ORT_PROVIDER)"; fi; \
+		if [ -n "$(INPUT_NAME)" ]; then CMD="$$CMD --input-name $(INPUT_NAME)"; echo "input-name: $(INPUT_NAME)"; fi; \
+		if [ -n "$(OUTPUT_NAME)" ]; then CMD="$$CMD --output-name $(OUTPUT_NAME)"; echo "output-name: $(OUTPUT_NAME)"; fi; \
+		echo ""; \
+		eval $$CMD 2>&1; \
+		EXIT_CODE=$$?; \
+		echo ""; \
+		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "退出码: $$EXIT_CODE"; \
+		exit $$EXIT_CODE; \
+	} 2>&1 | tee "$$LOGFILE"
+
+infer-ksim-onnx:
+	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
+	@if [ -z "$(MODEL)" ]; then \
+		echo "错误: 请指定 ONNX 模型路径 MODEL=..."; \
+		echo "示例: MUJOCO_GL=egl make infer-ksim-onnx MODEL=exported_models/policy_mean_xax.onnx CKPT=logs/ksim_train/.../checkpoints/ckpt.XXXX.bin SAVE_VIDEO=1 VIDEO_PATH=plays/xax_onnx.mp4"; \
+		exit 1; \
+	fi
+	@if [ -z "$(CKPT)" ] && [ -z "$(CONFIG)" ]; then \
+		echo "错误: 请指定配置来源：CKPT=... 或 CONFIG=..."; \
+		echo "示例: make infer-ksim-onnx MODEL=... CKPT=logs/ksim_train/.../checkpoints/ckpt.XXXX.bin"; \
+		echo "示例: make infer-ksim-onnx MODEL=... CONFIG=configs/ksim/gaoda_jiyuan_stand.yaml"; \
+		exit 1; \
+	fi
+	@LOGFILE="$(call MAKELOG_FILE,infer_ksim_onnx)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
+	echo "=== ksim ONNX 推理/回放 ==="; \
+	echo "模型: $(MODEL)"; \
+	echo "日志文件: $$LOGFILE"; \
+	{ \
+		echo "=== 推理日志 ==="; \
+		echo "命令: make infer-ksim-onnx MODEL=$(MODEL)"; \
+		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "模型: $(MODEL)"; \
+		echo "[deps] 同步 ksim+onnx extras ..."; \
+		$(UV_ENV) $(UV) sync --extra ksim --extra onnx --inexact || exit $$?; \
+		CMD="FORCE_COLOR=1 $(PYTHON) $(INFER_KSIM_SCRIPT) --model $(MODEL)"; \
+		if [ -n "$(CKPT)" ]; then CMD="$$CMD --checkpoint $(CKPT)"; echo "checkpoint: $(CKPT)"; fi; \
+		if [ -n "$(CONFIG)" ]; then CMD="$$CMD --config $(CONFIG)"; echo "config: $(CONFIG)"; fi; \
+		if [ -n "$(NUM_ENVS)" ]; then CMD="$$CMD --num-envs $(NUM_ENVS)"; echo "num-envs: $(NUM_ENVS)"; fi; \
+		if [ -n "$(MAX_STEPS)" ]; then CMD="$$CMD --num-steps $(MAX_STEPS)"; echo "num-steps: $(MAX_STEPS)"; fi; \
+		if [ -n "$(SAVE_VIDEO)" ]; then CMD="$$CMD --save-video"; echo "保存视频: 是"; fi; \
+		if [ -n "$(VIDEO_PATH)" ]; then CMD="$$CMD --video-path $(VIDEO_PATH)"; echo "视频路径: $(VIDEO_PATH)"; fi; \
+		if [ -n "$(VIDEO_FPS)" ]; then CMD="$$CMD --target-fps $(VIDEO_FPS)"; echo "视频FPS: $(VIDEO_FPS)"; fi; \
+		if [ -n "$(RENDER_WIDTH)" ]; then CMD="$$CMD --render-width $(RENDER_WIDTH)"; echo "渲染宽度: $(RENDER_WIDTH)"; \
+		elif [ -n "$(WIDTH)" ]; then CMD="$$CMD --render-width $(WIDTH)"; echo "渲染宽度: $(WIDTH)"; \
+		elif [ -n "$(WEIGHT)" ]; then CMD="$$CMD --render-width $(WEIGHT)"; echo "渲染宽度: $(WEIGHT)"; fi; \
+		if [ -n "$(RENDER_HEIGHT)" ]; then CMD="$$CMD --render-height $(RENDER_HEIGHT)"; echo "渲染高度: $(RENDER_HEIGHT)"; \
+		elif [ -n "$(HEIGHT)" ]; then CMD="$$CMD --render-height $(HEIGHT)"; echo "渲染高度: $(HEIGHT)"; fi; \
+		if [ -n "$(CAMERA_NAME)" ]; then CMD="$$CMD --camera-name $(CAMERA_NAME)"; echo "相机: $(CAMERA_NAME)"; fi; \
+		if [ -n "$(CPU)" ]; then CMD="$$CMD --cpu"; echo "设备: CPU"; fi; \
+		if [ -n "$(NO_JAX_PREALLOC)" ]; then CMD="$$CMD --no-jax-prealloc"; echo "JAX预分配: 关闭"; fi; \
+		if [ -n "$(JAX_MEM_FRACTION)" ]; then CMD="$$CMD --jax-mem-fraction $(JAX_MEM_FRACTION)"; echo "JAX显存比例: $(JAX_MEM_FRACTION)"; fi; \
 		if [ -n "$(ORT_PROVIDER)" ]; then CMD="$$CMD --ort-provider $(ORT_PROVIDER)"; echo "ort-provider: $(ORT_PROVIDER)"; fi; \
 		if [ -n "$(INPUT_NAME)" ]; then CMD="$$CMD --input-name $(INPUT_NAME)"; echo "input-name: $(INPUT_NAME)"; fi; \
 		if [ -n "$(OUTPUT_NAME)" ]; then CMD="$$CMD --output-name $(OUTPUT_NAME)"; echo "output-name: $(OUTPUT_NAME)"; fi; \
