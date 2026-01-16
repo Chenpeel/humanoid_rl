@@ -517,7 +517,7 @@ eval:
 		echo "命令: make eval CKPT=$(CKPT)"; \
 		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "检查点: $(CKPT)"; \
-		CKPT_FORMAT="$$($(PYTHON) -c 'import sys; sys.path.insert(0, \"scripts\"); from checkpoint_compat import resolve_checkpoint; print(resolve_checkpoint(sys.argv[1]).format.value)' "$(CKPT)" 2>/dev/null || true)"; \
+		CKPT_FORMAT="$$($(PYTHON) -c 'import sys; sys.path.insert(0, "scripts"); from checkpoint_compat import resolve_checkpoint; print(resolve_checkpoint(sys.argv[1]).format.value)' \"$(CKPT)\" 2>/dev/null || true)"; \
 		if [ "$$CKPT_FORMAT" = "xax_tar" ]; then \
 			echo "[deps] 检测到 xax/ksim checkpoint，自动同步 ksim extra ..."; \
 			$(UV_ENV) $(UV) sync --extra ksim || exit $$?; \
@@ -571,7 +571,7 @@ play:
 		echo "=== 播放日志 ==="; \
 		echo "命令: make play CKPT=$(CKPT)"; \
 			echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
-			CKPT_FORMAT="$$($(PYTHON) -c 'import sys; sys.path.insert(0, \"scripts\"); from checkpoint_compat import resolve_checkpoint; print(resolve_checkpoint(sys.argv[1]).format.value)' "$(CKPT)" 2>/dev/null || true)"; \
+			CKPT_FORMAT="$$($(PYTHON) -c 'import sys; sys.path.insert(0, "scripts"); from checkpoint_compat import resolve_checkpoint; print(resolve_checkpoint(sys.argv[1]).format.value)' \"$(CKPT)\" 2>/dev/null || true)"; \
 			if [ "$$CKPT_FORMAT" = "xax_tar" ]; then \
 				echo "[deps] 检测到 xax/ksim checkpoint，自动同步 ksim extra ..."; \
 				$(UV_ENV) $(UV) sync --extra ksim || exit $$?; \
@@ -630,7 +630,7 @@ export: sync-onnx
 		echo "命令: make export CKPT=$(CKPT)"; \
 		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "检查点: $(CKPT)"; \
-		CKPT_FORMAT="$$($(PYTHON) -c 'import sys; sys.path.insert(0, \"scripts\"); from checkpoint_compat import resolve_checkpoint; print(resolve_checkpoint(sys.argv[1]).format.value)' "$(CKPT)" 2>/dev/null || true)"; \
+		CKPT_FORMAT="$$($(PYTHON) -c 'import sys; sys.path.insert(0, "scripts"); from checkpoint_compat import resolve_checkpoint; print(resolve_checkpoint(sys.argv[1]).format.value)' \"$(CKPT)\" 2>/dev/null || true)"; \
 		if [ "$$CKPT_FORMAT" = "xax_tar" ]; then \
 			echo "[deps] 检测到 xax/ksim checkpoint，自动同步 ksim+onnx extras ..."; \
 			$(UV_ENV) $(UV) sync --extra ksim --extra onnx || exit $$?; \
