@@ -214,6 +214,9 @@ def export_to_onnx_manual_mlp(
         producer_name="jrl.export_model",
         opset_imports=[helper.make_operatorsetid("", 13)],
     )
+    # onnx==1.20+ 默认写入 IR_VERSION=13，但部分 onnxruntime 目前只支持到 11。
+    if getattr(model, "ir_version", 0) > 11:
+        model.ir_version = 11
     onnx.checker.check_model(model)
     onnx.save(model, output_path)
     print(f"✓ 模型已导出为ONNX: {output_path}")
@@ -510,6 +513,9 @@ def export_to_onnx_manual_eqx_mlp(
         producer_name="jrl.export_model.xax",
         opset_imports=[helper.make_operatorsetid("", 13)],
     )
+    # onnx==1.20+ 默认写入 IR_VERSION=13，但部分 onnxruntime 目前只支持到 11。
+    if getattr(model, "ir_version", 0) > 11:
+        model.ir_version = 11
     onnx.checker.check_model(model)
     onnx.save(model, output_path)
     print(f"✓ xax 模型已导出为ONNX: {output_path}")
