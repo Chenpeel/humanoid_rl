@@ -647,9 +647,21 @@ def main() -> int:
         description="ksim 训练 gaoda_jiyuan（MJX + PPO）")
     parser.add_argument("--config", type=str,
                         required=True, help="YAML 配置文件路径")
+    parser.add_argument(
+        "--load-ckpt",
+        type=str,
+        default=None,
+        help="从 checkpoint 初始化训练（不设置则从头训练）",
+    )
     args = parser.parse_args()
 
     cfg_dict = _load_yaml(args.config)
+    if args.load_ckpt:
+        ckpt_path = Path(args.load_ckpt).expanduser()
+        if not ckpt_path.is_file():
+            raise FileNotFoundError(f"检查点不存在: {ckpt_path}")
+        cfg_dict = dict(cfg_dict)
+        cfg_dict["load_from_ckpt_path"] = str(ckpt_path)
     config = GaodaJiyuanConfig(**cfg_dict)
     # xax 会默认把 sys.argv 当作 OmegaConf CLI override 解析；这里我们自己处理了 --config，
     # 所以必须关闭 xax 的 CLI 合并逻辑，避免把 --config 当作字段名导致报错。

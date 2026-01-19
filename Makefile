@@ -56,6 +56,7 @@ CONFIG_QUICK := configs/quick_test/train.yaml
 CONFIG_STAND := configs/train-stand/train.yaml
 CONFIG_KSIM_STAND := configs/ksim/gaoda_jiyuan_stand.yaml
 CONFIG_KSIM_WALK := configs/ksim/gaoda_jiyuan_walk.yaml
+LOAD_CKPT ?= $(load_ckpt)
 
 # 日志时间戳生成函数
 TIMESTAMP := $(shell date '+%Y%m%d_%H%M%S')
@@ -96,6 +97,7 @@ help:
 	@echo "ksim 训练（gaoda_jiyuan）："
 	@echo "  make train-ksim-stand      ksim 站立专训（自动执行 sync-ksim）"
 	@echo "  make train-ksim-walk       ksim 行走训练（自动执行 sync-ksim）"
+	@echo "  make train-ksim-walk load_ckpt=...ckpt.bin  从 checkpoint 开始行走训练"
 	@echo ""
 	@echo "课程学习机制："
 	@echo "  - 阶段1 (0-20M env steps):    站立平衡"
@@ -454,6 +456,7 @@ train-ksim-stand: sync-ksim
 		echo "配置文件: $(CONFIG_KSIM_STAND)"; \
 		echo ""; \
 		CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_KSIM_SCRIPT) --config $(CONFIG_KSIM_STAND)"; \
+		if [ -n "$(LOAD_CKPT)" ]; then CMD="$$CMD --load-ckpt $(LOAD_CKPT)"; echo "load_ckpt: $(LOAD_CKPT)"; fi; \
 		eval $$CMD 2>&1; \
 		EXIT_CODE=$$?; \
 		echo ""; \
@@ -479,6 +482,7 @@ train-ksim-walk: sync-ksim
 		echo "配置文件: $(CONFIG_KSIM_WALK)"; \
 		echo ""; \
 		CMD="FORCE_COLOR=1 $(PYTHON) $(TRAIN_KSIM_SCRIPT) --config $(CONFIG_KSIM_WALK)"; \
+		if [ -n "$(LOAD_CKPT)" ]; then CMD="$$CMD --load-ckpt $(LOAD_CKPT)"; echo "load_ckpt: $(LOAD_CKPT)"; fi; \
 		eval $$CMD 2>&1; \
 		EXIT_CODE=$$?; \
 		echo ""; \
