@@ -96,6 +96,7 @@ help:
 	@echo ""
 	@echo "ksim 训练（gaoda_jiyuan）："
 	@echo "  make train-ksim-stand      ksim 站立专训（自动执行 sync-ksim）"
+	@echo "  make train-ksim-stand load_ckpt=...ckpt.bin  从 checkpoint 开始站立训练"
 	@echo "  make train-ksim-walk       ksim 行走训练（自动执行 sync-ksim）"
 	@echo "  make train-ksim-walk load_ckpt=...ckpt.bin  从 checkpoint 开始行走训练"
 	@echo ""
