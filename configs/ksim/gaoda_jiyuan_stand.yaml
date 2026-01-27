@@ -53,6 +53,9 @@ reset_joint_pos_scale: 0.05
 reset_joint_vel_scale: 0.15
 reset_pitch_range: [-0.15, 0.15]
 reset_roll_range: [-0.15, 0.15]
+# 增加 yaw 方向扰动
+# reset_yaw_range: [-3.14, 3.14]
+# 增加 随机扰动： 随机推力、随机摩擦/质量抖动、噪声/延迟
 
 # ==================== Termination ====================
 terminate_min_z: 0.65
