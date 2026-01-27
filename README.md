@@ -38,6 +38,16 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv --version
 ```
 
+### 拉取 assets
+
+```bash
+# ubuntu
+# 使用 lfs
+sudo apt-get install git-lfs
+
+git lfs pull
+```
+
 ### ksim 训练
 
 ```bash
