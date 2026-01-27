@@ -1,7 +1,7 @@
 # Makefile for JRL - JAX Reinforcement Learning Training
 # 用于管理机器人训练（自动课程学习）
 
-.PHONY: help sync sync-ksim sync-onnx lock install install-dev submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-ksim train-ksim-stand train-ksim-walk eval play export infer infer-ksim-onnx clean clean-cache clean-logs clean-train clean-makelog clean-all
+.PHONY: help sync sync-ksim sync-onnx lock install install-dev submodule-update train train-vis train-long train-long-vis train-test train-test-vis train-stand train-stand-vis train-custom train-custom-vis train-ksim train-ksim-stand train-ksim-walk eval play export infer infer-ksim-onnx visualize-mjcf clean clean-cache clean-logs clean-train clean-makelog clean-all
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
@@ -48,6 +48,7 @@ EVAL_SCRIPT := scripts/eval.py
 EXPORT_SCRIPT := scripts/export.py
 INFER_SCRIPT := scripts/infer_onnx.py
 INFER_KSIM_SCRIPT := scripts/infer_onnx_ksim.py
+VISUALIZE_MJCF_SCRIPT := scripts/visualize_mjcf.py
 
 # 配置文件路径
 CONFIG_TRAIN := configs/train/train.yaml
@@ -126,6 +127,9 @@ help:
 	@echo "  make format               格式化代码"
 	@echo "  make test                 运行单元测试"
 	@echo "  make validate-config      验证配置文件语法"
+	@echo "  make visualize-mjcf       MJCF 模型可视化（支持热刷新）"
+	@echo "  make visualize-mjcf XML=robots/gaoda_jiyuan/jiyuan.xml AUTORELOAD=0 MODE=launch"
+	@echo "  make visualize-mjcf XML=robots/gaoda_jiyuan/jiyuan.xml NO_INTERACTIVE=1 GRAVITY=1"
 	@echo ""
 	@echo "清理命令："
 	@echo "  make clean                清理临时文件"
@@ -764,6 +768,33 @@ infer-ksim-onnx:
 		if [ -n "$(ORT_PROVIDER)" ]; then CMD="$$CMD --ort-provider $(ORT_PROVIDER)"; echo "ort-provider: $(ORT_PROVIDER)"; fi; \
 		if [ -n "$(INPUT_NAME)" ]; then CMD="$$CMD --input-name $(INPUT_NAME)"; echo "input-name: $(INPUT_NAME)"; fi; \
 		if [ -n "$(OUTPUT_NAME)" ]; then CMD="$$CMD --output-name $(OUTPUT_NAME)"; echo "output-name: $(OUTPUT_NAME)"; fi; \
+		echo ""; \
+		eval $$CMD 2>&1; \
+		EXIT_CODE=$$?; \
+		echo ""; \
+		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		echo "退出码: $$EXIT_CODE"; \
+		exit $$EXIT_CODE; \
+	} 2>&1 | tee "$$LOGFILE"
+
+visualize-mjcf:
+	@LOGFILE="$(call MAKELOG_FILE,visualize_mjcf)"; \
+	mkdir -p "$$(dirname "$$LOGFILE")"; \
+	echo "=== MJCF 可视化 ==="; \
+	echo "日志文件: $$LOGFILE"; \
+	{ \
+		echo "=== MJCF 可视化日志 ==="; \
+		echo "命令: make visualize-mjcf"; \
+		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
+		CMD="FORCE_COLOR=1 $(PYTHON) $(VISUALIZE_MJCF_SCRIPT)"; \
+		if [ -n "$(XML)" ]; then CMD="$$CMD --xml $(XML)"; echo "模型: $(XML)"; \
+		elif [ -n "$(XML_PATH)" ]; then CMD="$$CMD --xml $(XML_PATH)"; echo "模型: $(XML_PATH)"; fi; \
+		if [ -n "$(NO_INTERACTIVE)" ]; then CMD="$$CMD --no-interactive"; echo "交互: 关闭"; fi; \
+		if [ -n "$(AUTORELOAD)" ]; then CMD="$$CMD --autoreload $(AUTORELOAD)"; echo "autoreload: $(AUTORELOAD)"; fi; \
+		if [ -n "$(MODE)" ]; then CMD="$$CMD --mode $(MODE)"; echo "mode: $(MODE)"; fi; \
+		if [ -n "$(GRAVITY)" ]; then CMD="$$CMD --gravity $(GRAVITY)"; echo "gravity: $(GRAVITY)"; fi; \
+		if [ -n "$(RENDER_CPU)" ]; then CMD="LIBGL_ALWAYS_SOFTWARE=1 $$CMD"; echo "LIBGL_ALWAYS_SOFTWARE: 1"; fi; \
+		if [ -n "$(MUJOCO_GL_IS_CMDLINE)" ]; then CMD="MUJOCO_GL=$(MUJOCO_GL) $$CMD"; echo "MUJOCO_GL: $(MUJOCO_GL)"; fi; \
 		echo ""; \
 		eval $$CMD 2>&1; \
 		EXIT_CODE=$$?; \
