@@ -38,13 +38,13 @@ warmup_steps: 0 # 学习率预热步数（max_steps=null 时无效）
 valid_every_n_seconds: 600.0 # 降低完整 valid（渲染+作图）频率，提升有效训练吞吐
 
 # ==================== Threading (optional) ====================
-# cpu_threads: 8  # 限制 CPU 线程/核心数（会同步设置 OMP/MKL/OPENBLAS/NUMEXPR + XLA CPU 线程）
-# xla_cpu_thread_count: 8  # 仅设置 XLA CPU 线程数（可覆盖 cpu_threads）
-# xla_cpu_multi_thread_eigen: true  # 可选：显式控制 XLA CPU 多线程
-# omp_num_threads: 8
-# mkl_num_threads: 8
-# openblas_num_threads: 8
-# numexpr_num_threads: 8
+cpu_threads: 4 # 限制 CPU 线程/核心数（会同步设置 OMP/MKL/OPENBLAS/NUMEXPR + XLA CPU 线程）
+xla_cpu_thread_count: 4 # 仅设置 XLA CPU 线程数（可覆盖 cpu_threads）
+xla_cpu_multi_thread_eigen: true # 可选：显式控制 XLA CPU 多线程
+omp_num_threads: 4
+mkl_num_threads: 4
+openblas_num_threads: 4
+numexpr_num_threads: 4
 
 # ==================== Commands (world frame) ====================
 # (vx, vy, wz) 全部置 0：纯站立

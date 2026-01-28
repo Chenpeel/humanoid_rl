@@ -80,18 +80,25 @@ def _upsert_xla_flag(name: str, value: str) -> None:
 
 def _apply_threading_env(cfg: Mapping[str, Any]) -> None:
     cpu_threads = _to_positive_int(cfg.get("cpu_threads"), "cpu_threads")
-    xla_thread_count = _to_positive_int(cfg.get("xla_cpu_thread_count"), "xla_cpu_thread_count") or cpu_threads
-    xla_multi = _to_bool(cfg.get("xla_cpu_multi_thread_eigen"), "xla_cpu_multi_thread_eigen")
+    xla_thread_count = _to_positive_int(
+        cfg.get("xla_cpu_thread_count"), "xla_cpu_thread_count") or cpu_threads
+    xla_multi = _to_bool(cfg.get("xla_cpu_multi_thread_eigen"),
+                         "xla_cpu_multi_thread_eigen")
 
-    omp_threads = _to_positive_int(cfg.get("omp_num_threads"), "omp_num_threads") or cpu_threads
-    mkl_threads = _to_positive_int(cfg.get("mkl_num_threads"), "mkl_num_threads") or cpu_threads
-    openblas_threads = _to_positive_int(cfg.get("openblas_num_threads"), "openblas_num_threads") or cpu_threads
-    numexpr_threads = _to_positive_int(cfg.get("numexpr_num_threads"), "numexpr_num_threads") or cpu_threads
+    omp_threads = _to_positive_int(
+        cfg.get("omp_num_threads"), "omp_num_threads") or cpu_threads
+    mkl_threads = _to_positive_int(
+        cfg.get("mkl_num_threads"), "mkl_num_threads") or cpu_threads
+    openblas_threads = _to_positive_int(
+        cfg.get("openblas_num_threads"), "openblas_num_threads") or cpu_threads
+    numexpr_threads = _to_positive_int(
+        cfg.get("numexpr_num_threads"), "numexpr_num_threads") or cpu_threads
 
     if xla_thread_count is not None:
         _upsert_xla_flag("--xla_cpu_thread_count", str(xla_thread_count))
     if xla_multi is not None:
-        _upsert_xla_flag("--xla_cpu_multi_thread_eigen", "true" if xla_multi else "false")
+        _upsert_xla_flag("--xla_cpu_multi_thread_eigen",
+                         "true" if xla_multi else "false")
 
     _set_env_int("OMP_NUM_THREADS", omp_threads)
     _set_env_int("MKL_NUM_THREADS", mkl_threads)
@@ -112,7 +119,8 @@ def _apply_threading_from_argv() -> None:
 
 def _setup_jax_runtime() -> None:
     """在导入 jax/ksim 前设置环境变量（避免无效设置）。"""
-
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     project_root = Path(__file__).resolve().parent.parent
 
     cache_dir = project_root / ".jax_cache"
@@ -125,9 +133,11 @@ def _setup_jax_runtime() -> None:
     logs_dir.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("RUN_DIR", str(logs_dir / "ksim_train"))
 
-    # 1080Ti(11GB) 默认不要把显存吃满；用户可在外部覆盖。
-    os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "true")
-    os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.80")
+    os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+    os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.50")
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+    # import warnings
+    # warnings.filterwarnings("ignore", category=Warning)
 
 
 _apply_threading_from_argv()
@@ -426,7 +436,8 @@ class GaodaJiyuanConfig(ksim.PPOConfig):
     )
     omp_num_threads: int | None = xax.field(value=None, help="OpenMP 线程数")
     mkl_num_threads: int | None = xax.field(value=None, help="MKL 线程数")
-    openblas_num_threads: int | None = xax.field(value=None, help="OpenBLAS 线程数")
+    openblas_num_threads: int | None = xax.field(
+        value=None, help="OpenBLAS 线程数")
     numexpr_num_threads: int | None = xax.field(value=None, help="NumExpr 线程数")
 
     def __post_init__(self) -> None:
