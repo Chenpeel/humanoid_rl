@@ -23,18 +23,25 @@ UV_INDEX_STRATEGY ?= unsafe-first-match
 # 可选：额外 index（逗号分隔 URL）
 UV_INDEX ?=
 UV_ENV ?= UV_DEFAULT_INDEX=$(UV_DEFAULT_INDEX) UV_INDEX_STRATEGY=$(UV_INDEX_STRATEGY) $(if $(UV_INDEX),UV_INDEX=$(UV_INDEX),)
+SYNC_EXTRAS ?= --extra ksim --extra onnx --extra tensorboard
+SYNC_FLAGS ?= --inexact
 
-# Python 解释器：优先使用绝对路径（减少对环境激活的依赖）
+# Python 解释器：默认使用项目 .venv 的绝对路径（减少对环境激活的依赖）
 # 1) 项目 uv venv：$(PROJECT_ROOT)/.venv/bin/python
 # 2) 当前激活环境：$CONDA_PREFIX/bin/python
 # 3) 默认环境：~/.miniconda3/envs/jrl/bin/python
 # 4) 回退：which python3 / python
-PYTHON ?= $(shell \
-	if [ -x "$(PROJECT_ROOT)/.venv/bin/python" ]; then echo "$(PROJECT_ROOT)/.venv/bin/python"; \
-	elif [ -n "$$CONDA_PREFIX" ] && [ -x "$$CONDA_PREFIX/bin/python" ]; then echo "$$CONDA_PREFIX/bin/python"; \
+PYTHON_VENV := $(PROJECT_ROOT)/.venv/bin/python
+PYTHON ?= $(PYTHON_VENV)
+ifeq ($(PYTHON),$(PYTHON_VENV))
+ifeq ($(strip $(wildcard $(PYTHON_VENV))),)
+PYTHON := $(shell \
+	if [ -n "$$CONDA_PREFIX" ] && [ -x "$$CONDA_PREFIX/bin/python" ]; then echo "$$CONDA_PREFIX/bin/python"; \
 	elif [ -x "$$HOME/.miniconda3/envs/jrl/bin/python" ]; then echo "$$HOME/.miniconda3/envs/jrl/bin/python"; \
 	elif command -v python3 >/dev/null 2>&1; then command -v python3; \
 	else command -v python; fi)
+endif
+endif
 
 MUJOCO_GL_IS_CMDLINE := $(filter command line,$(origin MUJOCO_GL))
 LOG_DIR := $(PROJECT_ROOT)/logs
@@ -69,12 +76,12 @@ help:
 	@echo "JRL 训练系统 - Makefile 命令（自动课程学习）"
 	@echo ""
 	@echo "环境配置："
-	@echo "  make sync                 使用 uv 同步基础依赖"
-	@echo "  make sync-ksim            使用 uv 同步依赖（含 ksim extra）"
-	@echo "  make sync-onnx            使用 uv 同步依赖（onnx/onnxruntime extra）"
+	@echo "  make sync                 使用 uv 同步完整依赖（ksim/onnx/tensorboard）"
+	@echo "  make sync-ksim            兼容目标：等同 make sync"
+	@echo "  make sync-onnx            兼容目标：等同 make sync"
 	@echo "  make lock                 生成/更新 uv.lock（可复现）"
 	@echo "  make install              = make sync"
-	@echo "  make install-dev          = make sync + 可选依赖（dev/tensorboard）"
+	@echo "  make install-dev          = make sync + 可选依赖（dev）"
 	@echo "  make check-env            检查 JAX/CUDA/ksim 环境"
 	@echo "  make submodule-update     初始化/更新子模块（models）"
 	@echo ""
@@ -96,9 +103,9 @@ help:
 	@echo "  make train ENABLE_VIDEO=1 VIDEO_INTERVAL=500  周期性录制训练视频到 logs/diy_train/.../videos"
 	@echo ""
 	@echo "ksim 训练（gaoda_jiyuan）："
-	@echo "  make train-ksim-stand      ksim 站立专训（自动执行 sync-ksim）"
+	@echo "  make train-ksim-stand      ksim 站立专训（自动执行 sync）"
 	@echo "  make train-ksim-stand load_ckpt=...ckpt.bin  从 checkpoint 开始站立训练"
-	@echo "  make train-ksim-walk       ksim 行走训练（自动执行 sync-ksim）"
+	@echo "  make train-ksim-walk       ksim 行走训练（自动执行 sync）"
 	@echo "  make train-ksim-walk load_ckpt=...ckpt.bin  从 checkpoint 开始行走训练"
 	@echo ""
 	@echo "课程学习机制："
@@ -148,15 +155,11 @@ help:
 
 sync:
 	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
-	$(UV_ENV) $(UV) sync
+	$(UV_ENV) $(UV) sync $(SYNC_EXTRAS) $(SYNC_FLAGS)
 
-sync-ksim:
-	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
-	$(UV_ENV) $(UV) sync --extra ksim --inexact
+sync-ksim: sync
 
-sync-onnx:
-	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
-	$(UV_ENV) $(UV) sync --extra onnx --inexact
+sync-onnx: sync
 
 lock:
 	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
@@ -167,8 +170,8 @@ install: sync
 
 install-dev:
 	@$(UV) --version >/dev/null 2>&1 || (echo "❌ 未找到 uv，请先安装 uv"; exit 1)
-	@echo "=== 安装开发依赖（dev/tensorboard）==="
-	$(UV_ENV) $(UV) sync --extra tensorboard --extra dev
+	@echo "=== 安装开发依赖（dev）==="
+	$(UV_ENV) $(UV) sync $(SYNC_EXTRAS) --extra dev $(SYNC_FLAGS)
 	@echo "✓ 开发依赖已通过 uv 同步完成"
 
 check-env:
@@ -176,7 +179,7 @@ check-env:
 	@echo "Python版本: $$($(PYTHON) --version)"
 	@echo "JAX版本: $$($(PYTHON) -c 'import jax; print(jax.__version__)')"
 	@echo "JAX后端: $$($(PYTHON) -c 'import jax; print(jax.default_backend())')"
-	@$(PYTHON) -c 'import ksim; print("ksim版本:", getattr(ksim, "__version__", "unknown"))' 2>/dev/null || echo "ksim: 未安装（请先 make sync-ksim）"
+	@$(PYTHON) -c 'import ksim; print("ksim版本:", getattr(ksim, "__version__", "unknown"))' 2>/dev/null || echo "ksim: 未安装（请先 make sync）"
 	@echo "可用设备:"
 	@$(PYTHON) -c 'import jax; [print(f"  - {d}") for d in jax.devices()]'
 
