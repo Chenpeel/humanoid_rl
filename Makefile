@@ -835,8 +835,9 @@ tensorboard:
 		echo "开始时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
 		echo "监控目录: $$TB_LOGDIR/"; \
 		echo ""; \
-		$(PYTHON) -m tensorboard.main --version >/dev/null 2>&1 || (echo "❌ tensorboard 未安装，请先运行: make install-dev"; exit 1); \
-		FORCE_COLOR=1 $(PYTHON) -m tensorboard.main --logdir="$$TB_LOGDIR" --host=127.0.0.1 --port=6006 2>&1; \
+		if [ ! -x "$(PYTHON_VENV)" ]; then echo "❌ 未找到 .venv Python: $(PYTHON_VENV)"; exit 1; fi; \
+		$(PYTHON_VENV) -m tensorboard.main --version >/dev/null 2>&1 || (echo "❌ tensorboard 未安装，请先运行: make install-dev"; exit 1); \
+		FORCE_COLOR=1 $(PYTHON_VENV) -m tensorboard.main --logdir="$$TB_LOGDIR" --host=127.0.0.1 --port=6006 2>&1; \
 		EXIT_CODE=$$?; \
 		echo ""; \
 		echo "结束时间: $$(date '+%Y-%m-%d %H:%M:%S')"; \
