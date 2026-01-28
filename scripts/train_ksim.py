@@ -38,7 +38,13 @@ def _find_config_path(argv: list[str]) -> str | None:
 
 def _ensure_venv_python() -> None:
     project_root = Path(__file__).resolve().parent.parent
-    venv_python = project_root / ".venv" / "bin" / "python"
+    venv_bin = project_root / ".venv" / "bin"
+    venv_python = venv_bin / "python"
+    if venv_bin.is_dir():
+        venv_path = str(venv_bin)
+        path_parts = os.environ.get("PATH", "").split(os.pathsep)
+        path_parts = [p for p in path_parts if p and p != venv_path]
+        os.environ["PATH"] = os.pathsep.join([venv_path] + path_parts)
     if not venv_python.is_file():
         return
     if sys.executable:
