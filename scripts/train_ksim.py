@@ -38,28 +38,6 @@ def _find_config_path(argv: list[str]) -> str | None:
 
 def _ensure_venv_python() -> None:
     project_root = Path(__file__).resolve().parent.parent
-    venv_bin = project_root / ".venv" / "bin"
-    venv_python = venv_bin / "python"
-    if not venv_python.is_file():
-        return
-    venv_path = str(venv_bin)
-    path_parts = os.environ.get("PATH", "").split(os.pathsep)
-    path_parts = [p for p in path_parts if p and p != venv_path]
-    os.environ["PATH"] = os.pathsep.join([venv_path] + path_parts)
-    if sys.executable:
-        try:
-            if Path(sys.executable).resolve() == venv_python.resolve():
-                return
-        except OSError:
-            pass
-    if os.environ.get("JRL_VENV_REEXEC") == "1":
-        return
-    os.environ["JRL_VENV_REEXEC"] = "1"
-    os.execv(venv_python.as_posix(), [venv_python.as_posix(), *sys.argv])
-
-
-def _ensure_venv_python() -> None:
-    project_root = Path(__file__).resolve().parent.parent
     venv_python = project_root / ".venv" / "bin" / "python"
     if not venv_python.is_file():
         return
@@ -179,7 +157,6 @@ def _setup_jax_runtime() -> None:
     # warnings.filterwarnings("ignore", category=Warning)
 
 
-_ensure_venv_python()
 _ensure_venv_python()
 _apply_threading_from_argv()
 _setup_jax_runtime()
