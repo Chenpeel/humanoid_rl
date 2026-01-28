@@ -39,8 +39,8 @@ valid_every_n_seconds: 600.0 # 降低完整 valid（渲染+作图）频率，提
 
 # ==================== Threading (optional) ====================
 cpu_threads: 4 # 限制 CPU 线程/核心数（会同步设置 OMP/MKL/OPENBLAS/NUMEXPR + XLA CPU 线程）
-xla_cpu_thread_count: 4 # 仅设置 XLA CPU 线程数（可覆盖 cpu_threads）
-xla_cpu_multi_thread_eigen: true # 可选：显式控制 XLA CPU 多线程
+# xla_cpu_thread_count: 4 # 仅在 JAX 支持该 flag 时设置（旧版会报 Unknown flag）
+# xla_cpu_multi_thread_eigen: true # 可选：显式控制 XLA CPU 多线程
 omp_num_threads: 4
 mkl_num_threads: 4
 openblas_num_threads: 4

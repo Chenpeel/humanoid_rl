@@ -81,7 +81,7 @@ def _upsert_xla_flag(name: str, value: str) -> None:
 def _apply_threading_env(cfg: Mapping[str, Any]) -> None:
     cpu_threads = _to_positive_int(cfg.get("cpu_threads"), "cpu_threads")
     xla_thread_count = _to_positive_int(
-        cfg.get("xla_cpu_thread_count"), "xla_cpu_thread_count") or cpu_threads
+        cfg.get("xla_cpu_thread_count"), "xla_cpu_thread_count")
     xla_multi = _to_bool(cfg.get("xla_cpu_multi_thread_eigen"),
                          "xla_cpu_multi_thread_eigen")
 
