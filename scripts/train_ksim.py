@@ -10,10 +10,104 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, TypeVar
 from xml.etree import ElementTree as ET
+
+import yaml
+
+
+def _load_yaml(path: str) -> dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"配置文件必须是 dict: {path}")
+    return data
+
+
+def _find_config_path(argv: list[str]) -> str | None:
+    for idx, arg in enumerate(argv):
+        if arg == "--config" and idx + 1 < len(argv):
+            return argv[idx + 1]
+        if arg.startswith("--config="):
+            return arg.split("=", 1)[1]
+    return None
+
+
+def _to_positive_int(value: Any, key: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{key} 不能是布尔值")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{key} 必须是整数") from exc
+    if parsed <= 0:
+        raise ValueError(f"{key} 必须是正整数")
+    return parsed
+
+
+def _to_bool(value: Any, key: str) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "y"}:
+            return True
+        if lowered in {"false", "0", "no", "n"}:
+            return False
+    raise ValueError(f"{key} 必须是布尔值")
+
+
+def _set_env_int(name: str, value: int | None) -> None:
+    if value is None:
+        return
+    os.environ[name] = str(value)
+
+
+def _upsert_xla_flag(name: str, value: str) -> None:
+    flags = os.environ.get("XLA_FLAGS", "").split()
+    prefix = f"{name}="
+    flags = [flag for flag in flags if not flag.startswith(prefix)]
+    flags.append(f"{name}={value}")
+    os.environ["XLA_FLAGS"] = " ".join(flags).strip()
+
+
+def _apply_threading_env(cfg: Mapping[str, Any]) -> None:
+    cpu_threads = _to_positive_int(cfg.get("cpu_threads"), "cpu_threads")
+    xla_thread_count = _to_positive_int(cfg.get("xla_cpu_thread_count"), "xla_cpu_thread_count") or cpu_threads
+    xla_multi = _to_bool(cfg.get("xla_cpu_multi_thread_eigen"), "xla_cpu_multi_thread_eigen")
+
+    omp_threads = _to_positive_int(cfg.get("omp_num_threads"), "omp_num_threads") or cpu_threads
+    mkl_threads = _to_positive_int(cfg.get("mkl_num_threads"), "mkl_num_threads") or cpu_threads
+    openblas_threads = _to_positive_int(cfg.get("openblas_num_threads"), "openblas_num_threads") or cpu_threads
+    numexpr_threads = _to_positive_int(cfg.get("numexpr_num_threads"), "numexpr_num_threads") or cpu_threads
+
+    if xla_thread_count is not None:
+        _upsert_xla_flag("--xla_cpu_thread_count", str(xla_thread_count))
+    if xla_multi is not None:
+        _upsert_xla_flag("--xla_cpu_multi_thread_eigen", "true" if xla_multi else "false")
+
+    _set_env_int("OMP_NUM_THREADS", omp_threads)
+    _set_env_int("MKL_NUM_THREADS", mkl_threads)
+    _set_env_int("OPENBLAS_NUM_THREADS", openblas_threads)
+    _set_env_int("NUMEXPR_NUM_THREADS", numexpr_threads)
+
+
+def _apply_threading_from_argv() -> None:
+    config_path = _find_config_path(sys.argv)
+    if not config_path:
+        return
+    try:
+        cfg = _load_yaml(config_path)
+    except (OSError, ValueError, yaml.YAMLError):
+        return
+    _apply_threading_env(cfg)
 
 
 def _setup_jax_runtime() -> None:
@@ -36,6 +130,7 @@ def _setup_jax_runtime() -> None:
     os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.80")
 
 
+_apply_threading_from_argv()
 _setup_jax_runtime()
 
 if True:
@@ -47,7 +142,6 @@ if True:
     import mujoco
     import optax
     import xax
-    import yaml
     from jaxtyping import Array, PRNGKeyArray, PyTree
 
     # 导入统一优化器
@@ -316,6 +410,24 @@ class GaodaJiyuanConfig(ksim.PPOConfig):
         value=0,
         help="学习率预热步数（仅当max_steps不为None时有效）"
     )
+
+    # 线程/核心控制（可选）
+    cpu_threads: int | None = xax.field(
+        value=None,
+        help="限制 CPU 线程/核心数（会同步设置 OMP/MKL/OPENBLAS/NUMEXPR + XLA CPU 线程）",
+    )
+    xla_cpu_thread_count: int | None = xax.field(
+        value=None,
+        help="XLA CPU 线程数（默认跟随 cpu_threads）",
+    )
+    xla_cpu_multi_thread_eigen: bool | None = xax.field(
+        value=None,
+        help="是否显式设置 XLA CPU 多线程（默认不设置）",
+    )
+    omp_num_threads: int | None = xax.field(value=None, help="OpenMP 线程数")
+    mkl_num_threads: int | None = xax.field(value=None, help="MKL 线程数")
+    openblas_num_threads: int | None = xax.field(value=None, help="OpenBLAS 线程数")
+    numexpr_num_threads: int | None = xax.field(value=None, help="NumExpr 线程数")
 
     def __post_init__(self) -> None:
         self.cmd_x_range = tuple(self.cmd_x_range)
@@ -632,14 +744,6 @@ class GaodaJiyuanTask(ksim.PPOTask[ConfigT]):
             jit_level=ksim.JitLevel.RL_CORE,
         )
         return ppo_vars, None
-
-
-def _load_yaml(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    if not isinstance(data, dict):
-        raise ValueError(f"配置文件必须是 dict: {path}")
-    return data
 
 
 def main() -> int:
