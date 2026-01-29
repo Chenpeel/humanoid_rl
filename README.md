@@ -100,6 +100,8 @@ make eval CKPT=... SAVE_VIDEO=1 VIDEO_PATH=eval.mp4  # 保存视频（较慢）
 
 ### 仅可视化播放（不评估）
 
+- Jax
+
 ```bash
 make play CKPT=logs/diy_train/ppo_*/checkpoints/best_model
 # 或直接运行:
@@ -109,12 +111,25 @@ python scripts/play.py --checkpoint logs/diy_train/ppo_*/checkpoints/best_model 
 make play CKPT=... SAVE_VIDEO=1 VIDEO_PATH=play.mp4 VIDEO_FPS=50
 # 指定模型XML路径（可选）
 make play CKPT=... XML_PATH=assets/xmls/scenes/flat_terrain.xml
+ 
+```
+
+- xax
+
+
+```bash
+make export CKPT=logs/ksim_train/gaoda_jiyuan_task/run_{001...999}/checkpoints/ckpt.bin FORMAT=onnx OUT_DIR=exported_models/${date}
+
+MUJOCO_GL=egl make infer-ksim-onnx \
+    MODEL=exported_models/${date}/policy_mean_xax.onnx \
+    CKPT=logs/ksim_train/gaoda_jiyuan_task/run_{001...999}/checkpoints/ckpt.bin \
+    SAVE_VIDEO=1 VIDEO_PATH=plays/play_${date}.mp4 \
+    MAX_STEPS=600 NUM_ENVS=1
 ```
 
 ## 目录结构
 
 ```
-jrl/
 ├── configs/                    # 配置文件
 │   ├── train/                  # 标准训练配置
 │   ├── train-10h/              # 长时间训练配置
@@ -139,19 +154,6 @@ jrl/
 
 ```
 
-## 日志结构
-
-- **训练日志**: `logs/diy_train/ppo_[时间戳]/`
-  - `events.out.tfevents.*` - TensorBoard事件文件
-  - `checkpoints/` - 模型检查点
-  - `videos/` - 训练过程视频
-  - `config.yaml` - 训练配置快照
-
-- **ksim 训练输出**: `logs/ksim_train/gaoda_jiyuan_task/run_###/`
-
-- **Make执行日志**: `logs/makelog/[命令]_[时间戳].log`
-  - 完整记录所有make命令的执行过程
-  - 与终端输出完全一致（使用tee实现）
 
 ## 配置说明
 
