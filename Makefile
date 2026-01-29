@@ -23,6 +23,10 @@ ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
 RUNNER ?= isaaclab
 UV ?= uv
 UV_PROJECT ?= isaaclab_rl
+# Isaac Sim pip 安装配置
+ISAACSIM_VERSION ?= 5.1.0
+ISAACSIM_EXTRAS ?= all,extscache
+ISAACSIM_INDEX ?= https://pypi.nvidia.com
 
 # Isaac Sim AppLauncher 常用参数
 # HEADLESS=1 时自动追加 --headless（云服务器/无显示环境推荐）
@@ -40,12 +44,28 @@ else
 PYTHON_RUN = $(ISAACLAB_PYTHON)
 endif
 
+# 选择 pip 安装器：优先使用已激活的 uv venv，其次按 RUNNER
+UV_VENV := $(shell test -n "$$VIRTUAL_ENV" && test -f "$$VIRTUAL_ENV/pyvenv.cfg" && grep -q "uv" "$$VIRTUAL_ENV/pyvenv.cfg" && echo 1)
+ifeq ($(UV_VENV),1)
+PIP_RUN = $(UV) pip
+PIP_CHECK = check-uv
+PIP_NOTE = uv
+else ifeq ($(RUNNER),uv)
+PIP_RUN = $(UV) pip
+PIP_CHECK = check-uv
+PIP_NOTE = uv
+else
+PIP_RUN = $(ISAACLAB_PYTHON) -m pip
+PIP_CHECK = check-isaaclab
+PIP_NOTE = isaaclab
+endif
+
 # AutoDL 云服务器平台专用配置
 export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
 export CARB_LOG_LEVEL=ERROR
 export TERM=xterm
 
-.PHONY: help install install-dev install-vis install-all clean clean-logs verify
+.PHONY: help install install-dev install-vis install-all clean clean-logs verify install-isaacsim
 .PHONY: submodule-init submodule-update submodule-status submodule-update-remote
 .PHONY: check-env check-isaaclab check-uv check-runner convert-usd
 .PHONY: train train-curriculum train-standing train-flat train-walking train-rough
@@ -118,25 +138,30 @@ submodule-status:
 submodule-update-remote:
 	@git submodule update --remote --merge --recursive
 
-install: check-isaaclab
-	@echo "安装项目（开发模式，安装到 Isaac Lab Python）..."
-	$(ISAACLAB_PYTHON) -m pip install -e "isaaclab_rl"
+install: install-isaacsim
+	@echo "安装项目（开发模式，使用 $(PIP_NOTE) 安装）..."
+	$(PIP_RUN) install -e "isaaclab_rl"
 	@echo "✓ 安装完成"
 
-install-dev: check-isaaclab
-	@echo "安装项目（含 dev 依赖，安装到 Isaac Lab Python）..."
-	$(ISAACLAB_PYTHON) -m pip install -e "isaaclab_rl[dev]"
+install-dev: install-isaacsim
+	@echo "安装项目（含 dev 依赖，使用 $(PIP_NOTE) 安装）..."
+	$(PIP_RUN) install -e "isaaclab_rl[dev]"
 	@echo "✓ 安装完成"
 
-install-vis: check-isaaclab
-	@echo "安装项目（含 vis 依赖，安装到 Isaac Lab Python）..."
-	$(ISAACLAB_PYTHON) -m pip install -e "isaaclab_rl[vis]"
+install-vis: install-isaacsim
+	@echo "安装项目（含 vis 依赖，使用 $(PIP_NOTE) 安装）..."
+	$(PIP_RUN) install -e "isaaclab_rl[vis]"
 	@echo "✓ 安装完成"
 
-install-all: check-isaaclab
-	@echo "安装项目（含 all 依赖，安装到 Isaac Lab Python）..."
-	$(ISAACLAB_PYTHON) -m pip install -e "isaaclab_rl[all]"
+install-all: install-isaacsim
+	@echo "安装项目（含 all 依赖，使用 $(PIP_NOTE) 安装）..."
+	$(PIP_RUN) install -e "isaaclab_rl[all]"
 	@echo "✓ 安装完成"
+
+install-isaacsim: $(PIP_CHECK)
+	@echo "安装 Isaac Sim $(ISAACSIM_VERSION)（使用 $(PIP_NOTE) 安装）..."
+	$(PIP_RUN) install "isaacsim[$(ISAACSIM_EXTRAS)]==$(ISAACSIM_VERSION)" --extra-index-url $(ISAACSIM_INDEX)
+	@echo "✓ Isaac Sim 安装完成"
 
 uv-sync:
 	@echo "使用 uv 同步 $(UV_PROJECT) 依赖（仅管理纯 Python 依赖/工具）..."
