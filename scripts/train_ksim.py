@@ -155,9 +155,9 @@ def _setup_jax_runtime() -> None:
     logs_dir = project_root / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("RUN_DIR", str(logs_dir / "ksim_train"))
-
+    os.environ.setdefault("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
     os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-    os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.50")
+    os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.90")
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     # import warnings
     # warnings.filterwarnings("ignore", category=Warning)
