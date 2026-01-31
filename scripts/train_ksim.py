@@ -347,6 +347,23 @@ class ZeroObservation(ksim.Observation):
         return jnp.zeros((self.dim,), dtype=dtype)
 
 
+@attrs.define(frozen=True, kw_only=True)
+class RandomYawReset(ksim.Reset):
+    """随机重置 base yaw 角（世界系）。"""
+
+    yaw_range: tuple[float, float] = attrs.field(default=(-jnp.pi, jnp.pi))
+
+    def __call__(self, data: ksim.PhysicsData, curriculum_level: Array, rng: PRNGKeyArray) -> ksim.PhysicsData:
+        min_yaw, max_yaw = self.yaw_range
+        angle = jax.random.uniform(rng, data.qpos.shape[:-1], minval=min_yaw, maxval=max_yaw)
+        euler = jnp.stack([jnp.zeros_like(angle), jnp.zeros_like(angle), angle], axis=-1)
+        quat = xax.euler_to_quat(euler)
+        # 左乘：在世界坐标系绕 Z 轴施加 yaw
+        new_quat = xax.quat_mul(quat, data.qpos[..., 3:7])
+        qpos = ksim.utils.mujoco.slice_update(data, "qpos", slice(3, 7), new_quat)
+        return ksim.utils.mujoco.update_data_field(data, "qpos", qpos)
+
+
 class NormalizedTorqueActuators(ksim.Actuators):
     """把 [-1, 1] action 映射到 actuator ctrlrange。"""
 
@@ -399,6 +416,43 @@ class GaodaJiyuanConfig(ksim.PPOConfig):
         value=(-0.15, 0.15), help="pitch 随机范围（rad）")
     reset_roll_range: tuple[float, float] = xax.field(
         value=(-0.15, 0.15), help="roll 随机范围（rad）")
+    reset_yaw_range: tuple[float, float] | None = xax.field(
+        value=None, help="yaw 随机范围（rad），None 表示不启用")
+
+    # 随机推力事件（物理步时间，单位：秒）
+    enable_random_pushes: bool = xax.field(value=False, help="是否启用随机推力扰动")
+    push_vel_range: tuple[float, float] = xax.field(
+        value=(0.0, 0.0), help="推力速度幅值范围（m/s）")
+    push_interval_range: tuple[float, float] = xax.field(
+        value=(0.5, 2.0), help="两次推力间隔范围（秒）")
+    push_curriculum_range: tuple[float, float] = xax.field(
+        value=(0.0, 1.0), help="推力强度随课程缩放范围")
+
+    # 摩擦 / 质量随机化
+    enable_random_friction: bool = xax.field(value=False, help="是否随机化摩擦参数")
+    dof_friction_scale_range: tuple[float, float] = xax.field(
+        value=(0.5, 2.0), help="关节摩擦缩放范围")
+    floor_friction_range: tuple[float, float] = xax.field(
+        value=(0.4, 1.0), help="地面摩擦范围（绝对值）")
+    floor_geom_name: str = xax.field(value="floor", help="地面 geom 名称")
+    enable_random_mass: bool = xax.field(value=False, help="是否随机化质量")
+    mass_scale_range: tuple[float, float] = xax.field(
+        value=(0.98, 1.02), help="全身质量缩放范围")
+
+    # 观测噪声 / 延迟
+    obs_noise_std: float = xax.field(value=0.0, help="观测高斯噪声标准差（0 关闭）")
+    obs_noise_targets: tuple[str, ...] = xax.field(
+        value=(
+            "joint_position",
+            "joint_velocity",
+            "base_linear_velocity",
+            "base_angular_velocity",
+            "projected_gravity",
+        ),
+        help="需要添加噪声的观测键",
+    )
+    joint_pos_delay_steps: int = xax.field(value=1, help="关节位置观测延迟步数（>=1）")
+    joint_vel_delay_steps: int = xax.field(value=1, help="关节速度观测延迟步数（>=1）")
 
     # 终止
     terminate_min_z: float = xax.field(value=0.65, help="过低高度终止阈值")
@@ -470,7 +524,22 @@ class GaodaJiyuanConfig(ksim.PPOConfig):
         self.cmd_yaw_range = tuple(self.cmd_yaw_range)
         self.reset_pitch_range = tuple(self.reset_pitch_range)
         self.reset_roll_range = tuple(self.reset_roll_range)
+        if self.reset_yaw_range is not None:
+            self.reset_yaw_range = tuple(self.reset_yaw_range)
+        self.push_vel_range = tuple(self.push_vel_range)
+        self.push_interval_range = tuple(self.push_interval_range)
+        self.push_curriculum_range = tuple(self.push_curriculum_range)
+        self.dof_friction_scale_range = tuple(self.dof_friction_scale_range)
+        self.floor_friction_range = tuple(self.floor_friction_range)
+        self.mass_scale_range = tuple(self.mass_scale_range)
+        self.obs_noise_targets = tuple(self.obs_noise_targets)
         self.hidden_sizes = tuple(self.hidden_sizes)
+        self.joint_pos_delay_steps = int(self.joint_pos_delay_steps)
+        self.joint_vel_delay_steps = int(self.joint_vel_delay_steps)
+        if self.joint_pos_delay_steps < 1:
+            raise ValueError("joint_pos_delay_steps 必须 >= 1")
+        if self.joint_vel_delay_steps < 1:
+            raise ValueError("joint_vel_delay_steps 必须 >= 1")
 
 
 class Actor(eqx.Module):
@@ -553,13 +622,42 @@ class GaodaJiyuanTask(ksim.PPOTask[ConfigT]):
         return NormalizedTorqueActuators(physics_model)
 
     def get_physics_randomizers(self, physics_model: ksim.PhysicsModel) -> Mapping[str, ksim.PhysicsRandomizer]:
-        return {}
+        randomizers: dict[str, ksim.PhysicsRandomizer] = {}
+        if self.config.enable_random_friction:
+            scale_lo, scale_hi = self.config.dof_friction_scale_range
+            randomizers["static_friction"] = ksim.StaticFrictionRandomizer(
+                scale_lower=scale_lo,
+                scale_upper=scale_hi,
+            )
+            floor_lo, floor_hi = self.config.floor_friction_range
+            randomizers["floor_friction"] = ksim.FloorFrictionRandomizer.from_geom_name(
+                physics_model,
+                floor_geom_name=self.config.floor_geom_name,
+                scale_lower=floor_lo,
+                scale_upper=floor_hi,
+            )
+        if self.config.enable_random_mass:
+            mass_lo, mass_hi = self.config.mass_scale_range
+            randomizers["mass_scale"] = ksim.AllBodiesMassMultiplicationRandomizer(
+                scale_lower=mass_lo,
+                scale_upper=mass_hi,
+            )
+        return randomizers
 
     def get_events(self, physics_model: ksim.PhysicsModel) -> Mapping[str, ksim.Event]:
-        return {}
+        if not self.config.enable_random_pushes:
+            return {}
+        return {
+            "random_push": ksim.LinearPushEvent(
+                linvel=self.config.push_vel_range[1],
+                vel_range=self.config.push_vel_range,
+                interval_range=self.config.push_interval_range,
+                curriculum_range=self.config.push_curriculum_range,
+            )
+        }
 
     def get_resets(self, physics_model: ksim.PhysicsModel) -> list[ksim.Reset]:
-        return [
+        resets = [
             ksim.RandomJointPositionReset.create(
                 physics_model,
                 scale=self.config.reset_joint_pos_scale,
@@ -572,23 +670,59 @@ class GaodaJiyuanTask(ksim.PPOTask[ConfigT]):
                 roll_range=self.config.reset_roll_range,
             ),
         ]
+        if self.config.reset_yaw_range is not None:
+            resets.append(RandomYawReset(yaw_range=self.config.reset_yaw_range))
+        return resets
 
     def get_observations(self, physics_model: ksim.PhysicsModel) -> Mapping[str, ksim.Observation]:
         sensor_name_to_idx_range = ksim.utils.mujoco.get_sensor_data_idxs_by_name(
             physics_model)
 
+        noise = None
+        if self.config.obs_noise_std > 0.0:
+            noise = ksim.AdditiveGaussianNoise(std=self.config.obs_noise_std)
+        noise_targets = set(self.config.obs_noise_targets)
+
+        def _noise_for(name: str) -> ksim.Noise | None:
+            if noise is None or name not in noise_targets:
+                return None
+            return noise
+
         def _sensor_or_zero(name: str) -> ksim.Observation:
             if name not in sensor_name_to_idx_range:
-                return ZeroObservation(dim=1)
-            return ksim.SensorObservation.create(physics_model=physics_model, sensor_name=name)
+                return ZeroObservation(dim=1, noise=_noise_for(name))
+            return ksim.SensorObservation.create(
+                physics_model=physics_model,
+                sensor_name=name,
+                noise=_noise_for(name),
+            )
+
+        if self.config.joint_pos_delay_steps > 1:
+            joint_pos_obs = ksim.DelayedJointPositionObservation(
+                delay_steps=self.config.joint_pos_delay_steps,
+                noise=_noise_for("joint_position"),
+            )
+        else:
+            joint_pos_obs = ksim.JointPositionObservation(noise=_noise_for("joint_position"))
+
+        if self.config.joint_vel_delay_steps > 1:
+            joint_vel_obs = ksim.DelayedJointVelocityObservation(
+                delay_steps=self.config.joint_vel_delay_steps,
+                noise=_noise_for("joint_velocity"),
+            )
+        else:
+            joint_vel_obs = ksim.JointVelocityObservation(noise=_noise_for("joint_velocity"))
 
         return {
-            "joint_position": ksim.JointPositionObservation(),
-            "joint_velocity": ksim.JointVelocityObservation(),
-            "base_linear_velocity": ksim.BaseLinearVelocityObservation(),
-            "base_angular_velocity": ksim.BaseAngularVelocityObservation(),
-            "base_quat_zup": ZUpBaseQuaternionObservation(),
-            "projected_gravity": ZUpProjectedGravityObservation(),
+            "joint_position": joint_pos_obs,
+            "joint_velocity": joint_vel_obs,
+            "base_linear_velocity": ksim.BaseLinearVelocityObservation(
+                noise=_noise_for("base_linear_velocity")),
+            "base_angular_velocity": ksim.BaseAngularVelocityObservation(
+                noise=_noise_for("base_angular_velocity")),
+            "base_quat_zup": ZUpBaseQuaternionObservation(noise=_noise_for("base_quat_zup")),
+            "projected_gravity": ZUpProjectedGravityObservation(
+                noise=_noise_for("projected_gravity")),
             "right_foot_contact": _sensor_or_zero("right_foot_contact"),
             "right_toe_contact": _sensor_or_zero("right_toe_contact"),
             "left_foot_contact": _sensor_or_zero("left_foot_contact"),
@@ -701,13 +835,20 @@ class GaodaJiyuanTask(ksim.PPOTask[ConfigT]):
     def get_initial_model_carry(self, model: Model, rng: PRNGKeyArray) -> PyTree | None:
         return None
 
+    def _select_obs(self, obs: xax.FrozenDict[str, PyTree], name: str) -> Array:
+        if self.config.obs_noise_std > 0.0 and name in self.config.obs_noise_targets:
+            noisy_name = f"noisy_{name}"
+            if noisy_name in obs:
+                return obs[noisy_name]
+        return obs[name]
+
     def _build_obs(self, obs: xax.FrozenDict[str, PyTree], cmd: Array) -> Array:
-        jp = obs["joint_position"]
-        jv = obs["joint_velocity"]
-        grav = obs["projected_gravity"]
-        linvel = obs["base_linear_velocity"]
-        angvel = obs["base_angular_velocity"]
-        quat = obs["base_quat_zup"]
+        jp = self._select_obs(obs, "joint_position")
+        jv = self._select_obs(obs, "joint_velocity")
+        grav = self._select_obs(obs, "projected_gravity")
+        linvel = self._select_obs(obs, "base_linear_velocity")
+        angvel = self._select_obs(obs, "base_angular_velocity")
+        quat = self._select_obs(obs, "base_quat_zup")
         contacts = jnp.concatenate(
             [
                 obs["right_foot_contact"],

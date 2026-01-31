@@ -62,9 +62,32 @@ reset_joint_pos_scale: 0.05
 reset_joint_vel_scale: 0.15
 reset_pitch_range: [-0.15, 0.15]
 reset_roll_range: [-0.15, 0.15]
-# 增加 yaw 方向扰动
-# reset_yaw_range: [-3.14, 3.14]
-# 增加 随机扰动： 随机推力、随机摩擦/质量抖动、噪声/延迟
+reset_yaw_range: [-3.14, 3.14]
+
+# ==================== 随机推力（单位：秒） ====================
+enable_random_pushes: true
+push_vel_range: [0.15, 0.6]
+push_interval_range: [0.6, 2.0]
+push_curriculum_range: [0.0, 1.0]
+
+# ==================== 随机化（摩擦/质量） ====================
+enable_random_friction: true
+dof_friction_scale_range: [0.6, 1.4]
+floor_friction_range: [0.6, 1.2]
+floor_geom_name: floor
+enable_random_mass: true
+mass_scale_range: [0.98, 1.02]
+
+# ==================== 观测噪声/延迟 ====================
+obs_noise_std: 0.01
+obs_noise_targets:
+  - joint_position
+  - joint_velocity
+  - base_linear_velocity
+  - base_angular_velocity
+  - projected_gravity
+joint_pos_delay_steps: 2
+joint_vel_delay_steps: 2
 
 # ==================== Termination ====================
 terminate_min_z: 0.65
