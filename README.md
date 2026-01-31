@@ -54,10 +54,13 @@ git lfs pull
 # 1) 同步依赖（包含 ksim extra）
 make sync-ksim
 
-# 2) 站立专训（先把 upright/height 练稳）
+# 2) 设置环境变量
+. export-env.sh
+
+# 3) 站立专训（先把 upright/height 练稳）
 make train-ksim-stand
 
-# 3) 行走训练（世界系速度命令 vx, vy, wz）
+# 4) 行走训练（世界系速度命令 vx, vy, wz）
 make train-ksim-walk
 ```
 
