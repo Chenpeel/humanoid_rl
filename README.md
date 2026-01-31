@@ -54,14 +54,11 @@ git lfs pull
 # 1) 同步依赖（包含 ksim extra）
 make sync-ksim
 
-# 2) 每次训练需设置环境变量 （远程服务器）
-. export-env.sh
+# 2) 站立专训
+. export-env.sh && make train-ksim-stand
 
-# 3) 站立专训
-make train-ksim-stand
-
-# 4) 行走训练
-make train-ksim-walk
+# 3) 行走训练
+. export-env.sh && make train-ksim-walk
 ```
 
 配置文件见 `configs/ksim/`，训练入口脚本为 `scripts/train_ksim.py`。

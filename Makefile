@@ -48,6 +48,8 @@ LOG_DIR := $(PROJECT_ROOT)/logs
 # Make命令执行日志固定写入项目根目录下的logs/makelog，
 # 避免用户覆写LOG_DIR（如指定某次训练run目录/某个checkpoint文件）导致日志目录解析失败。
 MAKELOG_DIR := $(PROJECT_ROOT)/logs/makelog
+# ksim/xax 回放/推理会在 logs 下额外生成目录（非训练日志）
+AUX_LOG_DIRS := $(PROJECT_ROOT)/logs/ksim_compat $(PROJECT_ROOT)/logs/ksim_onnx
 CACHE_DIR := $(PROJECT_ROOT)/.jax_cache
 TRAIN_SCRIPT := scripts/train.py
 TRAIN_KSIM_SCRIPT := scripts/train_ksim.py
@@ -144,11 +146,12 @@ help:
 	@echo "  make clean-train          清理训练日志（慎用！会删除所有模型检查点）"
 	@echo "  make clean-makelog        清理make执行日志"
 	@echo "  make clean-logs           清理所有日志（训练日志+make日志）"
-	@echo "  make clean-all            清理所有（保留训练日志，仅删除缓存+make日志+临时文件）"
+	@echo "  make clean-all            清理所有（保留训练日志，删除缓存+make日志+回放/推理日志+临时文件）"
 	@echo ""
 	@echo "日志说明："
 	@echo "  训练日志: logs/diy_train/ppo_[时间戳]/ (包含TensorBoard、检查点、视频等)"
 	@echo "  Make日志: logs/makelog/[命令]_[时间戳].log (make命令执行记录)"
+	@echo "  回放/推理日志: logs/ksim_compat/ (xax回放) , logs/ksim_onnx/ (ksim ONNX回放)"
 	@echo "  实时终端输出和日志文件内容完全一致（使用tee实现）"
 
 # ==================== 安装相关 ====================
@@ -893,6 +896,8 @@ clean-all:
 	$(MAKE) clean
 	$(MAKE) clean-cache
 	$(MAKE) clean-makelog
+	@echo "=== 清理回放/推理日志 ==="
+	rm -rf $(AUX_LOG_DIRS)
 	@echo "✓ 全部清理完成（训练日志已保留）"
 	@echo ""
 	@echo "提示: 如需删除训练日志，请运行: make clean-train"
