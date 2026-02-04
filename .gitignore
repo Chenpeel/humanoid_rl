@@ -46,3 +46,6 @@ build/
 # std_docs
 .std_docs/
 AGENTS.md
+
+.eval
+.migrate
