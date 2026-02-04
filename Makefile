@@ -176,6 +176,28 @@ uv-run:
 	$(UV) run --project $(UV_PROJECT) $(CMD)
 
 # ==============================================================================
+# MJCF 可视化
+# ==============================================================================
+VISUALIZE_MJCF_SCRIPT ?= scripts/visualize_mjcf.py
+
+visualize-mjcf:
+	@{ \
+		test -f "$(VISUALIZE_MJCF_SCRIPT)" || (echo "Error: 找不到 $(VISUALIZE_MJCF_SCRIPT)"; exit 1); \
+		CMD="FORCE_COLOR=1 $(PYTHON_RUN) $(VISUALIZE_MJCF_SCRIPT)"; \
+		if [ -n "$(XML)" ]; then CMD="$$CMD --xml $(XML)"; \
+		elif [ -n "$(XML_PATH)" ]; then CMD="$$CMD --xml $(XML_PATH)"; fi; \
+		if [ -n "$(NO_INTERACTIVE)" ]; then CMD="$$CMD --no-interactive"; fi; \
+		if [ -n "$(AUTORELOAD)" ]; then CMD="$$CMD --autoreload $(AUTORELOAD)"; fi; \
+		if [ -n "$(MODE)" ]; then CMD="$$CMD --mode $(MODE)"; fi; \
+		if [ -n "$(GRAVITY)" ]; then CMD="$$CMD --gravity $(GRAVITY)"; fi; \
+		if [ -n "$(RENDER_CPU)" ]; then CMD="LIBGL_ALWAYS_SOFTWARE=1 $$CMD"; fi; \
+		if [ -n "$(MUJOCO_GL_IS_CMDLINE)" ]; then CMD="MUJOCO_GL=$(MUJOCO_GL) $$CMD"; fi; \
+		eval $$CMD; \
+	}
+
+
+
+# ==============================================================================
 # 资产转换
 # ==============================================================================
 
