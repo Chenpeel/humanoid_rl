@@ -6,16 +6,6 @@
 
 本项目为机器人提供完整的强化学习训练解决方案，从仿真训练到真机部署的全流程支持。
 
-### 核心特性
-
-- ✅ **Isaac Lab 仿真环境** - 基于 NVIDIA Isaac Sim 的高性能物理仿真
-- ✅ **RSL_RL PPO 训练器** - 成熟的强化学习算法实现
-- ✅ **MJCF 模型支持** - 直接加载 MuJoCo XML 格式的机器人模型
-- ✅ **Sim2Real 映射** - 仿真到真机的动作映射和校准
-- ✅ **模仿学习支持** - 支持从专家演示数据学习
-- ✅ **实时可视化** - Omniverse Viewer 实时3D可视化
-- ✅ **并行环境训练** - 支持数千个并行环境加速训练
-
 ### 技术栈
 
 | 组件 | 技术 | 版本 |
@@ -51,12 +41,24 @@ cd rl
 # 2. 更新子模块
 make submodule-update
 
-# 3. 安装 Isaac Lab
+# 3. 安装 uv（用于管理 Python 版本）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# 或者使用清华镜像 pip 安装
+# $(which python) -m pip install -U uv -i https://pypi.tuna.tsinghua.edu.cn/simple
+uv --version
+# 4. 创建并激活 Python3.11 虚拟环境
+uv venv -p 3.11
+.venv/bin/activate.bat  # Windows
+# source .venv/bin/activate.fish # Linux fish shell
+# 可查看其他 shell
+# ls .venv/bin/activate*
+
+# 4. 安装 Isaac Lab
 cd dep/IsaacLab
 ./isaaclab.sh --install
 
 # 4. 安装项目
-cd ..
+cd ../../
 make install
 
 # 5. 验证安装
