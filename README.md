@@ -8,13 +8,13 @@
 
 ### 技术栈
 
-| 组件 | 技术 | 版本 |
-|------|------|------|
-| 仿真引擎 | NVIDIA Isaac Sim | 2024.1.1+ |
-| 环境框架 | Isaac Lab | v0.2.0+ |
-| 深度学习 | PyTorch | 2.0+ |
-| 强化学习 | RSL_RL | v2.2.1+ |
-| 机器人模型 | MJCF (MuJoCo) | - |
+| 组件       | 技术             | 版本      |
+| ---------- | ---------------- | --------- |
+| 仿真引擎   | NVIDIA Isaac Sim | 2024.1.1+ |
+| 环境框架   | Isaac Lab        | v0.2.0+   |
+| 深度学习   | PyTorch          | 2.0+      |
+| 强化学习   | RSL_RL           | v2.2.1+   |
+| 机器人模型 | MJCF (MuJoCo)    | -         |
 
 ## 快速开始
 
@@ -66,4 +66,25 @@ make verify
 
 # 6. 运行训练
 make train
+```
+
+
+### 3. 自定模型
+
+将自定义的 MJCF 模型文件放置在 `rl/robots/` 目录下，并在训练配置中指定模型名称即可。
+
+> 编写urdf/mjcf的xml文件
+> 使用可视化验证
+
+```bash
+make visualize-mjcf XML=robots/unitree_h1/scene.xml \
+AUTORELOAD=0 #是否自动重载模型\
+GRAVITY=1 #是否启动重力\
+MODE=launch 
+```
+
+> 更多内容参考
+
+```bash
+make help
 ```

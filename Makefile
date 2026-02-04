@@ -107,6 +107,9 @@ help:
 	@echo "  make submodule-update        - 更新所有子模块"
 	@echo "  make install                 - 安装 RL 环境"
 	@echo "  make convert-usd             - 转换模型 (MJCF -> USD)"
+	@echo "  make visualize-mjcf          - 可视化 MJCF"
+	@echo "                                参数: XML=<路径> AUTORELOAD=0/1 MODE=sim/launch GRAVITY=0/1 NO_INTERACTIVE=1 RENDER_CPU=1"
+	@echo "                                MODE=sim 为手动步进，MODE=launch 为 Simulate GUI"
 	@echo ""
 
 # ==============================================================================
