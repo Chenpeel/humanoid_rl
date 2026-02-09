@@ -53,13 +53,14 @@ uv venv -p 3.11
 # 可查看其他 shell
 # ls .venv/bin/activate*
 
-# 4. 安装 Isaac Lab
+# 4. 安装项目
+make install
+# 5. 安装 Isaac Lab
 cd dep/IsaacLab
 ./isaaclab.sh --install
-
-# 4. 安装项目
 cd ../../
-make install
+
+
 
 # 5. 验证安装
 make verify
