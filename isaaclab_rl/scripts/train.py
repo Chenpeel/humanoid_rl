@@ -175,7 +175,6 @@ TASK_PPO_CFG_MAP = {
 def parse_args():
     """解析命令行参数
 
-    注意：AppLauncher 参数已经在前面解析过了，这里只解析训练相关参数
     """
     parser = argparse.ArgumentParser(
         description="训练双足机器人",
@@ -222,7 +221,6 @@ def parse_args():
         help="随机种子。覆盖配置文件中的值",
     )
 
-    # 注意：--device 参数已由 AppLauncher 提供，不需要重复定义
 
     # 检查点相关
     parser.add_argument(
@@ -253,7 +251,6 @@ def parse_args():
         help="日志根目录。覆盖配置文件中的值",
     )
 
-    # 注意：--headless 参数已由 AppLauncher 提供，不需要重复定义
 
     parser.add_argument(
         "--video",
@@ -507,7 +504,6 @@ def create_runner(env: ManagerBasedRLEnv, ppo_cfg, config: ConfigDict, args):
     print(f"[INFO] PPO 配置已保存到: {ppo_config_path}")
 
     # 创建 RSL_RL 训练器
-    # 注意：OnPolicyRunner 期望接收字典格式的配置，而不是配置类对象
     # 将配置类对象转换为字典
     ppo_cfg_dict = {
         "algorithm": ppo_cfg.algorithm.__dict__,
@@ -593,6 +589,14 @@ def main():
     # 应用命令行参数覆盖环境配置
     env_cfg.scene.num_envs = config.environment.num_envs
     env_cfg.episode_length_s = config.environment.get("episode_length_s", env_cfg.episode_length_s)
+
+    # 设置 Isaac Lab 运行日志目录，避免默认 /tmp 目录权限问题
+    if getattr(env_cfg, "sim", None) is not None:
+        current_log_dir = getattr(env_cfg.sim, "log_dir", None)
+        if not current_log_dir:
+            log_root = config.ppo.runner.get("log_dir", "logs")
+            default_sim_log_dir = os.path.abspath(os.path.join(log_root, "isaaclab"))
+            env_cfg.sim.log_dir = os.environ.get("ISAACLAB_LOG_DIR", default_sim_log_dir)
 
     # 将 YAML 配置“落地”到 env_cfg（奖励权重/终止阈值/领域随机化等）
     apply_config_to_env_cfg(env_cfg, config)
