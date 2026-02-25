@@ -225,7 +225,8 @@ class JiyuanSceneCfg(InteractiveSceneCfg):
     # 接触力传感器（用于feet_air_time等奖励）
     # 借鉴H1/G1配置，追踪脚部和身体接触
     contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*",
+        # ContactSensor 的 prim_path 只匹配一层子节点，因此必须显式包含 base_link 这一层。
+        prim_path="{ENV_REGEX_NS}/Robot/base_link/.*",
         track_air_time=True,  # 追踪脚部空中时间（关键！）
         history_length=3,  # 保留3步历史
         track_pose=False,
