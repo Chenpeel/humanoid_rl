@@ -106,7 +106,7 @@ help:
 	@echo ""
 	@echo "  make submodule-update        - 更新所有子模块"
 	@echo "  make install                 - 安装 RL 环境"
-	@echo "  make convert-usd             - 转换模型 (MJCF -> USD)"
+	@echo "  make convert-usd XML=<path>  - 转换模型并在同级生成 USD"
 	@echo "  make visualize-mjcf          - 可视化 MJCF"
 	@echo "                                参数: XML=<路径> AUTORELOAD=0/1 MODE=sim/launch GRAVITY=0/1 NO_INTERACTIVE=1 RENDER_CPU=1"
 	@echo "                                MODE=sim 为手动步进，MODE=launch 为 Simulate GUI"
@@ -204,14 +204,21 @@ visualize-mjcf:
 # 资产转换
 # ==============================================================================
 
-MJCF ?= assets/xmls/models/jiyuan_fit.xml
-USD_OUT ?= assets/usd/jiyuan_fit/jiyuan_fit.usd
+XML ?=
 
 convert-usd: check-isaaclab
-	@echo "转换 MJCF 到 USD..."
-	@mkdir -p $(dir $(USD_OUT))
-	$(ISAACLAB_PYTHON) dep/IsaacLab/scripts/tools/convert_mjcf.py $(MJCF) $(USD_OUT) --import-sites
-	@echo "✓ 转换完成"
+	@{ \
+		set -e; \
+		test -n "$(XML)" || (echo "Error: 请提供 XML 路径，例如: make convert-usd XML=robots/gaoda_jiyuan/scene.xml"; exit 1); \
+		test -f "$(XML)" || (echo "Error: 输入文件不存在: $(XML)"; exit 1); \
+		USD_OUT="$$(dirname "$(XML)")/$$(basename "$(XML)" .xml).usd"; \
+		echo "转换 MJCF 到 USD..."; \
+		echo "  输入: $(XML)"; \
+		echo "  输出: $$USD_OUT"; \
+		mkdir -p "$$(dirname "$$USD_OUT")"; \
+		$(ISAACLAB_PYTHON) dep/IsaacLab/scripts/tools/convert_mjcf.py "$(XML)" "$$USD_OUT" --import-sites; \
+		echo "✓ 转换完成: $$USD_OUT"; \
+	}
 
 # ==============================================================================
 # 训练目标 (Pipeline & Curriculum)
