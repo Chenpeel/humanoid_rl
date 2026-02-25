@@ -35,8 +35,48 @@ from __future__ import annotations
 import isaaclab.sim as sim_utils
 from isaaclab.utils import configclass
 
+import isaaclab.envs.mdp as mdp
+
 from .velocity_tracking_env_cfg import VelocityTrackingEnvCfg
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
+
+
+# -----------------------------------------------------------------------------
+# Curriculum helpers
+# -----------------------------------------------------------------------------
+
+_CURRICULUM_THRESHOLDS = (200, 300, 400)
+_CURRICULUM_LIN_VEL_X = ((0.0, 0.0), (-0.2, 0.2), (-1.0, 1.0), (-1.5, 1.5))
+_CURRICULUM_LIN_VEL_Y = ((0.0, 0.0), (-0.2, 0.2), (-0.8, 0.8), (-1.0, 1.0))
+_CURRICULUM_ANG_VEL_Z = ((0.0, 0.0), (-0.2, 0.2), (-1.0, 1.0), (-1.5, 1.5))
+
+
+def _curriculum_stage(env, thresholds):
+    mean_len = float(env.episode_length_buf.float().mean().item())
+    stage = 0
+    for thr in thresholds:
+        if mean_len >= thr:
+            stage += 1
+        else:
+            break
+    return min(stage, len(thresholds))
+
+
+def _curriculum_stage_log(env, env_ids, thresholds):
+    return float(_curriculum_stage(env, thresholds))
+
+
+def _curriculum_param_by_stage(env, env_ids, data, thresholds, values):
+    stage = _curriculum_stage(env, thresholds)
+    if stage >= len(values):
+        stage = len(values) - 1
+    desired = values[stage]
+    try:
+        if data == desired:
+            return mdp.modify_env_param.NO_CHANGE
+    except Exception:
+        pass
+    return desired
 
 
 ##
@@ -48,50 +88,57 @@ from isaaclab.managers import CurriculumTermCfg as CurrTerm
 class CurriculumEnvCfg(VelocityTrackingEnvCfg):
     """分阶段课程学习环境配置"""
 
+    @configclass
+    class CurriculumCfg:
+        """课程学习配置
+
+        根据平均 episode 长度逐步放宽速度命令范围。
+        """
+
+        stage = CurrTerm(
+            func=_curriculum_stage_log,
+            params={"thresholds": _CURRICULUM_THRESHOLDS},
+        )
+        cmd_lin_vel_x = CurrTerm(
+            func=mdp.modify_env_param,
+            params={
+                "address": "command_manager.cfg.base_velocity.ranges.lin_vel_x",
+                "modify_fn": _curriculum_param_by_stage,
+                "modify_params": {
+                    "thresholds": _CURRICULUM_THRESHOLDS,
+                    "values": _CURRICULUM_LIN_VEL_X,
+                },
+            },
+        )
+        cmd_lin_vel_y = CurrTerm(
+            func=mdp.modify_env_param,
+            params={
+                "address": "command_manager.cfg.base_velocity.ranges.lin_vel_y",
+                "modify_fn": _curriculum_param_by_stage,
+                "modify_params": {
+                    "thresholds": _CURRICULUM_THRESHOLDS,
+                    "values": _CURRICULUM_LIN_VEL_Y,
+                },
+            },
+        )
+        cmd_ang_vel_z = CurrTerm(
+            func=mdp.modify_env_param,
+            params={
+                "address": "command_manager.cfg.base_velocity.ranges.ang_vel_z",
+                "modify_fn": _curriculum_param_by_stage,
+                "modify_params": {
+                    "thresholds": _CURRICULUM_THRESHOLDS,
+                    "values": _CURRICULUM_ANG_VEL_Z,
+                },
+            },
+        )
+
+    curriculum: CurriculumCfg = CurriculumCfg()
+
     def __post_init__(self):
         """后处理配置，定义课程学习阶段。"""
         # 调用父类的后处理
         super().__post_init__()
-
-        # 定义课程学习
-        self.curriculum = self.CurriculumCfg(
-            # 阶段切换条件：基于平均 episode 长度
-            # 当平均 episode 长度超过阈值时，进入下一阶段
-            # episode_length_buf 是 RSL_RL runner 内部记录的 episode 长度缓冲区
-            net_reward_term=CurrTerm(
-                func=lambda runner: runner.episode_length_buf.mean(),
-                name="episode_length",
-            ),
-            # 定义阶段
-            # 顺序很重要，从易到难
-            # 阶段0 -> 1 的切换阈值
-            # 阶段 1 -> 2 的切换阈值 ...
-            # 阈值单位是“步数”，不是秒。 1s = 50Hz / decimation = 50 / 4 = 12.5 步
-            # 200 步 ~= 16 秒
-            # 300 步 ~= 24 秒
-            # 400 步 ~= 32 秒 (超过 episode length, 意味着基本不会摔倒)
-            thresholds=[200, 300, 400],
-            # 定义每个阶段要修改的参数
-            # 使用点号分隔的字符串来指定嵌套的配置参数
-            # key: 要修改的参数路径
-            # value: 包含每个阶段值的列表 (阶段0, 阶段1, 阶段2, 阶段3)
-            terms={
-                # -----------------
-                # 阶段 1: 站立
-                # -----------------
-                "commands.base_velocity.ranges.lin_vel_x": [(0.0, 0.0), (-0.2, 0.2), (-1.0, 1.0), (-1.5, 1.5)],
-                "commands.base_velocity.ranges.lin_vel_y": [(0.0, 0.0), (-0.2, 0.2), (-0.8, 0.8), (-1.0, 1.0)],
-                "commands.base_velocity.ranges.ang_vel_z": [(0.0, 0.0), (-0.2, 0.2), (-1.0, 1.0), (-1.5, 1.5)],
-                
-                # -----------------
-                # 阶段 4: 地形适应
-                # -----------------
-                # 仅在最后一个阶段引入粗糙地形
-                "scene.ground.terrain_type": ["plane", "plane", "plane", "rough"],
-                "scene.ground.terrain_cfg.sub_terrains.mounts100.max_height": [0.0, 0.0, 0.0, 0.08],
-                "scene.ground.terrain_cfg.sub_terrains.pyramid_stairs_inv.step_height_range": [ (0.0, 0.0), (0.0, 0.0), (0.0, 0.0), (0.05, 0.15)],
-            },
-        )
 
 
 ##
