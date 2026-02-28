@@ -8,6 +8,7 @@
 - sim2real.py: Sim2Real 映射层（并联脚踝映射）
 - imitation.py: 模仿学习框架（BVH/FBX 支持）
 - config_loader.py: 配置加载工具（支持优先级：CLI > 配置文件 > 预定义）
+- ros_bridge.py: Isaac-ROS 舵机桥接工具（命令发布 / 状态订阅）
 - visualization.py: 可视化辅助函数（计划中）
 """
 
@@ -18,6 +19,7 @@ __all__ = [
     "sim2real",
     "imitation",
     "config_loader",
+    "ros_bridge",
 ]
 
 
