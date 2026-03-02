@@ -117,6 +117,14 @@ def parse_args():
         help="评估任务 (默认: velocity)",
     )
 
+    parser.add_argument(
+        "--run_mode",
+        type=str,
+        default="policy",
+        choices=["policy", "usd_bridge"],
+        help="运行模式: policy=原有ckpt策略评估, usd_bridge=仅USD仿真+ROS通信",
+    )
+
     # 环境参数
     parser.add_argument(
         "--num_envs",
@@ -149,6 +157,13 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--sim_steps",
+        type=int,
+        default=20000,
+        help="usd_bridge 模式总步数 (默认: 20000)",
+    )
+
+    parser.add_argument(
         "--deterministic",
         action="store_true",
         help="使用确定性策略（无探索噪声）",
@@ -175,6 +190,28 @@ def parse_args():
         type=str,
         default="videos",
         help="视频保存路径 (默认: videos)",
+    )
+
+    parser.add_argument(
+        "--action_source",
+        type=str,
+        default="zero",
+        choices=["zero", "sine"],
+        help="usd_bridge 模式动作来源 (默认: zero)",
+    )
+
+    parser.add_argument(
+        "--sine_amp",
+        type=float,
+        default=0.2,
+        help="正弦动作幅值（rad）(默认: 0.2)",
+    )
+
+    parser.add_argument(
+        "--sine_freq",
+        type=float,
+        default=0.5,
+        help="正弦动作频率（Hz）(默认: 0.5)",
     )
 
     parser.add_argument(
@@ -223,6 +260,20 @@ def parse_args():
         type=str,
         default="",
         help="ROS 桥接映射使用的机器人配置文件路径（为空时使用默认 robot_config.yaml）",
+    )
+
+    parser.add_argument(
+        "--usd_model",
+        type=str,
+        default="",
+        help="按模型名加载 assets/usd/<name>/<name>.usd",
+    )
+
+    parser.add_argument(
+        "--usd_path",
+        type=str,
+        default="",
+        help="直接指定 USD 绝对路径（优先级最高）",
     )
 
     args = parser.parse_args()
@@ -394,6 +445,88 @@ def evaluate_policy(
     return stats
 
 
+def run_usd_bridge(
+    env: ManagerBasedRLEnv,
+    args,
+    ros_bridge: Any | None = None,
+    ankle_mapper: Any | None = None,
+) -> dict[str, float]:
+    """无策略网络模式：仅驱动 USD 仿真与 ROS 通信。"""
+    import math
+
+    obs, _ = env.reset()
+    _ = obs  # 保持与 evaluate_policy 的变量语义一致
+
+    action_shape = getattr(env.action_space, "shape", None)
+    if not action_shape:
+        raise ValueError(f"无法从动作空间推导维度: {env.action_space}")
+
+    action_dim = int(action_shape[0])
+    actions = torch.zeros((env.num_envs, action_dim), device=args.device)
+    step_count = 0
+    ros_publish_failures = 0
+
+    # 使用固定脚踝索引做联调动作注入（左右脚对称反相）。
+    debug_sine_indices = (9, 10, 12, 13)
+    valid_sine_indices = [idx for idx in debug_sine_indices if idx < action_dim]
+    if args.action_source == "sine" and len(valid_sine_indices) < len(debug_sine_indices):
+        print(
+            f"[WARN] 动作维度仅 {action_dim}，无法完整注入脚踝正弦索引 {debug_sine_indices}；"
+            f"将使用可用索引 {valid_sine_indices}"
+        )
+
+    print(f"\n[INFO] 开始 usd_bridge 模式，总步数: {int(args.sim_steps)}")
+    print(f"[INFO] 动作源: {args.action_source}")
+    if args.action_source == "sine":
+        print(f"[INFO] 正弦参数: amp={args.sine_amp}, freq={args.sine_freq}Hz")
+    if ros_bridge is not None:
+        print(f"[INFO] ROS 桥接: 启用（topic: {args.ros_command_topic} -> {args.ros_state_topic}）")
+        if env.num_envs > 1:
+            print(f"[WARN] ROS 桥接仅发送 env[0] 动作，当前 num_envs={env.num_envs}")
+
+    print("=" * 80)
+
+    while step_count < int(args.sim_steps):
+        if args.action_source == "sine":
+            t = step_count / 50.0
+            value = float(args.sine_amp) * math.sin(2.0 * math.pi * float(args.sine_freq) * t)
+            actions[:] = 0.0
+            if 9 in valid_sine_indices:
+                actions[:, 9] = value
+            if 10 in valid_sine_indices:
+                actions[:, 10] = -value
+            if 12 in valid_sine_indices:
+                actions[:, 12] = value
+            if 13 in valid_sine_indices:
+                actions[:, 13] = -value
+        else:
+            actions[:] = 0.0
+
+        if ros_bridge is not None:
+            if ankle_mapper is not None:
+                if max(1, int(args.ros_publish_every)) > 0 and step_count % max(1, int(args.ros_publish_every)) == 0:
+                    try:
+                        ros_bridge.publish_action(
+                            action=actions[0],
+                            mapper=ankle_mapper,
+                            speed_override=int(args.ros_speed),
+                        )
+                    except Exception as exc:
+                        ros_publish_failures += 1
+                        if ros_publish_failures <= 3 or ros_publish_failures % 50 == 0:
+                            print(f"[WARN] ROS 命令发布失败(step={step_count}): {exc}")
+            ros_bridge.spin_once(timeout_sec=0.0)
+
+        obs, _, _, _, _ = env.step(actions)
+        _ = obs
+        step_count += 1
+
+    return {
+        "total_steps": float(step_count),
+        "ros_publish_failures": float(ros_publish_failures),
+    }
+
+
 def main():
     """主评估函数"""
     # 解析参数
@@ -403,26 +536,45 @@ def main():
     print(f"Jiyuan 机器人策略评估脚本")
     print("=" * 80)
     print(f"任务: {args.task}")
+    print(f"运行模式: {args.run_mode}")
     print(f"环境ID: {TASK_ENV_MAP[args.task]}")
     print(f"并行环境数: {args.num_envs}")
     print(f"设备: {args.device}")
     print("=" * 80)
 
-    # 确定检查点路径
-    if args.checkpoint:
-        checkpoint_path = args.checkpoint
+    checkpoint_path = ""
+    if args.run_mode == "policy":
+        # policy 模式保留原有 ckpt 加载逻辑
+        if args.checkpoint:
+            checkpoint_path = args.checkpoint
+        else:
+            checkpoint_path = find_latest_checkpoint(args.log_dir, args.task)
+
+        if not os.path.exists(checkpoint_path):
+            raise ValueError(f"检查点文件不存在: {checkpoint_path}")
+
+        print(f"\n[INFO] 加载检查点: {checkpoint_path}")
     else:
-        checkpoint_path = find_latest_checkpoint(args.log_dir, args.task)
-
-    if not os.path.exists(checkpoint_path):
-        raise ValueError(f"检查点文件不存在: {checkpoint_path}")
-
-    print(f"\n[INFO] 加载检查点: {checkpoint_path}")
+        print("\n[INFO] usd_bridge 模式：跳过 checkpoint 加载，仅执行仿真与通信循环")
 
     env = None
     ros_bridge = None
 
     try:
+        if args.usd_path:
+            if not os.path.isabs(args.usd_path):
+                raise ValueError(f"--usd_path 必须为绝对路径: {args.usd_path}")
+            usd_path = os.path.abspath(args.usd_path)
+            if not os.path.exists(usd_path):
+                raise ValueError(f"--usd_path 指定文件不存在: {usd_path}")
+            os.environ["JIYUAN_USD_PATH"] = usd_path
+            print(f"[INFO] 使用 USD 绝对路径: {usd_path}")
+            if args.usd_model:
+                print(f"[WARN] 已提供 --usd_path，忽略 --usd_model={args.usd_model}")
+        elif args.usd_model:
+            os.environ["ROBOT_MODEL"] = args.usd_model
+            print(f"[INFO] 使用 USD 模型名: {args.usd_model}")
+
         # 创建环境
         print(f"\n[INFO] 创建环境: {TASK_ENV_MAP[args.task]}")
 
@@ -438,8 +590,11 @@ def main():
 
         # 如果需要录制视频，包装环境
         if args.video:
-            log_dir = os.path.dirname(checkpoint_path)
-            video_folder = os.path.join(log_dir, "videos", "play")
+            if args.run_mode == "policy":
+                log_dir = os.path.dirname(checkpoint_path)
+                video_folder = os.path.join(log_dir, "videos", "play")
+            else:
+                video_folder = os.path.join(args.video_path, "play")
             os.makedirs(video_folder, exist_ok=True)
 
             video_kwargs = {
@@ -460,17 +615,6 @@ def main():
         print(f"  - 动作空间: {env.action_space}")
         print(f"  - 并行环境数: {env.num_envs}")
 
-        # 获取 PPO 配置
-        ppo_cfg = TASK_PPO_CFG_MAP[args.task]
-
-        # 创建训练器（用于加载策略）
-        print(f"\n[INFO] 创建 RSL_RL 训练器")
-        runner = OnPolicyRunner(env, ppo_cfg, log_dir=None, device=args.device)
-
-        # 加载检查点
-        print(f"[INFO] 加载策略权重")
-        runner.load(checkpoint_path)
-
         ankle_mapper = None
         if args.ros_bridge:
             from jiyuan_tasks.utils.ros_bridge import IsaacServoRosBridge, create_parallel_ankle_mapper
@@ -487,13 +631,28 @@ def main():
 
             if getattr(ankle_mapper, "solver", None) is None:
                 print("[WARN] 未检测到 ROS 运动学求解器，当前不会发布并联脚踝舵机命令")
+        if args.run_mode == "policy":
+            # 获取 PPO 配置
+            ppo_cfg = TASK_PPO_CFG_MAP[args.task]
 
-        # 评估策略
-        print("\n" + "=" * 80)
-        print("评估策略")
-        print("=" * 80)
+            # 创建训练器（用于加载策略）
+            print(f"\n[INFO] 创建 RSL_RL 训练器")
+            runner = OnPolicyRunner(env, ppo_cfg, log_dir=None, device=args.device)
 
-        stats = evaluate_policy(env, runner, args, ros_bridge=ros_bridge, ankle_mapper=ankle_mapper)
+            # 加载检查点
+            print(f"[INFO] 加载策略权重")
+            runner.load(checkpoint_path)
+
+            # 评估策略
+            print("\n" + "=" * 80)
+            print("评估策略")
+            print("=" * 80)
+            stats = evaluate_policy(env, runner, args, ros_bridge=ros_bridge, ankle_mapper=ankle_mapper)
+        else:
+            print("\n" + "=" * 80)
+            print("USD 直连通信")
+            print("=" * 80)
+            stats = run_usd_bridge(env, args, ros_bridge=ros_bridge, ankle_mapper=ankle_mapper)
 
         # 打印统计信息
         print("\n" + "=" * 80)
@@ -502,19 +661,23 @@ def main():
 
         if args.video:
             print(f"视频录制完成！")
-            log_dir = os.path.dirname(checkpoint_path)
-            video_folder = os.path.join(log_dir, "videos", "play")
+            if args.run_mode == "policy":
+                log_dir = os.path.dirname(checkpoint_path)
+                video_folder = os.path.join(log_dir, "videos", "play")
+            else:
+                video_folder = os.path.join(args.video_path, "play")
             print(f"视频保存路径: {video_folder}")
-            print(f"录制步数: {stats['total_steps']}")
+            print(f"录制步数: {int(stats['total_steps'])}")
         else:
-            print(f"Episode 数量: {args.num_episodes}")
-            print(f"平均奖励: {stats['mean_reward']:.2f} ± {stats['std_reward']:.2f}")
-            print(f"奖励范围: [{stats['min_reward']:.2f}, {stats['max_reward']:.2f}]")
-            print(f"平均 episode 长度: {stats['mean_length']:.1f}")
-            print(f"总步数: {stats['total_steps']}")
+            if args.run_mode == "policy":
+                print(f"Episode 数量: {args.num_episodes}")
+                print(f"平均奖励: {stats['mean_reward']:.2f} ± {stats['std_reward']:.2f}")
+                print(f"奖励范围: [{stats['min_reward']:.2f}, {stats['max_reward']:.2f}]")
+                print(f"平均 episode 长度: {stats['mean_length']:.1f}")
+            print(f"总步数: {int(stats['total_steps'])}")
 
         if args.ros_bridge:
-            print(f"ROS 发布失败次数: {stats['ros_publish_failures']}")
+            print(f"ROS 发布失败次数: {int(stats['ros_publish_failures'])}")
 
         print("=" * 80)
         print("\n评估完成")
