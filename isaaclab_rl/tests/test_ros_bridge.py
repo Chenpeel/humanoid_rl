@@ -9,7 +9,7 @@ ISAACLAB_RL_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ISAACLAB_RL_ROOT))
 
 from jiyuan_tasks.utils.config_loader import ConfigDict
-from jiyuan_tasks.utils.ros_bridge import build_ankle_indices, prepare_servo_command_entries
+from jiyuan_tasks.utils.ros_bridge import IsaacServoRosBridge, build_ankle_indices, prepare_servo_command_entries
 
 
 def test_build_ankle_indices_from_config_dict():
@@ -62,3 +62,33 @@ def test_prepare_servo_command_entries_speed_override_and_clamp():
 def test_prepare_servo_command_entries_requires_position():
     with pytest.raises(ValueError):
         prepare_servo_command_entries(commands=[{"id": 9}], default_speed=100)
+
+
+def test_state_statistics_and_snapshot_output(capsys):
+    bridge = IsaacServoRosBridge()
+
+    class _Stamp:
+        sec = 123
+        nanosec = 456000000
+
+    class _StateMsg:
+        servo_type = "bus"
+        servo_id = 9
+        position = 1500
+        load = 10
+        temperature = 30
+        error_code = 0
+        stamp = _Stamp()
+
+    bridge._on_state_msg(_StateMsg())
+
+    cached = bridge.get_state(9)
+    assert cached is not None
+    assert cached.stamp_sec == pytest.approx(123.456)
+    assert bridge.get_last_state_timestamp() is not None
+    assert bridge.get_recent_state_count(window_sec=5.0) >= 1
+    assert bridge.get_recent_state_rate(window_sec=5.0) > 0.0
+
+    bridge.print_state_snapshot(window_sec=5.0)
+    captured = capsys.readouterr()
+    assert "ROS_STATE" in captured.out

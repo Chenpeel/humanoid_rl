@@ -192,6 +192,8 @@ class IsaacServoRosBridge:
         self._state_sub = None
         self._owns_rclpy_context = False
         self._state_cache: Dict[int, ServoStateEntry] = {}
+        self._state_received_monotonic_sec: list[float] = []
+        self._last_state_received_time_sec: float | None = None
 
         if auto_start:
             self.start()
@@ -249,6 +251,7 @@ class IsaacServoRosBridge:
         stamp = getattr(msg, "stamp", None)
         if stamp is not None and hasattr(stamp, "sec") and hasattr(stamp, "nanosec"):
             stamp_sec = float(stamp.sec) + float(stamp.nanosec) * 1e-9
+        received_time_sec = time.monotonic()
 
         state = ServoStateEntry(
             servo_type=str(msg.servo_type),
@@ -258,9 +261,23 @@ class IsaacServoRosBridge:
             temperature=int(msg.temperature),
             error_code=int(msg.error_code),
             stamp_sec=stamp_sec,
-            received_time_sec=time.monotonic(),
+            received_time_sec=received_time_sec,
         )
         self._state_cache[state.servo_id] = state
+        self._last_state_received_time_sec = received_time_sec
+        self._state_received_monotonic_sec.append(received_time_sec)
+        self._trim_state_receive_history(window_sec=10.0, now_sec=received_time_sec)
+
+    def _trim_state_receive_history(self, window_sec: float, now_sec: float | None = None) -> None:
+        """按时间窗口裁剪状态接收历史，避免历史数据无限增长。"""
+        if not self._state_received_monotonic_sec:
+            return
+        now = time.monotonic() if now_sec is None else float(now_sec)
+        safe_window = max(0.0, float(window_sec))
+        cutoff = now - safe_window
+
+        kept = [timestamp for timestamp in self._state_received_monotonic_sec if timestamp >= cutoff]
+        self._state_received_monotonic_sec = kept
 
     def publish_servo_command(
         self,
@@ -323,6 +340,44 @@ class IsaacServoRosBridge:
     def get_latest_states(self) -> Dict[int, ServoStateEntry]:
         """获取全部舵机最新状态快照。"""
         return dict(self._state_cache)
+
+    def get_last_state_timestamp(self) -> float | None:
+        """返回最近一次收到状态消息的本地单调时钟时间戳（秒）。"""
+        return self._last_state_received_time_sec
+
+    def get_recent_state_count(self, window_sec: float = 1.0) -> int:
+        """统计最近 N 秒收到的状态消息条数。"""
+        safe_window = max(0.0, float(window_sec))
+        now_sec = time.monotonic()
+        self._trim_state_receive_history(window_sec=safe_window, now_sec=now_sec)
+        cutoff = now_sec - safe_window
+        return sum(1 for timestamp in self._state_received_monotonic_sec if timestamp >= cutoff)
+
+    def get_recent_state_rate(self, window_sec: float = 1.0) -> float:
+        """统计最近 N 秒状态消息接收频率（条/秒）。"""
+        safe_window = max(1e-6, float(window_sec))
+        return float(self.get_recent_state_count(window_sec=safe_window)) / safe_window
+
+    def print_state_snapshot(self, window_sec: float = 1.0) -> None:
+        """打印状态缓存与最近接收统计，便于联调快速观察链路。"""
+        latest_states = self.get_latest_states()
+        recent_count = self.get_recent_state_count(window_sec=window_sec)
+        recent_rate = self.get_recent_state_rate(window_sec=window_sec)
+        last_time = self.get_last_state_timestamp()
+        ids_preview = sorted(latest_states.keys())[:8]
+
+        message = (
+            f"[ROS_STATE] cache={len(latest_states)} "
+            f"last_rx={last_time if last_time is not None else 'None'} "
+            f"recent_count({window_sec:.2f}s)={recent_count} "
+            f"recent_rate={recent_rate:.2f}Hz "
+            f"ids={ids_preview}"
+        )
+
+        if self._node is not None:
+            self._node.get_logger().info(message)
+        else:
+            print(message)
 
 
 __all__ = [
