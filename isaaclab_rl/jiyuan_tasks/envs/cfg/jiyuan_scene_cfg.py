@@ -86,7 +86,7 @@ DEFAULT_ROBOT_MODEL = "jiyuan_fit"
 
 
 def get_usd_path(model_name: str | None = None) -> str:
-    """根据模型名称获取 USD 文件路径
+    """获取 USD 文件路径（支持直接路径与模型名两种模式）
 
     Args:
         model_name: 机器人模型名称
@@ -96,9 +96,18 @@ def get_usd_path(model_name: str | None = None) -> str:
     Returns:
         USD 文件的绝对路径字符串
 
-    路径规则：
+    优先级规则：
+        1. 环境变量 JIYUAN_USD_PATH（直接路径）
+        2. 环境变量 ROBOT_MODEL 或显式传入 model_name
+        3. 默认模型 DEFAULT_ROBOT_MODEL
+
+    模型名路径规则：
         assets/usd/{model_name}/{model_name}.usd
     """
+    direct_usd = os.environ.get("JIYUAN_USD_PATH", "").strip()
+    if direct_usd:
+        return direct_usd
+
     if model_name is None:
         model_name = os.environ.get("ROBOT_MODEL", DEFAULT_ROBOT_MODEL)
     return str(ISAAC_LAB_RL_ROOT / f"assets/usd/{model_name}/{model_name}.usd")

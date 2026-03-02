@@ -15,6 +15,7 @@ Sim2Real 映射层
 
 from __future__ import annotations
 
+import os
 import numpy as np
 import torch
 from torch import Tensor
@@ -96,8 +97,11 @@ class ParallelAnkleMapper:
             # 尝试导入 ROS 包
             import sys
 
-            ros_path = "/home/chenpeel/work/repo/jiyuan/ros/src/parallel_3dof_controller"
-            if ros_path not in sys.path:
+            ros_path = os.environ.get(
+                "PARALLEL_3DOF_CONTROLLER_PATH",
+                "/home/chenpeel/work/repo/jiyuan/ros/src/parallel_3dof_controller",
+            ).strip()
+            if ros_path and ros_path not in sys.path:
                 sys.path.insert(0, ros_path)
 
             from parallel_3dof_controller.kinematics_solver import Parallel3DOFKinematicsSolver
