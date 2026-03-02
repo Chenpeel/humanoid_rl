@@ -319,6 +319,24 @@ def find_latest_checkpoint(log_dir: str, task: str) -> str:
     return latest_checkpoint
 
 
+def _get_num_envs(env, fallback: int = 1) -> int:
+    """兼容包装器，安全获取并行环境数。"""
+    if hasattr(env, "num_envs"):
+        return int(getattr(env, "num_envs"))
+    base = getattr(env, "unwrapped", None)
+    if base is not None and hasattr(base, "num_envs"):
+        return int(getattr(base, "num_envs"))
+    return int(fallback)
+
+
+def _get_action_dim(env) -> int:
+    """兼容动作空间 shape，安全获取动作维度。"""
+    shape = getattr(env.action_space, "shape", None)
+    if not shape:
+        raise ValueError(f"无法从动作空间推导维度: {env.action_space}")
+    return int(shape[-1])  # 兼容 (1, 16) 这种 shape
+
+
 def evaluate_policy(
     env: ManagerBasedRLEnv,
     runner: OnPolicyRunner,
@@ -345,9 +363,10 @@ def evaluate_policy(
 
     # 重置环境
     obs, _ = env.reset()
+    num_envs = _get_num_envs(env, args.num_envs)
 
-    current_episode_reward = torch.zeros(env.num_envs, device=args.device)
-    current_episode_length = torch.zeros(env.num_envs, device=args.device)
+    current_episode_reward = torch.zeros(num_envs, device=args.device)
+    current_episode_length = torch.zeros(num_envs, device=args.device)
 
     num_completed_episodes = 0
     step_count = 0
@@ -357,8 +376,8 @@ def evaluate_policy(
     print(f"[INFO] 确定性策略: {args.deterministic}")
     if ros_bridge is not None:
         print(f"[INFO] ROS 桥接: 启用（topic: {args.ros_command_topic} -> {args.ros_state_topic}）")
-        if env.num_envs > 1:
-            print(f"[WARN] ROS 桥接仅发送 env[0] 动作，当前 num_envs={env.num_envs}")
+        if num_envs > 1:
+            print(f"[WARN] ROS 桥接仅发送 env[0] 动作，当前 num_envs={num_envs}")
 
     # 如果录制视频，限制步数
     if args.video:
@@ -457,12 +476,9 @@ def run_usd_bridge(
     obs, _ = env.reset()
     _ = obs  # 保持与 evaluate_policy 的变量语义一致
 
-    action_shape = getattr(env.action_space, "shape", None)
-    if not action_shape:
-        raise ValueError(f"无法从动作空间推导维度: {env.action_space}")
-
-    action_dim = int(action_shape[0])
-    actions = torch.zeros((env.num_envs, action_dim), device=args.device)
+    action_dim = _get_action_dim(env)
+    num_envs = _get_num_envs(env, args.num_envs)
+    actions = torch.zeros((num_envs, action_dim), device=args.device)
     step_count = 0
     ros_publish_failures = 0
 
@@ -481,8 +497,8 @@ def run_usd_bridge(
         print(f"[INFO] 正弦参数: amp={args.sine_amp}, freq={args.sine_freq}Hz")
     if ros_bridge is not None:
         print(f"[INFO] ROS 桥接: 启用（topic: {args.ros_command_topic} -> {args.ros_state_topic}）")
-        if env.num_envs > 1:
-            print(f"[WARN] ROS 桥接仅发送 env[0] 动作，当前 num_envs={env.num_envs}")
+        if num_envs > 1:
+            print(f"[WARN] ROS 桥接仅发送 env[0] 动作，当前 num_envs={num_envs}")
 
     print("=" * 80)
 
@@ -625,7 +641,8 @@ def main():
         print(f"[INFO] 环境创建成功")
         print(f"  - 观测空间: {env.observation_space}")
         print(f"  - 动作空间: {env.action_space}")
-        print(f"  - 并行环境数: {env.num_envs}")
+        num_envs = _get_num_envs(env, args.num_envs)
+        print(f"  - 并行环境数: {num_envs}")
 
         ankle_mapper = None
         if args.ros_bridge:
