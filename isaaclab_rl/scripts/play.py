@@ -581,10 +581,22 @@ def main():
         # 如果需要录制视频，设置 render_mode
         render_mode = "rgb_array" if args.video else None
 
+        # 从注册信息读取 env_cfg（Isaac ManagerBasedRLEnv 必须传 cfg）
+        env_spec = gym.spec(TASK_ENV_MAP[args.task])
+        env_cfg_entry_point = env_spec.kwargs["env_cfg_entry_point"]
+        module_path, obj_name = env_cfg_entry_point.rsplit(":", 1)
+        module = __import__(module_path, fromlist=[obj_name])
+        env_cfg = getattr(module, obj_name)
+        if isinstance(env_cfg, type):
+            env_cfg = env_cfg()
+
+        # 覆盖并行环境数
+        env_cfg.scene.num_envs = args.num_envs
+
+        # 用 cfg 创建环境（不再直接传 num_envs/headless）
         env = gym.make(
             TASK_ENV_MAP[args.task],
-            num_envs=args.num_envs,
-            headless=False,  # 评估时始终显示 GUI
+            cfg=env_cfg,
             render_mode=render_mode,
         )
 
