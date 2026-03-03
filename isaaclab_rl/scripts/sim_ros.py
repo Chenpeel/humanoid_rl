@@ -263,7 +263,8 @@ def _tick_node_candidates(mode: str) -> list[tuple[str, str]]:
         return playback
     if mode == "physics":
         return physics
-    return physics + playback
+    # auto 模式优先 playback，避免 OnPhysicsStep 在非 on-demand graph 下不触发。
+    return playback + physics
 
 
 def _ros2_node_prefix(ros2_ext_name: str) -> str:
@@ -424,7 +425,6 @@ def _build_ros2_graph(
         "/ActionGraph",              # Isaac 常用路径
         "/Ros2BridgeGraph",          # 最后兜底
     ]
-    evaluator_candidates = ["execution", "push"]
     tick_candidates = _tick_node_candidates(tick_source)
 
     stage = omni.usd.get_context().get_stage()
@@ -436,6 +436,11 @@ def _build_ros2_graph(
 
     last_error = None
     for tick_node_type, tick_output_attr in tick_candidates:
+        # OnPhysicsStep 需要 on-demand 图，优先尝试 push evaluator。
+        if "OnPhysicsStep" in tick_node_type:
+            evaluator_candidates = ["push", "execution"]
+        else:
+            evaluator_candidates = ["execution", "push"]
         for evaluator_name in evaluator_candidates:
             for graph_path in candidates:
                 try:
