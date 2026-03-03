@@ -147,6 +147,13 @@ def parse_args():
         help="ROS2 Domain ID (默认: 环境变量 ROS_DOMAIN_ID 或 0)",
     )
     parser.add_argument(
+        "--tick_source",
+        type=str,
+        default="auto",
+        choices=["auto", "playback", "physics"],
+        help="ActionGraph 触发源 (默认: auto=优先 physics, 再 playback)",
+    )
+    parser.add_argument(
         "--log_every",
         type=int,
         default=200,
@@ -191,6 +198,11 @@ def _import_omnigraph_core():
     enabled_name = _enable_extension_candidates(["omni.graph.core", "omni.graph"])
     # OnPlaybackTick 依赖 omni.graph.action；其余扩展按可用性启用。
     _enable_extension_candidates(["omni.graph.action"])
+    for ext_name in ("isaacsim.core.nodes", "omni.isaac.core_nodes"):
+        try:
+            _enable_extension_candidates([ext_name])
+        except Exception:
+            pass
     for ext_name in ("omni.graph.nodes", "omni.graph.scriptnode", "omni.graph.ui_nodes"):
         try:
             _enable_extension_candidates([ext_name])
@@ -238,6 +250,20 @@ def _set_optional_input_attr(node, attr_candidates: list[str], value) -> str | N
         except Exception:
             continue
     return None
+
+
+def _tick_node_candidates(mode: str) -> list[tuple[str, str]]:
+    """返回 Tick 节点候选: (node_type, output_attr)。"""
+    playback = [("omni.graph.action.OnPlaybackTick", "tick")]
+    physics = [
+        ("isaacsim.core.nodes.OnPhysicsStep", "step"),
+        ("omni.isaac.core_nodes.OnPhysicsStep", "step"),
+    ]
+    if mode == "playback":
+        return playback
+    if mode == "physics":
+        return physics
+    return physics + playback
 
 
 def _ros2_node_prefix(ros2_ext_name: str) -> str:
@@ -310,6 +336,8 @@ def _create_ros2_graph_at_path(
     fb_topic: str,
     ros2_ext_name: str,
     ros_domain_id: int,
+    tick_node_type: str,
+    tick_output_attr: str,
     evaluator_name: str,
 ):
     """在指定路径创建 ROS2 发布/订阅 ActionGraph。"""
@@ -329,7 +357,7 @@ def _create_ros2_graph_at_path(
         {"graph_path": graph_path, "evaluator_name": evaluator_name},
         {
             og.Controller.Keys.CREATE_NODES: [
-                ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+                ("TickSource", tick_node_type),
                 ("RosContext", f"{node_prefix}.ROS2Context"),
                 ("CmdPublisher", f"{node_prefix}.ROS2Publisher"),
                 ("FbSubscriber", f"{node_prefix}.ROS2Subscriber"),
@@ -339,8 +367,8 @@ def _create_ros2_graph_at_path(
                 ("FbSubscriber.inputs:topicName", fb_topic),
             ],
             og.Controller.Keys.CONNECT: [
-                ("OnPlaybackTick.outputs:tick", "CmdPublisher.inputs:execIn"),
-                ("OnPlaybackTick.outputs:tick", "FbSubscriber.inputs:execIn"),
+                (f"TickSource.outputs:{tick_output_attr}", "CmdPublisher.inputs:execIn"),
+                (f"TickSource.outputs:{tick_output_attr}", "FbSubscriber.inputs:execIn"),
                 ("RosContext.outputs:context", "CmdPublisher.inputs:context"),
                 ("RosContext.outputs:context", "FbSubscriber.inputs:context"),
             ],
@@ -379,7 +407,13 @@ def _create_ros2_graph_at_path(
     return cmd_pub_node, fb_sub_node, layer_id
 
 
-def _build_ros2_graph(cmd_topic: str, fb_topic: str, ros2_ext_name: str, ros_domain_id: int):
+def _build_ros2_graph(
+    cmd_topic: str,
+    fb_topic: str,
+    ros2_ext_name: str,
+    ros_domain_id: int,
+    tick_source: str,
+):
     """创建 ROS2 发布/订阅 ActionGraph（带路径回退）。"""
     import omni.usd
 
@@ -391,6 +425,7 @@ def _build_ros2_graph(cmd_topic: str, fb_topic: str, ros2_ext_name: str, ros_dom
         "/Ros2BridgeGraph",          # 最后兜底
     ]
     evaluator_candidates = ["execution", "push"]
+    tick_candidates = _tick_node_candidates(tick_source)
 
     stage = omni.usd.get_context().get_stage()
     if stage is None:
@@ -400,29 +435,34 @@ def _build_ros2_graph(cmd_topic: str, fb_topic: str, ros2_ext_name: str, ros_dom
     print(f"[INFO] Stage 可写探针: writable={writable}, reason={reason}", flush=True)
 
     last_error = None
-    for evaluator_name in evaluator_candidates:
-        for graph_path in candidates:
-            try:
-                cmd_pub_node, fb_sub_node, layer_id = _create_ros2_graph_at_path(
-                    graph_path=graph_path,
-                    cmd_topic=cmd_topic,
-                    fb_topic=fb_topic,
-                    ros2_ext_name=ros2_ext_name,
-                    ros_domain_id=ros_domain_id,
-                    evaluator_name=evaluator_name,
-                )
-                print(
-                    "[INFO] ROS2 ActionGraph 创建成功: "
-                    f"{graph_path} (evaluator={evaluator_name}, edit_target={layer_id})",
-                    flush=True,
-                )
-                return cmd_pub_node, fb_sub_node
-            except Exception as exc:
-                last_error = exc
-                print(
-                    f"[WARN] ROS2 ActionGraph 创建失败({graph_path}, evaluator={evaluator_name}): {exc}",
-                    flush=True,
-                )
+    for tick_node_type, tick_output_attr in tick_candidates:
+        for evaluator_name in evaluator_candidates:
+            for graph_path in candidates:
+                try:
+                    cmd_pub_node, fb_sub_node, layer_id = _create_ros2_graph_at_path(
+                        graph_path=graph_path,
+                        cmd_topic=cmd_topic,
+                        fb_topic=fb_topic,
+                        ros2_ext_name=ros2_ext_name,
+                        ros_domain_id=ros_domain_id,
+                        tick_node_type=tick_node_type,
+                        tick_output_attr=tick_output_attr,
+                        evaluator_name=evaluator_name,
+                    )
+                    print(
+                        "[INFO] ROS2 ActionGraph 创建成功: "
+                        f"{graph_path} (tick={tick_node_type}, evaluator={evaluator_name}, edit_target={layer_id})",
+                        flush=True,
+                    )
+                    return cmd_pub_node, fb_sub_node
+                except Exception as exc:
+                    last_error = exc
+                    print(
+                        "[WARN] ROS2 ActionGraph 创建失败("
+                        f"{graph_path}, tick={tick_node_type}, evaluator={evaluator_name}"
+                        f"): {exc}",
+                        flush=True,
+                    )
 
     raise RuntimeError(f"无法创建 ROS2 ActionGraph，候选路径均失败: {candidates}") from last_error
 
@@ -465,6 +505,7 @@ def main():
     print(f"命令话题: {args.cmd_topic}")
     print(f"反馈话题: {args.fb_topic}")
     print(f"ROS_DOMAIN_ID: {args.ros_domain_id}")
+    print(f"Tick Source: {args.tick_source}")
     print(f"总步数: {args.sim_steps}")
     print(f"动作源: {args.action_source}")
     print("=" * 80)
@@ -493,6 +534,7 @@ def main():
             fb_topic=args.fb_topic,
             ros2_ext_name=enabled_ext,
             ros_domain_id=args.ros_domain_id,
+            tick_source=args.tick_source,
         )
         timeline = omni.timeline.get_timeline_interface()
         timeline.play()
