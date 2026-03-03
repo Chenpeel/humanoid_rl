@@ -28,6 +28,29 @@ from isaaclab.app import AppLauncher
 app_launcher_parser = argparse.ArgumentParser(add_help=False)
 AppLauncher.add_app_launcher_args(app_launcher_parser)
 app_launcher_args, _ = app_launcher_parser.parse_known_args()
+
+
+def _merge_kit_args(existing: str, additions: list[str]) -> str:
+    """合并 kit_args，若用户已显式设置同键则不覆盖。"""
+    merged = [item for item in existing.split() if item]
+    existing_keys = {item.split("=", 1)[0] for item in merged}
+    for item in additions:
+        key = item.split("=", 1)[0]
+        if key not in existing_keys:
+            merged.append(item)
+            existing_keys.add(key)
+    return " ".join(merged)
+
+
+# 这些设置必须在 SimulationApp 启动前注入，运行期修改通常已来不及影响 graph prim 包装逻辑。
+_OMNIGRAPH_KIT_OVERRIDES = [
+    "--/persistent/omnigraph/disablePrimNodes=false",
+    "--/app/omnigraph/disablePrimNodes=false",
+    "--/persistent/omnigraph/useSchemaPrims=false",
+    "--/app/omnigraph/useSchemaPrims=false",
+]
+app_launcher_args.kit_args = _merge_kit_args(getattr(app_launcher_args, "kit_args", ""), _OMNIGRAPH_KIT_OVERRIDES)
+
 app_launcher = AppLauncher(app_launcher_args)
 simulation_app = app_launcher.app
 
