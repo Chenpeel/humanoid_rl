@@ -47,7 +47,15 @@ export TMPDIR="${TMPDIR_DEFAULT}"
 mkdir -p "${TMPDIR}"
 
 export ROS_DISTRO=jazzy
-export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
+export ROS_LOCALHOST_ONLY="${ROS_LOCALHOST_ONLY:-0}"
+export ROS_AUTOMATIC_DISCOVERY_RANGE="${ROS_AUTOMATIC_DISCOVERY_RANGE:-SUBNET}"
+export FASTDDS_BUILTIN_TRANSPORTS="${FASTDDS_BUILTIN_TRANSPORTS:-UDPv4}"
+# 默认清理静态 peers，避免旧环境变量导致发现/传输异常；如需保留可设置 SIM_ROS_KEEP_STATIC_PEERS=1。
+if [[ "${SIM_ROS_KEEP_STATIC_PEERS:-0}" != "1" ]]; then
+  unset ROS_STATIC_PEERS || true
+fi
 
 if [[ -z "${ISAAC_ROS2_LIB:-}" ]]; then
   ISAAC_ROS2_LIB="$(ls -d "${IRL_ROOT}"/.venv/lib/python3.*/site-packages/isaacsim/exts/isaacsim.ros2.bridge/jazzy/lib 2>/dev/null | head -n 1 || true)"
@@ -69,6 +77,8 @@ fi
 cd "${ISAACLAB_RL_DIR}"
 echo "[INFO] DISPLAY=${DISPLAY:-<empty>} RUN_MODE=${RUN_MODE} APP_ARGS=${APP_ARGS[*]:-<none>}"
 echo "[INFO] USD_PATH=${USD_PATH}"
+echo "[INFO] ROS_DOMAIN_ID=${ROS_DOMAIN_ID} RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION} FASTDDS_BUILTIN_TRANSPORTS=${FASTDDS_BUILTIN_TRANSPORTS}"
+echo "[INFO] ROS_LOCALHOST_ONLY=${ROS_LOCALHOST_ONLY} ROS_AUTOMATIC_DISCOVERY_RANGE=${ROS_AUTOMATIC_DISCOVERY_RANGE} ROS_STATIC_PEERS=${ROS_STATIC_PEERS:-<unset>}"
 echo "[INFO] Logs: ${ISAACLAB_RL_DIR}/logs_run_sim_ros / logs_err_sim_ros"
 
 set +e
@@ -80,6 +90,7 @@ set +e
   --action_source "${ACTION_SOURCE}" \
   --cmd_topic "${CMD_TOPIC}" \
   --fb_topic "${FB_TOPIC}" \
+  --ros_domain_id "${ROS_DOMAIN_ID}" \
   --log_every "${LOG_EVERY}" \
   "$@" \
   1>logs_run_sim_ros 2>logs_err_sim_ros
