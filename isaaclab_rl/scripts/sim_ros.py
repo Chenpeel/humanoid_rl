@@ -33,7 +33,6 @@ simulation_app = app_launcher.app
 
 import gymnasium as gym
 import numpy as np
-import omni.graph.core as og
 import omni.kit.app
 import omni.timeline
 import torch
@@ -45,6 +44,9 @@ TASK_ENV_MAP = {
     "standing": "Isaac-Jiyuan-Standing-v0",
     "test": "Isaac-Jiyuan-Test-v0",
 }
+
+# 延迟导入的 OmniGraph 模块句柄（避免在扩展未启用时导入失败）
+og = None
 
 
 def parse_args():
@@ -136,6 +138,33 @@ def _enable_ros2_bridge_extension() -> str:
     raise RuntimeError("无法启用 ROS2 Bridge 扩展（isaacsim.ros2.bridge / omni.isaac.ros2_bridge）")
 
 
+def _enable_extension_candidates(candidates: list[str]) -> str:
+    """按候选列表启用扩展，返回成功的扩展名。"""
+    ext_manager = omni.kit.app.get_app().get_extension_manager()
+    for ext_name in candidates:
+        try:
+            if ext_manager.is_extension_enabled(ext_name):
+                return ext_name
+            if ext_manager.set_extension_enabled_immediate(ext_name, True):
+                return ext_name
+        except Exception:
+            continue
+    raise RuntimeError(f"无法启用任一扩展: {candidates}")
+
+
+def _import_omnigraph_core():
+    """确保 omni.graph.core 可用并返回模块对象。"""
+    enabled_name = _enable_extension_candidates(["omni.graph.core", "omni.graph"])
+    simulation_app.update()
+    try:
+        return import_module("omni.graph.core"), enabled_name
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            f"已尝试启用 {enabled_name}，但仍无法导入 omni.graph.core。"
+            "请确认 Isaac Sim 安装完整且使用 isaaclab.sh 启动。"
+        ) from exc
+
+
 def _build_env_cfg(task_id: str, num_envs: int):
     """从 Gym 注册信息解析并实例化 env cfg。"""
     env_spec = gym.spec(task_id)
@@ -218,6 +247,7 @@ def _build_command_vector(step_count: int, action_source: str, sine_amp: float, 
 
 
 def main():
+    global og
     args = parse_args()
 
     if not os.path.isabs(args.usd_path):
@@ -229,6 +259,7 @@ def main():
     os.environ["JIYUAN_USD_PATH"] = usd_path
 
     enabled_ext = _enable_ros2_bridge_extension()
+    og, og_ext_name = _import_omnigraph_core()
     print("=" * 80)
     print("Isaac Headless ROS2 联调入口")
     print("=" * 80)
@@ -236,6 +267,7 @@ def main():
     print(f"环境ID: {TASK_ENV_MAP[args.task]}")
     print(f"USD 路径: {usd_path}")
     print(f"ROS2 扩展: {enabled_ext}")
+    print(f"OmniGraph 扩展: {og_ext_name}")
     print(f"命令话题: {args.cmd_topic}")
     print(f"反馈话题: {args.fb_topic}")
     print(f"总步数: {args.sim_steps}")
