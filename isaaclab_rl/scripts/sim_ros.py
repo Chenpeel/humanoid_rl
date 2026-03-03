@@ -50,6 +50,9 @@ _OMNIGRAPH_KIT_OVERRIDES = [
     "--/app/omnigraph/useSchemaPrims=false",
 ]
 app_launcher_args.kit_args = _merge_kit_args(getattr(app_launcher_args, "kit_args", ""), _OMNIGRAPH_KIT_OVERRIDES)
+# 对 ROS2 ActionGraph 需求脚本，默认使用 isaaclab.python.kit 更稳定（保留用户显式传入优先）。
+if not getattr(app_launcher_args, "experience", ""):
+    app_launcher_args.experience = "isaaclab.python.kit"
 
 app_launcher = AppLauncher(app_launcher_args)
 simulation_app = app_launcher.app
@@ -138,6 +141,12 @@ def parse_args():
         help="并行环境数 (默认: 1)",
     )
     parser.add_argument(
+        "--ros_domain_id",
+        type=int,
+        default=int(os.environ.get("ROS_DOMAIN_ID", "0")),
+        help="ROS2 Domain ID (默认: 环境变量 ROS_DOMAIN_ID 或 0)",
+    )
+    parser.add_argument(
         "--log_every",
         type=int,
         default=200,
@@ -220,6 +229,17 @@ def _set_dynamic_message_type(ogn_node, message_package: str, message_name: str,
     simulation_app.update()
 
 
+def _set_optional_input_attr(node, attr_candidates: list[str], value) -> str | None:
+    """尝试设置输入属性（兼容不同节点版本字段名），返回成功的属性名。"""
+    for attr_name in attr_candidates:
+        try:
+            og.Controller.attribute(f"inputs:{attr_name}", node).set(value)
+            return attr_name
+        except Exception:
+            continue
+    return None
+
+
 def _ros2_node_prefix(ros2_ext_name: str) -> str:
     """根据启用的 ROS2 Bridge 扩展返回节点类型前缀。"""
     if ros2_ext_name == "omni.isaac.ros2_bridge":
@@ -289,6 +309,7 @@ def _create_ros2_graph_at_path(
     cmd_topic: str,
     fb_topic: str,
     ros2_ext_name: str,
+    ros_domain_id: int,
     evaluator_name: str,
 ):
     """在指定路径创建 ROS2 发布/订阅 ActionGraph。"""
@@ -333,6 +354,20 @@ def _create_ros2_graph_at_path(
 
     cmd_pub_node = new_nodes[2]
     fb_sub_node = new_nodes[3]
+    ros_ctx_node = new_nodes[1]
+
+    domain_attr_name = _set_optional_input_attr(
+        ros_ctx_node,
+        attr_candidates=["domain_id", "domainId"],
+        value=int(ros_domain_id),
+    )
+    if domain_attr_name is None:
+        print("[WARN] ROS2Context 未找到 domain_id/domainId 输入属性，使用节点默认 Domain。", flush=True)
+    else:
+        print(
+            f"[INFO] ROS2Context domain 设置成功: inputs:{domain_attr_name}={int(ros_domain_id)}",
+            flush=True,
+        )
 
     _set_dynamic_message_type(cmd_pub_node, message_package="std_msgs", message_name="Float32MultiArray")
     _set_dynamic_message_type(fb_sub_node, message_package="std_msgs", message_name="Float32MultiArray")
@@ -344,7 +379,7 @@ def _create_ros2_graph_at_path(
     return cmd_pub_node, fb_sub_node, layer_id
 
 
-def _build_ros2_graph(cmd_topic: str, fb_topic: str, ros2_ext_name: str):
+def _build_ros2_graph(cmd_topic: str, fb_topic: str, ros2_ext_name: str, ros_domain_id: int):
     """创建 ROS2 发布/订阅 ActionGraph（带路径回退）。"""
     import omni.usd
 
@@ -373,6 +408,7 @@ def _build_ros2_graph(cmd_topic: str, fb_topic: str, ros2_ext_name: str):
                     cmd_topic=cmd_topic,
                     fb_topic=fb_topic,
                     ros2_ext_name=ros2_ext_name,
+                    ros_domain_id=ros_domain_id,
                     evaluator_name=evaluator_name,
                 )
                 print(
@@ -428,6 +464,7 @@ def main():
     print(f"OmniGraph 扩展: {og_ext_name}")
     print(f"命令话题: {args.cmd_topic}")
     print(f"反馈话题: {args.fb_topic}")
+    print(f"ROS_DOMAIN_ID: {args.ros_domain_id}")
     print(f"总步数: {args.sim_steps}")
     print(f"动作源: {args.action_source}")
     print("=" * 80)
@@ -455,6 +492,7 @@ def main():
             cmd_topic=args.cmd_topic,
             fb_topic=args.fb_topic,
             ros2_ext_name=enabled_ext,
+            ros_domain_id=args.ros_domain_id,
         )
         timeline = omni.timeline.get_timeline_interface()
         timeline.play()
@@ -505,6 +543,13 @@ def main():
                     f"pub={pub_count} fb_ok={fb_count} fb_invalid={fb_invalid} "
                     f"fb_head={np.array2string(last_feedback[:4], precision=4)}"
                 )
+                if fb_count == 0 and (step_count + 1) >= max(200, int(args.log_every)):
+                    print(
+                        "[WARN] 目前未收到任何反馈消息。请检查："
+                        "1) 是否有节点在发布反馈话题；"
+                        f"2) ROS_DOMAIN_ID 是否一致(当前={args.ros_domain_id})；"
+                        "3) 反馈消息类型是否为 std_msgs/Float32MultiArray(16维)。"
+                    )
 
         print("=" * 80)
         print("[DONE] 仿真完成")
