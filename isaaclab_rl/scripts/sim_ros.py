@@ -264,6 +264,34 @@ def _set_optional_input_attr(node, attr_candidates: list[str], value) -> str | N
     return None
 
 
+def _ogn_attr_is_valid(node, attr_name: str) -> bool:
+    """判断节点属性是否存在且可用。"""
+    try:
+        attr = og.Controller.attribute(attr_name, node)
+    except Exception:
+        return False
+    if attr is None:
+        return False
+    for meth in ("is_valid", "isValid"):
+        fn = getattr(attr, meth, None)
+        if callable(fn):
+            try:
+                return bool(fn())
+            except Exception:
+                return False
+    # 无显式 is_valid 接口时，保守认为可用
+    return True
+
+
+def _pick_ogn_attr(node, candidates: list[str], role: str) -> str:
+    """从候选属性中选择第一个可用属性。"""
+    for attr_name in candidates:
+        if _ogn_attr_is_valid(node, attr_name):
+            print(f"[INFO] {role} 属性采用: {attr_name}", flush=True)
+            return attr_name
+    raise RuntimeError(f"{role} 无可用属性，候选={candidates}")
+
+
 def _tick_node_candidates(mode: str) -> list[tuple[str, str]]:
     """返回 Tick 节点候选: (node_type, output_attr)。"""
     playback = [("omni.graph.action.OnPlaybackTick", "tick")]
@@ -426,15 +454,27 @@ def _create_ros2_graph_at_path(
     _set_dynamic_message_type(cmd_pub_node, message_package="std_msgs", message_name="Float32MultiArray")
     _set_dynamic_message_type(fb_sub_node, message_package="std_msgs", message_name="Float32MultiArray")
 
+    # 解析 publisher/subscriber 数据属性（不同 Isaac Sim 版本字段名可能不同）
+    cmd_data_attr = _pick_ogn_attr(
+        cmd_pub_node,
+        candidates=["inputs:data", "inputs:message", "inputs:array"],
+        role="CmdPublisher 数据输入",
+    )
+    fb_data_attr = _pick_ogn_attr(
+        fb_sub_node,
+        candidates=["outputs:data", "outputs:message", "outputs:array"],
+        role="FbSubscriber 数据输出",
+    )
+
     # MultiArray 结构字段（最小有效配置）
-    og.Controller.attribute("inputs:layout:data_offset", cmd_pub_node).set(0)
-    og.Controller.attribute("inputs:layout:dim", cmd_pub_node).set([])
+    _set_optional_input_attr(cmd_pub_node, ["layout:data_offset"], 0)
+    _set_optional_input_attr(cmd_pub_node, ["layout:dim"], [])
 
     impulse_attr_path = None
     if tick_node_type.endswith("OnImpulseEvent"):
         impulse_attr_path = f"{graph_path}/TickSource.state:enableImpulse"
 
-    return cmd_pub_node, fb_sub_node, layer_id, impulse_attr_path
+    return cmd_pub_node, fb_sub_node, cmd_data_attr, fb_data_attr, layer_id, impulse_attr_path
 
 
 def _build_ros2_graph(
@@ -473,7 +513,14 @@ def _build_ros2_graph(
         for evaluator_name in evaluator_candidates:
             for graph_path in candidates:
                 try:
-                    cmd_pub_node, fb_sub_node, layer_id, impulse_attr_path = _create_ros2_graph_at_path(
+                    (
+                        cmd_pub_node,
+                        fb_sub_node,
+                        cmd_data_attr,
+                        fb_data_attr,
+                        layer_id,
+                        impulse_attr_path,
+                    ) = _create_ros2_graph_at_path(
                         graph_path=graph_path,
                         cmd_topic=cmd_topic,
                         fb_topic=fb_topic,
@@ -488,7 +535,7 @@ def _build_ros2_graph(
                         f"{graph_path} (tick={tick_node_type}, evaluator={evaluator_name}, edit_target={layer_id})",
                         flush=True,
                     )
-                    return cmd_pub_node, fb_sub_node, tick_node_type, impulse_attr_path
+                    return cmd_pub_node, fb_sub_node, cmd_data_attr, fb_data_attr, tick_node_type, impulse_attr_path
                 except Exception as exc:
                     last_error = exc
                     print(
@@ -509,6 +556,9 @@ def _trigger_impulse_tick_if_needed(impulse_attr_path: str | None) -> None:
     impulse_attr = og.Controller.attribute(impulse_attr_path)
     og.Controller.set(impulse_attr, False)
     og.Controller.set(impulse_attr, True)
+    # 显式推进一次 app update，确保脉冲在本步被消费。
+    simulation_app.update()
+    og.Controller.set(impulse_attr, False)
 
 
 def _build_command_vector(step_count: int, action_source: str, sine_amp: float, sine_freq: float) -> np.ndarray:
@@ -580,7 +630,14 @@ def main():
         if action_dim < 16:
             print(f"[WARN] action_dim={action_dim} < 16，发布仍为16维，环境动作将按可用维度截断。")
 
-        cmd_pub_node, fb_sub_node, tick_node_type, impulse_attr_path = _build_ros2_graph(
+        (
+            cmd_pub_node,
+            fb_sub_node,
+            cmd_data_attr,
+            fb_data_attr,
+            tick_node_type,
+            impulse_attr_path,
+        ) = _build_ros2_graph(
             cmd_topic=args.cmd_topic,
             fb_topic=args.fb_topic,
             ros2_ext_name=enabled_ext,
@@ -611,7 +668,7 @@ def main():
             )
 
             # 发布 16 维命令到 ROS2
-            og.Controller.attribute("inputs:data", cmd_pub_node).set(cmd.tolist())
+            og.Controller.attribute(cmd_data_attr, cmd_pub_node).set(cmd.tolist())
             _trigger_impulse_tick_if_needed(impulse_attr_path)
             pub_count += 1
 
@@ -627,7 +684,7 @@ def main():
                 simulation_app.update()
 
             # 拉取最新反馈
-            fb_data = og.Controller.attribute("outputs:data", fb_sub_node).get()
+            fb_data = og.Controller.attribute(fb_data_attr, fb_sub_node).get()
             if fb_data is not None:
                 fb_np = np.asarray(fb_data, dtype=np.float32).reshape(-1)
                 if fb_np.size == 16 and np.all(np.isfinite(fb_np)):
