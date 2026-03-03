@@ -505,7 +505,10 @@ def _trigger_impulse_tick_if_needed(impulse_attr_path: str | None) -> None:
     """若使用 OnImpulseEvent，则触发一次图执行。"""
     if not impulse_attr_path:
         return
-    og.Controller.set(og.Controller.attribute(impulse_attr_path), True)
+    # OnImpulseEvent 需要脉冲沿，持续写 True 可能只在首次生效。
+    impulse_attr = og.Controller.attribute(impulse_attr_path)
+    og.Controller.set(impulse_attr, False)
+    og.Controller.set(impulse_attr, True)
 
 
 def _build_command_vector(step_count: int, action_source: str, sine_amp: float, sine_freq: float) -> np.ndarray:
