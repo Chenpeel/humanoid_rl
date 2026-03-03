@@ -132,6 +132,7 @@ def _enable_ros2_bridge_extension() -> str:
             if ext_manager.is_extension_enabled(ext_name):
                 return ext_name
             if ext_manager.set_extension_enabled_immediate(ext_name, True):
+                simulation_app.update()
                 return ext_name
         except Exception:
             continue
@@ -155,6 +156,8 @@ def _enable_extension_candidates(candidates: list[str]) -> str:
 def _import_omnigraph_core():
     """确保 omni.graph.core 可用并返回模块对象。"""
     enabled_name = _enable_extension_candidates(["omni.graph.core", "omni.graph"])
+    # OnPlaybackTick 依赖 omni.graph.action，尽量在此阶段一起启用。
+    _enable_extension_candidates(["omni.graph.action"])
     simulation_app.update()
     try:
         return import_module("omni.graph.core"), enabled_name
@@ -188,24 +191,44 @@ def _set_dynamic_message_type(ogn_node, message_package: str, message_name: str,
     simulation_app.update()
 
 
-def _build_ros2_graph(cmd_topic: str, fb_topic: str):
-    """创建 ROS2 发布/订阅 ActionGraph。"""
+def _ros2_node_prefix(ros2_ext_name: str) -> str:
+    """根据启用的 ROS2 Bridge 扩展返回节点类型前缀。"""
+    if ros2_ext_name == "omni.isaac.ros2_bridge":
+        return "omni.isaac.ros2_bridge"
+    return "isaacsim.ros2.bridge"
+
+
+def _set_stage_edit_target_to_session_layer(stage) -> str:
+    """将 Stage 编辑目标切换到 Session Layer，避免只读 Root Layer 写失败。"""
+    session_layer = stage.GetSessionLayer()
+    if session_layer is None:
+        raise RuntimeError("当前 USD Stage 缺少 Session Layer，无法写入 ActionGraph。")
+    stage.SetEditTarget(session_layer)
+    return session_layer.identifier
+
+
+def _create_ros2_graph_at_path(graph_path: str, cmd_topic: str, fb_topic: str, ros2_ext_name: str):
+    """在指定路径创建 ROS2 发布/订阅 ActionGraph。"""
     import omni.usd
 
-    graph_path = "/ActionGraph/SimRosBridge"
     stage = omni.usd.get_context().get_stage()
+    if stage is None:
+        raise RuntimeError("当前没有可用 USD Stage，无法创建 ActionGraph。")
+    layer_id = _set_stage_edit_target_to_session_layer(stage)
+
     if stage.GetPrimAtPath(graph_path).IsValid():
         stage.RemovePrim(graph_path)
         simulation_app.update()
 
+    node_prefix = _ros2_node_prefix(ros2_ext_name)
     (_, new_nodes, _, _) = og.Controller.edit(
         {"graph_path": graph_path, "evaluator_name": "execution"},
         {
             og.Controller.Keys.CREATE_NODES: [
                 ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                ("RosContext", "isaacsim.ros2.bridge.ROS2Context"),
-                ("CmdPublisher", "isaacsim.ros2.bridge.ROS2Publisher"),
-                ("FbSubscriber", "isaacsim.ros2.bridge.ROS2Subscriber"),
+                ("RosContext", f"{node_prefix}.ROS2Context"),
+                ("CmdPublisher", f"{node_prefix}.ROS2Publisher"),
+                ("FbSubscriber", f"{node_prefix}.ROS2Subscriber"),
             ],
             og.Controller.Keys.SET_VALUES: [
                 ("CmdPublisher.inputs:topicName", cmd_topic),
@@ -230,7 +253,33 @@ def _build_ros2_graph(cmd_topic: str, fb_topic: str):
     og.Controller.attribute("inputs:layout:data_offset", cmd_pub_node).set(0)
     og.Controller.attribute("inputs:layout:dim", cmd_pub_node).set([])
 
-    return cmd_pub_node, fb_sub_node
+    return cmd_pub_node, fb_sub_node, layer_id
+
+
+def _build_ros2_graph(cmd_topic: str, fb_topic: str, ros2_ext_name: str):
+    """创建 ROS2 发布/订阅 ActionGraph（带路径回退）。"""
+    candidates = [
+        "/World/SimRosBridgeGraph",  # 优先放到 World 下，减少根路径冲突
+        "/SimRosBridgeGraph",        # 根路径独立图
+        "/ActionGraph",              # Isaac 常用路径
+        "/Ros2BridgeGraph",          # 最后兜底
+    ]
+    last_error = None
+    for graph_path in candidates:
+        try:
+            cmd_pub_node, fb_sub_node, layer_id = _create_ros2_graph_at_path(
+                graph_path=graph_path,
+                cmd_topic=cmd_topic,
+                fb_topic=fb_topic,
+                ros2_ext_name=ros2_ext_name,
+            )
+            print(f"[INFO] ROS2 ActionGraph 创建成功: {graph_path} (edit_target={layer_id})")
+            return cmd_pub_node, fb_sub_node
+        except Exception as exc:
+            last_error = exc
+            print(f"[WARN] ROS2 ActionGraph 创建失败({graph_path}): {exc}")
+
+    raise RuntimeError(f"无法创建 ROS2 ActionGraph，候选路径均失败: {candidates}") from last_error
 
 
 def _build_command_vector(step_count: int, action_source: str, sine_amp: float, sine_freq: float) -> np.ndarray:
@@ -293,7 +342,11 @@ def main():
         if action_dim < 16:
             print(f"[WARN] action_dim={action_dim} < 16，发布仍为16维，环境动作将按可用维度截断。")
 
-        cmd_pub_node, fb_sub_node = _build_ros2_graph(args.cmd_topic, args.fb_topic)
+        cmd_pub_node, fb_sub_node = _build_ros2_graph(
+            cmd_topic=args.cmd_topic,
+            fb_topic=args.fb_topic,
+            ros2_ext_name=enabled_ext,
+        )
         timeline = omni.timeline.get_timeline_interface()
         timeline.play()
 
