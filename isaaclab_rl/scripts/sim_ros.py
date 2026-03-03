@@ -149,9 +149,9 @@ def parse_args():
     parser.add_argument(
         "--tick_source",
         type=str,
-        default="auto",
-        choices=["auto", "playback", "physics"],
-        help="ActionGraph 触发源 (默认: auto=优先 physics, 再 playback)",
+        default="impulse",
+        choices=["auto", "playback", "physics", "impulse"],
+        help="ActionGraph 触发源 (默认: impulse，逐仿真步手动触发)",
     )
     parser.add_argument(
         "--log_every",
@@ -259,12 +259,15 @@ def _tick_node_candidates(mode: str) -> list[tuple[str, str]]:
         ("isaacsim.core.nodes.OnPhysicsStep", "step"),
         ("omni.isaac.core_nodes.OnPhysicsStep", "step"),
     ]
+    impulse = [("omni.graph.action.OnImpulseEvent", "execOut")]
     if mode == "playback":
         return playback
     if mode == "physics":
         return physics
-    # auto 模式优先 playback，避免 OnPhysicsStep 在非 on-demand graph 下不触发。
-    return playback + physics
+    if mode == "impulse":
+        return impulse
+    # auto 模式优先 playback，其次 impulse，最后 physics。
+    return playback + impulse + physics
 
 
 def _ros2_node_prefix(ros2_ext_name: str) -> str:
@@ -397,6 +400,16 @@ def _create_ros2_graph_at_path(
             f"[INFO] ROS2Context domain 设置成功: inputs:{domain_attr_name}={int(ros_domain_id)}",
             flush=True,
         )
+        use_env_attr_name = _set_optional_input_attr(
+            ros_ctx_node,
+            attr_candidates=["useDomainIDEnvVar", "use_domain_id_env_var"],
+            value=False,
+        )
+        if use_env_attr_name is not None:
+            print(
+                f"[INFO] ROS2Context domain 来源固定为节点输入: inputs:{use_env_attr_name}=False",
+                flush=True,
+            )
 
     _set_dynamic_message_type(cmd_pub_node, message_package="std_msgs", message_name="Float32MultiArray")
     _set_dynamic_message_type(fb_sub_node, message_package="std_msgs", message_name="Float32MultiArray")
@@ -405,7 +418,11 @@ def _create_ros2_graph_at_path(
     og.Controller.attribute("inputs:layout:data_offset", cmd_pub_node).set(0)
     og.Controller.attribute("inputs:layout:dim", cmd_pub_node).set([])
 
-    return cmd_pub_node, fb_sub_node, layer_id
+    impulse_attr_path = None
+    if tick_node_type.endswith("OnImpulseEvent"):
+        impulse_attr_path = f"{graph_path}/TickSource.state:enableImpulse"
+
+    return cmd_pub_node, fb_sub_node, layer_id, impulse_attr_path
 
 
 def _build_ros2_graph(
@@ -444,7 +461,7 @@ def _build_ros2_graph(
         for evaluator_name in evaluator_candidates:
             for graph_path in candidates:
                 try:
-                    cmd_pub_node, fb_sub_node, layer_id = _create_ros2_graph_at_path(
+                    cmd_pub_node, fb_sub_node, layer_id, impulse_attr_path = _create_ros2_graph_at_path(
                         graph_path=graph_path,
                         cmd_topic=cmd_topic,
                         fb_topic=fb_topic,
@@ -459,7 +476,7 @@ def _build_ros2_graph(
                         f"{graph_path} (tick={tick_node_type}, evaluator={evaluator_name}, edit_target={layer_id})",
                         flush=True,
                     )
-                    return cmd_pub_node, fb_sub_node
+                    return cmd_pub_node, fb_sub_node, tick_node_type, impulse_attr_path
                 except Exception as exc:
                     last_error = exc
                     print(
@@ -470,6 +487,13 @@ def _build_ros2_graph(
                     )
 
     raise RuntimeError(f"无法创建 ROS2 ActionGraph，候选路径均失败: {candidates}") from last_error
+
+
+def _trigger_impulse_tick_if_needed(impulse_attr_path: str | None) -> None:
+    """若使用 OnImpulseEvent，则触发一次图执行。"""
+    if not impulse_attr_path:
+        return
+    og.Controller.set(og.Controller.attribute(impulse_attr_path), True)
 
 
 def _build_command_vector(step_count: int, action_source: str, sine_amp: float, sine_freq: float) -> np.ndarray:
@@ -534,13 +558,16 @@ def main():
         if action_dim < 16:
             print(f"[WARN] action_dim={action_dim} < 16，发布仍为16维，环境动作将按可用维度截断。")
 
-        cmd_pub_node, fb_sub_node = _build_ros2_graph(
+        cmd_pub_node, fb_sub_node, tick_node_type, impulse_attr_path = _build_ros2_graph(
             cmd_topic=args.cmd_topic,
             fb_topic=args.fb_topic,
             ros2_ext_name=enabled_ext,
             ros_domain_id=args.ros_domain_id,
             tick_source=args.tick_source,
         )
+        if impulse_attr_path is not None:
+            print(f"[INFO] 使用 OnImpulseEvent 手动触发: {impulse_attr_path}")
+        print(f"[INFO] 当前 Tick 节点: {tick_node_type}")
         timeline = omni.timeline.get_timeline_interface()
         timeline.play()
 
@@ -563,6 +590,7 @@ def main():
 
             # 发布 16 维命令到 ROS2
             og.Controller.attribute("inputs:data", cmd_pub_node).set(cmd.tolist())
+            _trigger_impulse_tick_if_needed(impulse_attr_path)
             pub_count += 1
 
             # 驱动环境动作（按 action_dim 截断/填零）
