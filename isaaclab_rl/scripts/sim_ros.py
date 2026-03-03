@@ -36,6 +36,7 @@ import numpy as np
 import omni.kit.app
 import omni.timeline
 import torch
+import carb
 
 import jiyuan_tasks  # noqa: F401  # 注册环境
 
@@ -156,8 +157,13 @@ def _enable_extension_candidates(candidates: list[str]) -> str:
 def _import_omnigraph_core():
     """确保 omni.graph.core 可用并返回模块对象。"""
     enabled_name = _enable_extension_candidates(["omni.graph.core", "omni.graph"])
-    # OnPlaybackTick 依赖 omni.graph.action，尽量在此阶段一起启用。
+    # OnPlaybackTick 依赖 omni.graph.action；其余扩展按可用性启用。
     _enable_extension_candidates(["omni.graph.action"])
+    for ext_name in ("omni.graph.nodes", "omni.graph.scriptnode", "omni.graph.ui_nodes"):
+        try:
+            _enable_extension_candidates([ext_name])
+        except Exception:
+            pass
     simulation_app.update()
     try:
         return import_module("omni.graph.core"), enabled_name
@@ -207,7 +213,61 @@ def _set_stage_edit_target_to_session_layer(stage) -> str:
     return session_layer.identifier
 
 
-def _create_ros2_graph_at_path(graph_path: str, cmd_topic: str, fb_topic: str, ros2_ext_name: str):
+def _configure_omnigraph_settings() -> None:
+    """在 headless 下放宽 OmniGraph 到 USD 的约束，减少 schema 兼容导致的建图失败。"""
+    settings = carb.settings.get_settings()
+    # 同时写 /persistent 与 /app 命名空间，适配不同 Kit 版本键路径。
+    key_values = [
+        ("/persistent/omnigraph/useSchemaPrims", False),
+        ("/app/omnigraph/useSchemaPrims", False),
+        ("/persistent/omnigraph/disablePrimNodes", False),
+        ("/app/omnigraph/disablePrimNodes", False),
+    ]
+    for key, value in key_values:
+        try:
+            settings.set(key, value)
+        except Exception:
+            pass
+
+
+def _stage_diagnostics(stage) -> str:
+    """输出 Stage 编辑诊断信息。"""
+    root_layer = stage.GetRootLayer()
+    session_layer = stage.GetSessionLayer()
+    edit_layer = stage.GetEditTarget().GetLayer()
+    root_id = getattr(root_layer, "identifier", "<none>")
+    session_id = getattr(session_layer, "identifier", "<none>")
+    edit_id = getattr(edit_layer, "identifier", "<none>")
+    root_edit = getattr(root_layer, "permissionToEdit", None)
+    session_edit = getattr(session_layer, "permissionToEdit", None)
+    return (
+        f"root={root_id} (editable={root_edit}), "
+        f"session={session_id} (editable={session_edit}), "
+        f"edit_target={edit_id}"
+    )
+
+
+def _probe_stage_writable(stage) -> tuple[bool, str]:
+    """探测当前 Stage 是否可创建普通 Prim。"""
+    probe_path = "/__SimRosProbe__"
+    try:
+        prim = stage.DefinePrim(probe_path, "Xform")
+        if not prim.IsValid():
+            return False, "DefinePrim 返回无效 Prim"
+        stage.RemovePrim(probe_path)
+        simulation_app.update()
+        return True, "ok"
+    except Exception as exc:
+        return False, repr(exc)
+
+
+def _create_ros2_graph_at_path(
+    graph_path: str,
+    cmd_topic: str,
+    fb_topic: str,
+    ros2_ext_name: str,
+    evaluator_name: str,
+):
     """在指定路径创建 ROS2 发布/订阅 ActionGraph。"""
     import omni.usd
 
@@ -222,7 +282,7 @@ def _create_ros2_graph_at_path(graph_path: str, cmd_topic: str, fb_topic: str, r
 
     node_prefix = _ros2_node_prefix(ros2_ext_name)
     (_, new_nodes, _, _) = og.Controller.edit(
-        {"graph_path": graph_path, "evaluator_name": "execution"},
+        {"graph_path": graph_path, "evaluator_name": evaluator_name},
         {
             og.Controller.Keys.CREATE_NODES: [
                 ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
@@ -242,6 +302,11 @@ def _create_ros2_graph_at_path(graph_path: str, cmd_topic: str, fb_topic: str, r
             ],
         },
     )
+    if len(new_nodes) < 4:
+        raise RuntimeError(
+            f"ActionGraph 创建返回节点数量异常: len={len(new_nodes)}, "
+            f"path={graph_path}, evaluator={evaluator_name}"
+        )
 
     cmd_pub_node = new_nodes[2]
     fb_sub_node = new_nodes[3]
@@ -258,26 +323,47 @@ def _create_ros2_graph_at_path(graph_path: str, cmd_topic: str, fb_topic: str, r
 
 def _build_ros2_graph(cmd_topic: str, fb_topic: str, ros2_ext_name: str):
     """创建 ROS2 发布/订阅 ActionGraph（带路径回退）。"""
+    import omni.usd
+
+    _configure_omnigraph_settings()
     candidates = [
         "/World/SimRosBridgeGraph",  # 优先放到 World 下，减少根路径冲突
         "/SimRosBridgeGraph",        # 根路径独立图
         "/ActionGraph",              # Isaac 常用路径
         "/Ros2BridgeGraph",          # 最后兜底
     ]
+    evaluator_candidates = ["execution", "push"]
+
+    stage = omni.usd.get_context().get_stage()
+    if stage is None:
+        raise RuntimeError("当前没有可用 USD Stage，无法创建 ActionGraph。")
+    print(f"[INFO] Stage 诊断: {_stage_diagnostics(stage)}", flush=True)
+    writable, reason = _probe_stage_writable(stage)
+    print(f"[INFO] Stage 可写探针: writable={writable}, reason={reason}", flush=True)
+
     last_error = None
-    for graph_path in candidates:
-        try:
-            cmd_pub_node, fb_sub_node, layer_id = _create_ros2_graph_at_path(
-                graph_path=graph_path,
-                cmd_topic=cmd_topic,
-                fb_topic=fb_topic,
-                ros2_ext_name=ros2_ext_name,
-            )
-            print(f"[INFO] ROS2 ActionGraph 创建成功: {graph_path} (edit_target={layer_id})")
-            return cmd_pub_node, fb_sub_node
-        except Exception as exc:
-            last_error = exc
-            print(f"[WARN] ROS2 ActionGraph 创建失败({graph_path}): {exc}")
+    for evaluator_name in evaluator_candidates:
+        for graph_path in candidates:
+            try:
+                cmd_pub_node, fb_sub_node, layer_id = _create_ros2_graph_at_path(
+                    graph_path=graph_path,
+                    cmd_topic=cmd_topic,
+                    fb_topic=fb_topic,
+                    ros2_ext_name=ros2_ext_name,
+                    evaluator_name=evaluator_name,
+                )
+                print(
+                    "[INFO] ROS2 ActionGraph 创建成功: "
+                    f"{graph_path} (evaluator={evaluator_name}, edit_target={layer_id})",
+                    flush=True,
+                )
+                return cmd_pub_node, fb_sub_node
+            except Exception as exc:
+                last_error = exc
+                print(
+                    f"[WARN] ROS2 ActionGraph 创建失败({graph_path}, evaluator={evaluator_name}): {exc}",
+                    flush=True,
+                )
 
     raise RuntimeError(f"无法创建 ROS2 ActionGraph，候选路径均失败: {candidates}") from last_error
 
