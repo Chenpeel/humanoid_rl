@@ -159,6 +159,18 @@ def parse_args():
         default=200,
         help="每 N 步打印一次统计 (默认: 200)",
     )
+    parser.add_argument(
+        "--app_update_every_step",
+        action="store_true",
+        default=True,
+        help="每步额外调用 simulation_app.update() 以泵送 OmniGraph/ROS 回调 (默认: 开启)",
+    )
+    parser.add_argument(
+        "--no_app_update_every_step",
+        dest="app_update_every_step",
+        action="store_false",
+        help="关闭每步 simulation_app.update()",
+    )
 
     return parser.parse_args()
 
@@ -523,6 +535,13 @@ def main():
 
     enabled_ext = _enable_ros2_bridge_extension()
     og, og_ext_name = _import_omnigraph_core()
+    if args.tick_source == "physics":
+        print(
+            "[WARN] tick_source=physics 在当前图配置下可能不触发（需要 on-demand graph）。"
+            "已自动回退到 impulse。",
+            flush=True,
+        )
+        args.tick_source = "impulse"
     print("=" * 80)
     print("Isaac Headless ROS2 联调入口")
     print("=" * 80)
@@ -601,6 +620,8 @@ def main():
 
             obs, _, _, _, _ = env.step(actions)
             _ = obs
+            if args.app_update_every_step:
+                simulation_app.update()
 
             # 拉取最新反馈
             fb_data = og.Controller.attribute("outputs:data", fb_sub_node).get()
