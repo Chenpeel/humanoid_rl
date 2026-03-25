@@ -12,8 +12,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IRL_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-ISAACLAB_SH="${IRL_ROOT}/dep/IsaacLab/isaaclab.sh"
 ISAACLAB_RL_DIR="${IRL_ROOT}/isaaclab_rl"
+UV_BIN="${UV_BIN:-uv}"
 
 TASK="${TASK:-standing}"
 SIM_STEPS="${SIM_STEPS:-3000}"
@@ -33,8 +33,8 @@ elif [[ "${1:-}" == "--gui" ]]; then
   shift
 fi
 
-if [[ ! -f "${ISAACLAB_SH}" ]]; then
-  echo "[ERROR] isaaclab.sh 不存在: ${ISAACLAB_SH}" >&2
+if ! command -v "${UV_BIN}" >/dev/null 2>&1; then
+  echo "[ERROR] 未找到 uv: ${UV_BIN}" >&2
   exit 2
 fi
 
@@ -82,7 +82,10 @@ echo "[INFO] ROS_LOCALHOST_ONLY=${ROS_LOCALHOST_ONLY} ROS_AUTOMATIC_DISCOVERY_RA
 echo "[INFO] Logs: ${ISAACLAB_RL_DIR}/logs_run_sim_ros / logs_err_sim_ros"
 
 set +e
-"${ISAACLAB_SH}" -p scripts/sim_ros.py \
+exec_cmd=(
+  "${UV_BIN}" run --project "${IRL_ROOT}" --all-packages --group training python scripts/sim_ros.py
+)
+"${exec_cmd[@]}" \
   "${APP_ARGS[@]}" \
   --task "${TASK}" \
   --usd_path "${USD_PATH}" \

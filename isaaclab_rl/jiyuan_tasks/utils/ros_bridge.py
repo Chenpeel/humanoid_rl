@@ -12,12 +12,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import time
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Mapping, Optional
 
 import numpy as np
 
 from .config_loader import load_default_robot_config, load_robot_config
-from .sim2real import ParallelAnkleMapper
+
+if TYPE_CHECKING:  # pragma: no cover
+    from .sim2real import ParallelAnkleMapper
 
 try:  # pragma: no cover - torch 为可选依赖（用于 Tensor 检查）
     import torch
@@ -107,8 +109,10 @@ def build_ankle_indices(robot_config: Mapping[str, Any]) -> Dict[str, list[int]]
     }
 
 
-def create_parallel_ankle_mapper(robot_config_path: str | Path | None = None) -> ParallelAnkleMapper:
+def create_parallel_ankle_mapper(robot_config_path: str | Path | None = None) -> "ParallelAnkleMapper":
     """根据机器人配置创建并联脚踝映射器。"""
+    from .sim2real import ParallelAnkleMapper
+
     if robot_config_path:
         robot_cfg = load_robot_config(robot_config_path)
     else:

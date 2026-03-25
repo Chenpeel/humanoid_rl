@@ -28,8 +28,10 @@ checkpoints/
 
 # 环境
 .env
+.venv/
 venv/
 env/
+uv.lock
 
 # 临时文件
 *.tmp

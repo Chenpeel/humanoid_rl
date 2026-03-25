@@ -30,7 +30,7 @@ Jiyuan 机器人策略评估脚本
     - 支持确定性/随机策略评估
 
 参考:
-- Isaac Lab CLI: isaaclab.sh -p source/standalone/workflows/rsl_rl/play.py
+- uv CLI: uv run --project .. python scripts/play.py
 """
 
 import argparse

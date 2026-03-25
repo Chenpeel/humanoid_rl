@@ -226,7 +226,7 @@ def _import_omnigraph_core():
     except ModuleNotFoundError as exc:
         raise RuntimeError(
             f"已尝试启用 {enabled_name}，但仍无法导入 omni.graph.core。"
-            "请确认 Isaac Sim 安装完整且使用 isaaclab.sh 启动。"
+            "请确认 Isaac Sim 安装完整，并且已经通过 uv 同步 training 依赖。"
         ) from exc
 
 

@@ -15,7 +15,7 @@ Jiyuan 机器人场景配置
 make convert-usd
 
 # 或者直接使用转换脚本
-dep/IsaacLab/isaaclab.sh -p dep/IsaacLab/scripts/tools/convert_mjcf.py \
+uv run --project . --all-packages --group training python scripts/convert_mjcf.py \
     assets/xmls/models/jiyuan.xml \
     assets/usd/jiyuan/jiyuan.usd \
     --make-instanceable --import-sites
