@@ -1,0 +1,88 @@
+# Unitree H2 机器人配置（规划中）
+# 与 H1 类似，关节数/质量/尺寸略不同
+
+robot:
+  name: h2
+  type: humanoid
+  manufacturer: Unitree
+
+asset:
+  # TODO: 替换为 H2 实际模型路径
+  path: robots/unitree_h2/scene.xml
+  usd_path: robots/unitree_h2/scene.usd
+
+joints:
+  names:
+    # 左腿
+    - left_hip_yaw_joint
+    - left_hip_roll_joint
+    - left_hip_pitch_joint
+    - left_knee_joint
+    - left_ankle_joint
+    # 右腿
+    - right_hip_yaw_joint
+    - right_hip_roll_joint
+    - right_hip_pitch_joint
+    - right_knee_joint
+    - right_ankle_joint
+    # 躯干
+    - torso_joint
+    # 左臂
+    - left_shoulder_pitch_joint
+    - left_shoulder_roll_joint
+    - left_shoulder_yaw_joint
+    - left_elbow_joint
+    # 右臂
+    - right_shoulder_pitch_joint
+    - right_shoulder_roll_joint
+    - right_shoulder_yaw_joint
+    - right_elbow_joint
+
+  default_positions:
+    - 0.0; 0.0; -0.3; 0.6; -0.3  # 左腿
+    - 0.0; 0.0; -0.3; 0.6; -0.3  # 右腿
+    - 0.0                          # torso
+    - 0.0; 0.2; 0.0; -0.5          # 左臂
+    - 0.0; -0.2; 0.0; -0.5         # 右臂
+
+pd:
+  stiffness:
+    - 100; 100; 150; 200; 80   # 左腿
+    - 100; 100; 150; 200; 80   # 右腿
+    - 100                       # torso
+    - 40; 40; 40; 40            # 左臂
+    - 40; 40; 40; 40            # 右臂
+
+  damping:
+    - 5; 5; 8; 10; 4  # 左腿
+    - 5; 5; 8; 10; 4  # 右腿
+    - 5               # torso
+    - 2; 2; 2; 2      # 左臂
+    - 2; 2; 2; 2      # 右臂
+
+physics:
+  total_mass: 65.0
+  base_height: 1.05
+
+rewards:
+  standing:
+    torso_orientation: -5.0
+    torso_height: -10.0
+    joint_acc: -2.5e-7
+    joint_torque: -1e-4
+    joint_pos: -0.5
+    alive: 2.0
+  walking:
+    lin_vel_tracking: 1.0
+    ang_vel_tracking: 0.5
+    torso_orientation: -2.5
+    torso_height: -5.0
+    joint_acc: -2.5e-7
+    alive: 1.0
+  velocity_tracking:
+    lin_vel_tracking: 2.0
+    ang_vel_tracking: 1.0
+    torso_orientation: -2.5
+    joint_acc: -2.5e-7
+    foot_slip: -0.1
+    alive: 0.5

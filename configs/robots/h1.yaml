@@ -1,0 +1,137 @@
+# Unitree H1 机器人配置
+# 通用双足人形机器人，19 自由度（12 腿部 + 7 手臂）
+
+robot:
+  name: h1
+  type: humanoid
+  manufacturer: Unitree
+
+# ---- 模型资产 ----
+asset:
+  # MJCF 文件路径（从仓库根目录）
+  path: robots/unitree_h1/scene.xml
+  # 备选 USD 路径
+  usd_path: robots/unitree_h1/scene.usd
+
+# ---- 关节配置 ----
+joints:
+  # 所有可驱动关节名称（按 Isaac Lab 规范）
+  names:
+    # 左腿
+    - left_hip_yaw_joint
+    - left_hip_roll_joint
+    - left_hip_pitch_joint
+    - left_knee_joint
+    - left_ankle_joint
+    # 右腿
+    - right_hip_yaw_joint
+    - right_hip_roll_joint
+    - right_hip_pitch_joint
+    - right_knee_joint
+    - right_ankle_joint
+    # 躯干
+    - torso_joint
+    # 左臂
+    - left_shoulder_pitch_joint
+    - left_shoulder_roll_joint
+    - left_shoulder_yaw_joint
+    - left_elbow_joint
+    # 右臂
+    - right_shoulder_pitch_joint
+    - right_shoulder_roll_joint
+    - right_shoulder_yaw_joint
+    - right_elbow_joint
+
+  # 默认站立姿态 (rad)
+  default_positions:
+    # 腿：微屈站立
+    - 0.0   # left_hip_yaw
+    - 0.0   # left_hip_roll
+    - -0.3  # left_hip_pitch (微前倾)
+    - 0.6   # left_knee
+    - -0.3  # left_ankle
+    - 0.0   # right_hip_yaw
+    - 0.0   # right_hip_roll
+    - -0.3  # right_hip_pitch
+    - 0.6   # right_knee
+    - -0.3  # right_ankle
+    - 0.0   # torso
+    # 臂：自然下垂
+    - 0.0   # left_shoulder_pitch
+    - 0.2   # left_shoulder_roll
+    - 0.0   # left_shoulder_yaw
+    - -0.5  # left_elbow
+    - 0.0   # right_shoulder_pitch
+    - -0.2  # right_shoulder_roll
+    - 0.0   # right_shoulder_yaw
+    - -0.5  # right_elbow
+
+  # 关节限制 (rad)
+  limits_lower:
+    - -0.8; -0.8; -1.5; -2.0; -0.8  # 左腿
+    - -0.8; -0.8; -1.5; -2.0; -0.8  # 右腿
+    - -0.5                            # torso
+    - -2.0; -1.0; -1.5; -2.0         # 左臂
+    - -2.0; -1.0; -1.5; -2.0         # 右臂
+
+  limits_upper:
+    - 0.8; 0.8; 0.8; 0.0; 0.8  # 左腿
+    - 0.8; 0.8; 0.8; 0.0; 0.8  # 右腿
+    - 0.5                        # torso
+    - 2.0; 1.0; 1.5; 0.0         # 左臂
+    - 2.0; 1.0; 1.5; 0.0         # 右臂
+
+# ---- PD 控制器参数 ----
+pd:
+  stiffness:
+    # 腿: 高刚度
+    - 100; 100; 150; 200; 80  # 左腿
+    - 100; 100; 150; 200; 80  # 右腿
+    - 100                      # torso
+    # 臂: 低刚度 (不影响行走)
+    - 40; 40; 40; 40           # 左臂
+    - 40; 40; 40; 40           # 右臂
+
+  damping:
+    # 腿
+    - 5; 5; 8; 10; 4  # 左腿
+    - 5; 5; 8; 10; 4  # 右腿
+    - 5               # torso
+    # 臂
+    - 2; 2; 2; 2      # 左臂
+    - 2; 2; 2; 2      # 右臂
+
+# ---- 物理参数 ----
+physics:
+  total_mass: 50.0          # kg
+  torso_mass: 20.0          # kg
+  base_height: 1.0          # m (站立时躯干离地高度)
+  foot_radius: 0.05         # m (足部接触球半径)
+
+# ---- 奖励权重 (按任务覆盖) ----
+rewards:
+  standing:
+    torso_orientation: -5.0
+    torso_height: -10.0
+    joint_acc: -2.5e-7
+    joint_torque: -1e-4
+    joint_pos: -0.5
+    alive: 2.0
+
+  walking:
+    lin_vel_tracking: 1.0
+    ang_vel_tracking: 0.5
+    torso_orientation: -2.5
+    torso_height: -5.0
+    joint_acc: -2.5e-7
+    joint_torque: -1e-5
+    alive: 1.0
+
+  velocity_tracking:
+    lin_vel_tracking: 2.0
+    ang_vel_tracking: 1.0
+    torso_orientation: -2.5
+    joint_acc: -2.5e-7
+    joint_torque: -1e-5
+    foot_slip: -0.1
+    alive: 0.5
