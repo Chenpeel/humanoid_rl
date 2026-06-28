@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from rsl_rl.modules import ActorCritic, EmpiricalNormalization
 
 
 class PPOCfg:
@@ -55,4 +54,4 @@ class PPOCfg:
     # ---- 观测归一化 ----
     normalize_observations: bool = True
     normalize_values: bool = True
-    observation_normalization: EmpiricalNormalization | None = None
+    observation_normalization: object | None = None

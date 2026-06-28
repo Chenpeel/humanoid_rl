@@ -5,7 +5,7 @@
 .PHONY: help install verify train play clean train-smoke
 
 # Python 版本（与 .python-version 保持一致）
-PYTHON := python3.10
+PYTHON := $(shell test -f .venv/bin/python && echo .venv/bin/python || which python3)
 
 # ==============================================================================
 # 帮助
