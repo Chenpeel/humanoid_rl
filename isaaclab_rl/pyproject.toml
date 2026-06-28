@@ -7,7 +7,7 @@ name = "isaaclab-biped-rl"
 version = "0.3.0"
 description = "机器人强化学习训练框架（基于 Isaac Lab + RSL_RL）"
 readme = "README.md"
-requires-python = ">=3.10,<3.12"
+requires-python = ">=3.11,<3.12"
 license = {text = "MIT"}
 authors = [
     {name = "Chenpeel", email = "chenpeel@foxmail.com"}
@@ -19,7 +19,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Scientific/Engineering :: Robotics",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
 
@@ -52,7 +51,18 @@ vis = [
 
 # 模仿学习
 imitation = [
-    "bvh>=0.4.0",
+    "bvh>=0.3",
+]
+
+# Isaac Lab / RSL_RL 训练运行时
+# 通过 uv 从 PyPI / NVIDIA 索引安装。
+training = [
+    "torch==2.7.0",
+    "torchvision==0.22.0",
+    "isaacsim[all,extscache]==5.1.0",
+    "isaacsim-core==5.1.0.0",
+    "isaaclab[isaacsim,all]==2.3.2.post1",
+    "rsl-rl-lib==3.0.1",
 ]
 
 # 所有可选依赖
@@ -80,7 +90,7 @@ Issues = "https://github.com/chenpeel/biped-rl/issues"
 # Black 配置
 [tool.black]
 line-length = 120
-target-version = ["py310", "py311", "py312"]
+target-version = ["py311"]
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -120,7 +130,7 @@ addopts = "-v --cov=jiyuan_tasks --cov=agents --cov-report=term-missing --cov-re
 
 # mypy 配置
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false

@@ -9,24 +9,37 @@
 #   make play-video         - 录制策略视频
 #
 # 环境配置:
-#   make submodule-update   - 初始化并更新git子模块
-#   make install            - 安装项目（开发模式）
+#   make install            - 自动同步环境（Linux: dev + training；其他平台: dev）
 # ==============================================================================
 
-# Isaac Lab 路径配置
-ISAACLAB_PATH ?= dep/IsaacLab
-ISAACLAB_PYTHON = $(ISAACLAB_PATH)/isaaclab.sh -p
-
 # 运行模式
-# - RUNNER=isaaclab: 使用 Isaac Lab 管理的 Python（默认，训练/评估推荐）
-# - RUNNER=uv: 使用 uv 的虚拟环境（适合 format/lint/纯 Python 单测；训练需你自行安装 Isaac 依赖）
-RUNNER ?= isaaclab
+# - RUNNER=uv: 使用根目录 uv workspace 的 .venv（唯一支持的运行方式）
+RUNNER ?= uv
 UV ?= uv
-UV_PROJECT ?= isaaclab_rl
-# Isaac Sim pip 安装配置
-ISAACSIM_VERSION ?= 5.1.0
-ISAACSIM_EXTRAS ?= all,extscache
-ISAACSIM_INDEX ?= https://pypi.nvidia.com
+UV_PROJECT ?= .
+UV_SYNC_FLAGS ?= --project $(UV_PROJECT) --all-packages
+UV_RUN_GROUPS ?=
+UV_TRAINING_GROUPS = --group training
+HOST_OS := $(shell uname -s)
+HOST_ARCH := $(shell uname -m)
+TRAINING_PLATFORM_SUPPORTED := 0
+ifeq ($(HOST_OS),Linux)
+ifeq ($(HOST_ARCH),x86_64)
+TRAINING_PLATFORM_SUPPORTED := 1
+endif
+ifeq ($(HOST_ARCH),aarch64)
+TRAINING_PLATFORM_SUPPORTED := 1
+endif
+endif
+ifeq ($(TRAINING_PLATFORM_SUPPORTED),1)
+INSTALL_GROUPS := --group dev --group training
+INSTALL_LABEL := 完整训练环境（dev + training）
+INSTALL_NOTE :=
+else
+INSTALL_GROUPS := --group dev
+INSTALL_LABEL := 开发环境（dev）
+INSTALL_NOTE := 当前平台 $(HOST_OS)/$(HOST_ARCH) 不提供 Isaac Lab 官方 wheel，install 自动跳过 training 组。
+endif
 
 # Isaac Sim AppLauncher 常用参数
 # HEADLESS=1 时自动追加 --headless（云服务器/无显示环境推荐）
@@ -37,41 +50,21 @@ ifeq ($(HEADLESS),1)
 APP_ARGS += --headless
 endif
 APP_ARGS += --device $(DEVICE)
-
-ifeq ($(RUNNER),uv)
-PYTHON_RUN = $(UV) run --project $(UV_PROJECT) python
-else
-PYTHON_RUN = $(ISAACLAB_PYTHON)
-endif
-
-# 选择 pip 安装器：优先使用已激活的 uv venv，其次按 RUNNER
-UV_VENV := $(shell test -n "$$VIRTUAL_ENV" && test -f "$$VIRTUAL_ENV/pyvenv.cfg" && grep -q "uv" "$$VIRTUAL_ENV/pyvenv.cfg" && echo 1)
-ifeq ($(UV_VENV),1)
-PIP_RUN = $(UV) pip
-PIP_CHECK = check-uv
-PIP_NOTE = uv
-else ifeq ($(RUNNER),uv)
-PIP_RUN = $(UV) pip
-PIP_CHECK = check-uv
-PIP_NOTE = uv
-else
-PIP_RUN = $(ISAACLAB_PYTHON) -m pip
-PIP_CHECK = check-isaaclab
-PIP_NOTE = isaaclab
-endif
+PYTHON_RUN = $(UV) run --project $(UV_PROJECT) --all-packages $(UV_RUN_GROUPS) python
 
 # AutoDL 云服务器平台专用配置
 export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
 export CARB_LOG_LEVEL=ERROR
 export TERM=xterm
 
-.PHONY: help install install-dev install-vis install-all clean clean-logs verify install-isaacsim
-.PHONY: submodule-init submodule-update submodule-status submodule-update-remote
-.PHONY: check-env check-isaaclab check-uv check-runner convert-usd
+.PHONY: help install clean clean-logs verify
+.PHONY: check-env check-uv check-runner check-train-runner check-train-platform convert-usd
 .PHONY: train train-curriculum train-standing train-flat train-walking train-rough
 .PHONY: train-smoke
 .PHONY: play play-velocity play-standing play-walking play-video play-video-velocity play-video-standing
-.PHONY: uv-sync uv-run
+.PHONY: uv-run
+
+convert-usd train-smoke train-curriculum train-standing train-flat train-walking train-rough play-velocity play-standing play-walking play-video-velocity play-video-standing play-video-walking: UV_RUN_GROUPS = $(UV_TRAINING_GROUPS)
 
 # 默认目标
 help:
@@ -104,8 +97,7 @@ help:
 	@echo "🔧 环境与安装"
 	@echo "==================================================================="
 	@echo ""
-	@echo "  make submodule-update        - 更新所有子模块"
-	@echo "  make install                 - 安装 RL 环境"
+	@echo "  make install                 - 自动同步环境（Linux: dev + training；其他平台: dev）"
 	@echo "  make convert-usd XML=<path>  - 转换模型并在同级生成 USD"
 	@echo "  make visualize-mjcf          - 可视化 MJCF"
 	@echo "                                参数: XML=<路径> AUTORELOAD=0/1 MODE=sim/launch GRAVITY=0/1 NO_INTERACTIVE=1 RENDER_CPU=1"
@@ -113,11 +105,8 @@ help:
 	@echo ""
 
 # ==============================================================================
-# 子模块与安装
+# 安装与检查
 # ==============================================================================
-
-check-isaaclab:
-	@test -x $(ISAACLAB_PATH)/isaaclab.sh || (echo "Error: 找不到 $(ISAACLAB_PATH)/isaaclab.sh，请先初始化子模块或修正 ISAACLAB_PATH"; exit 1)
 
 check-uv:
 	@command -v $(UV) >/dev/null 2>&1 || (echo "Error: 未找到 uv（请先安装 uv 或设置 UV=...）"; exit 1)
@@ -126,57 +115,32 @@ check-runner:
 ifeq ($(RUNNER),uv)
 	@$(MAKE) check-uv
 else
-	@$(MAKE) check-isaaclab
+	@echo "Error: dep/ 已移除，当前仓库仅支持 RUNNER=uv"
+	@exit 1
 endif
 
-submodule-init:
-	@git submodule update --init --recursive
+check-train-platform:
+ifeq ($(TRAINING_PLATFORM_SUPPORTED),1)
+	@true
+else
+	@echo "Error: 当前平台 $(HOST_OS)/$(HOST_ARCH) 不支持 Isaac Lab 训练运行时。"
+	@echo "       make install 已自动退化为 dev 环境；训练/评估/convert-usd 需在 Linux x86_64 或 Linux aarch64 上运行。"
+	@exit 1
+endif
 
-submodule-update: submodule-init
-	@echo "✓ 子模块已更新"
+check-train-runner: check-runner check-train-platform
 
-submodule-status:
-	@git submodule status --recursive
-
-submodule-update-remote:
-	@git submodule update --remote --merge --recursive
-
-install: install-isaacsim
-	@echo "安装项目（开发模式，使用 $(PIP_NOTE) 安装）..."
-	$(PIP_RUN) install -e "isaaclab_rl"
+install: check-uv
+	@echo "使用 uv 同步 $(INSTALL_LABEL)..."
+	@if [ -n "$(INSTALL_NOTE)" ]; then echo "$(INSTALL_NOTE)"; fi
+	$(UV) sync $(UV_SYNC_FLAGS) $(INSTALL_GROUPS)
 	@echo "✓ 安装完成"
-
-install-dev: install-isaacsim
-	@echo "安装项目（含 dev 依赖，使用 $(PIP_NOTE) 安装）..."
-	$(PIP_RUN) install -e "isaaclab_rl[dev]"
-	@echo "✓ 安装完成"
-
-install-vis: install-isaacsim
-	@echo "安装项目（含 vis 依赖，使用 $(PIP_NOTE) 安装）..."
-	$(PIP_RUN) install -e "isaaclab_rl[vis]"
-	@echo "✓ 安装完成"
-
-install-all: install-isaacsim
-	@echo "安装项目（含 all 依赖，使用 $(PIP_NOTE) 安装）..."
-	$(PIP_RUN) install -e "isaaclab_rl[all]"
-	@echo "✓ 安装完成"
-
-install-isaacsim: $(PIP_CHECK)
-	@echo "安装 Isaac Sim $(ISAACSIM_VERSION)（使用 $(PIP_NOTE) 安装）..."
-	$(PIP_RUN) install "isaacsim[$(ISAACSIM_EXTRAS)]==$(ISAACSIM_VERSION)" --extra-index-url $(ISAACSIM_INDEX)
-	@echo "✓ Isaac Sim 安装完成"
-
-uv-sync:
-	@echo "使用 uv 同步 $(UV_PROJECT) 依赖（仅管理纯 Python 依赖/工具）..."
-	@$(MAKE) check-uv
-	$(UV) sync --project $(UV_PROJECT) --all-extras
-	@echo "✓ uv 同步完成"
 
 uv-run:
 	@echo "示例：make uv-run CMD=\"python -m black isaaclab_rl\""
 	@$(MAKE) check-uv
 	@if [ -z "$(CMD)" ]; then echo "Error: 需要提供 CMD=..."; exit 1; fi
-	$(UV) run --project $(UV_PROJECT) $(CMD)
+	$(UV) run --project $(UV_PROJECT) --all-packages $(UV_RUN_GROUPS) $(CMD)
 
 # ==============================================================================
 # MJCF 可视化
@@ -205,8 +169,9 @@ visualize-mjcf:
 # ==============================================================================
 
 XML ?=
+CONVERT_MJCF_SCRIPT ?= scripts/convert_mjcf.py
 
-convert-usd: check-isaaclab
+convert-usd: check-train-runner
 	@{ \
 		set -e; \
 		test -n "$(XML)" || (echo "Error: 请提供 XML 路径，例如: make convert-usd XML=robots/gaoda_jiyuan/scene.xml"; exit 1); \
@@ -216,7 +181,7 @@ convert-usd: check-isaaclab
 		echo "  输入: $(XML)"; \
 		echo "  输出: $$USD_OUT"; \
 		mkdir -p "$$(dirname "$$USD_OUT")"; \
-		$(ISAACLAB_PYTHON) dep/IsaacLab/scripts/tools/convert_mjcf.py "$(XML)" "$$USD_OUT" --import-sites; \
+		$(PYTHON_RUN) $(CONVERT_MJCF_SCRIPT) "$(XML)" "$$USD_OUT" --import-sites; \
 		echo "✓ 转换完成: $$USD_OUT"; \
 	}
 
@@ -235,7 +200,7 @@ train: train-standing train-flat train-walking train-rough
 #   make train-smoke NUM_ENVS=256 ITERS=200
 NUM_ENVS_SMOKE ?= 128
 ITERS_SMOKE ?= 50
-train-smoke: check-isaaclab
+train-smoke: check-train-runner
 	@echo ">>> [SMOKE] 低资源快速验证 (NUM_ENVS=$(NUM_ENVS_SMOKE), ITERS=$(ITERS_SMOKE))..."
 	$(PYTHON_RUN) isaaclab_rl/scripts/train.py $(APP_ARGS) \
 		--config isaaclab_rl/configs/train_config.yaml \
@@ -243,7 +208,7 @@ train-smoke: check-isaaclab
 		--max_iterations $(ITERS_SMOKE) $(ARGS)
 
 # 全自动课程学习
-train-curriculum: check-isaaclab
+train-curriculum: check-train-runner
 	@echo ">>> [全自动课程学习] 开始训练..."
 	$(PYTHON_RUN) isaaclab_rl/scripts/train.py $(APP_ARGS) \
 		--config isaaclab_rl/configs/train_config.yaml \
@@ -252,14 +217,14 @@ train-curriculum: check-isaaclab
 
 # -- 各阶段任务 --
 
-train-standing: check-isaaclab
+train-standing: check-train-runner
 	@echo ">>> [Stage 1: 站立平衡] 开始训练 (2000 iterations)..."
 	$(PYTHON_RUN) isaaclab_rl/scripts/train.py $(APP_ARGS) \
 		--config isaaclab_rl/configs/train_config.yaml \
 		--task standing \
 		--max_iterations 2000 $(ARGS)
 
-train-flat: check-isaaclab
+train-flat: check-train-runner
 	@echo ">>> [Stage 2: 平坦地形] 加载站立权重并训练 (5000 iterations)..."
 	@LATEST_STANDING=$$(ls -td logs/jiyuan_standing/*/ 2>/dev/null | head -1 | xargs -I {} basename {}); \
 	if [ -z "$$LATEST_STANDING" ]; then echo "Error: 未找到站立训练记录"; exit 1; fi; \
@@ -269,7 +234,7 @@ train-flat: check-isaaclab
 		--max_iterations 5000 \
 		--resume --load_run jiyuan_standing/$$LATEST_STANDING $(ARGS)
 
-train-walking: check-isaaclab
+train-walking: check-train-runner
 	@echo ">>> [Stage 3: 正常行走] 加载平坦地形权重并训练 (10000 iterations)..."
 	@LATEST_VEL=$$(ls -td logs/jiyuan_velocity_tracking/*/ 2>/dev/null | head -1 | xargs -I {} basename {}); \
 	if [ -z "$$LATEST_VEL" ]; then echo "Error: 未找到平坦地形训练记录"; exit 1; fi; \
@@ -279,7 +244,7 @@ train-walking: check-isaaclab
 		--max_iterations 10000 \
 		--resume --load_run jiyuan_velocity_tracking/$$LATEST_VEL $(ARGS)
 
-train-rough: check-isaaclab
+train-rough: check-train-runner
 	@echo ">>> [Stage 4: 粗糙地形] 加载行走权重并训练 (30000 iterations)..."
 	@LATEST_VEL=$$(ls -td logs/jiyuan_velocity_tracking/*/ 2>/dev/null | head -1 | xargs -I {} basename {}); \
 	if [ -z "$$LATEST_VEL" ]; then echo "Error: 未找到行走训练记录"; exit 1; fi; \
@@ -302,7 +267,7 @@ NUM_ENVS ?= 1
 play: play-velocity
 
 # 评估速度跟踪策略
-play-velocity: check-isaaclab
+play-velocity: check-train-runner
 	@echo "评估速度跟踪策略（GUI 可视化）..."
 	@if [ -n "$(CHECKPOINT)" ]; then \
 		echo "使用指定检查点: $(CHECKPOINT)"; \
@@ -318,7 +283,7 @@ play-velocity: check-isaaclab
 	fi
 
 # 评估站立平衡策略
-play-standing: check-isaaclab
+play-standing: check-train-runner
 	@echo "评估站立平衡策略（GUI 可视化）..."
 	@if [ -n "$(CHECKPOINT)" ]; then \
 		echo "使用指定检查点: $(CHECKPOINT)"; \
@@ -334,7 +299,7 @@ play-standing: check-isaaclab
 	fi
 
 # 评估行走步态策略
-play-walking: check-isaaclab
+play-walking: check-train-runner
 	@echo "评估行走步态策略（GUI 可视化）..."
 	@if [ -n "$(CHECKPOINT)" ]; then \
 		echo "使用指定检查点: $(CHECKPOINT)"; \
@@ -353,7 +318,7 @@ play-walking: check-isaaclab
 play-video: play-video-velocity
 
 # 录制速度跟踪视频
-play-video-velocity: check-isaaclab
+play-video-velocity: check-train-runner
 	@echo "录制速度跟踪视频（$(VIDEO_LENGTH) 步）..."
 	@if [ -n "$(CHECKPOINT)" ]; then \
 		echo "使用指定检查点: $(CHECKPOINT)"; \
@@ -372,7 +337,7 @@ play-video-velocity: check-isaaclab
 	@echo "✓ 视频录制完成！查看 logs/<实验名>/<运行ID>/videos/play/"
 
 # 录制站立平衡视频
-play-video-standing: check-isaaclab
+play-video-standing: check-train-runner
 	@echo "录制站立平衡视频（$(VIDEO_LENGTH) 步）..."
 	@if [ -n "$(CHECKPOINT)" ]; then \
 		echo "使用指定检查点: $(CHECKPOINT)"; \
@@ -391,7 +356,7 @@ play-video-standing: check-isaaclab
 	@echo "✓ 视频录制完成！查看 logs/<实验名>/<运行ID>/videos/play/"
 
 # 录制行走步态视频
-play-video-walking: check-isaaclab
+play-video-walking: check-train-runner
 	@echo "录制行走步态视频（$(VIDEO_LENGTH) 步）..."
 	@if [ -n "$(CHECKPOINT)" ]; then \
 		echo "使用指定检查点: $(CHECKPOINT)"; \
@@ -414,13 +379,17 @@ play-video-walking: check-isaaclab
 # 验证目标
 # ==============================================================================
 
-verify: check-isaaclab
+verify: check-runner
 	@echo "验证安装..."
-	@$(ISAACLAB_PYTHON) -c "import yaml; print('✓ PyYAML 可用')" || echo "✗ PyYAML 未安装"
-	@$(ISAACLAB_PYTHON) -c "import tensorboard; print('✓ TensorBoard 可用')" || echo "✗ TensorBoard 未安装"
-	@$(ISAACLAB_PYTHON) -c "import omni.isaac.lab; print('✓ Isaac Lab 可用')" || echo "✗ Isaac Lab 未安装"
-	@$(ISAACLAB_PYTHON) -c "import rsl_rl; print('✓ RSL_RL 可用')" || echo "✗ RSL_RL 未安装"
-	@$(ISAACLAB_PYTHON) -c "from jiyuan_tasks import *; print('✓ jiyuan_tasks 模块可用')" || echo "✗ jiyuan_tasks 模块未安装"
+	@$(PYTHON_RUN) -c "import yaml; print('✓ PyYAML 可用')" || echo "✗ PyYAML 未安装"
+	@$(PYTHON_RUN) -c "import tensorboard; print('✓ TensorBoard 可用')" || echo "✗ TensorBoard 未安装"
+ifeq ($(TRAINING_PLATFORM_SUPPORTED),1)
+	@$(UV) run --project $(UV_PROJECT) --all-packages $(UV_TRAINING_GROUPS) python -c "import isaaclab; print('✓ Isaac Lab 可用')" || echo "✗ Isaac Lab 未安装"
+	@$(UV) run --project $(UV_PROJECT) --all-packages $(UV_TRAINING_GROUPS) python -c "import rsl_rl; print('✓ RSL_RL 可用')" || echo "✗ RSL_RL 未安装"
+	@$(UV) run --project $(UV_PROJECT) --all-packages $(UV_TRAINING_GROUPS) python -c "from jiyuan_tasks import *; print('✓ jiyuan_tasks 模块可用')" || echo "✗ jiyuan_tasks 模块未安装"
+else
+	@echo "ℹ 当前平台 $(HOST_OS)/$(HOST_ARCH) 仅验证 dev 环境；training 运行时未安装，这是预期行为。"
+endif
 	@echo ""
 	@echo "如果所有检查都通过，安装成功！"
 
@@ -451,11 +420,11 @@ clean-logs:
 # 格式化代码（需要安装 dev 依赖）
 format: check-runner
 	@echo "格式化代码..."
-	$(PYTHON_RUN) -m black isaaclab_rl/jiyuan_tasks/ isaaclab_rl/scripts/ --line-length 120
+	$(PYTHON_RUN) -m black --config isaaclab_rl/pyproject.toml isaaclab_rl/jiyuan_tasks/ isaaclab_rl/scripts/
 	@echo "✓ 代码格式化完成！"
 
 # 运行测试（需要安装 dev 依赖）
 test: check-runner
 	@echo "运行测试..."
-	PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 $(PYTHON_RUN) -m pytest -p pytest_cov isaaclab_rl/tests/ -v
+	PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 $(PYTHON_RUN) -m pytest -c isaaclab_rl/pyproject.toml -p pytest_cov isaaclab_rl/tests/ -v
 	@echo "✓ 测试完成！"

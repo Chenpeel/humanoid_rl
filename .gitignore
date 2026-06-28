@@ -28,8 +28,10 @@ checkpoints/
 
 # 环境
 .env
+.venv/
 venv/
 env/
+uv.lock
 
 # 临时文件
 *.tmp
@@ -52,3 +54,5 @@ AGENTS.md
 .tmp
 
 tmp
+isaaclab_rl/logs_err_sim_ros
+isaaclab_rl/logs_run_sim_ros

@@ -21,7 +21,7 @@
     - Isaac Lab >= 1.2.0（需要先安装 Isaac Sim 2024.1.1+）
     - RSL_RL >= 1.0.2（从 GitHub 安装）
     - PyTorch >= 2.0.0
-    - Python >= 3.10, < 3.13
+    - Python >= 3.11, < 3.12
 """
 
 from pathlib import Path
@@ -93,7 +93,7 @@ setup(
 
     # 包配置
     packages=find_packages(exclude=["tests", "tests.*", "scripts", "docs", "logs", "configs", "assets"]),
-    python_requires=">=3.10,<3.13",  # Isaac Lab 要求
+    python_requires=">=3.11,<3.12",  # Isaac Lab 包发行版要求 Python 3.11
 
     # 依赖
     install_requires=INSTALL_REQUIRES,
@@ -125,9 +125,7 @@ setup(
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "Topic :: Scientific/Engineering :: Robotics",
         "License :: OSI Approved :: MIT License",
-        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
     ],
 
     # 许可证

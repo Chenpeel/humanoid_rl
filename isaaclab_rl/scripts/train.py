@@ -37,7 +37,7 @@
     python scripts/train.py --config configs/train_config.yaml --resume --load_run run_20250122_143000
 
 参考:
-- Isaac Lab CLI: isaaclab.sh -p source/standalone/workflows/rsl_rl/train.py
+- uv CLI: uv run --project .. python scripts/train.py
 - RSL_RL: https://github.com/leggedrobotics/rsl_rl
 """
 

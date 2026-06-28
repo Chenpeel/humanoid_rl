@@ -1,0 +1,30 @@
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.workspace]
+members = ["isaaclab_rl"]
+
+[tool.uv.sources]
+"isaaclab-biped-rl" = { workspace = true }
+torch = { index = "pytorch" }
+torchvision = { index = "pytorch" }
+isaacsim = { index = "nvidia" }
+isaacsim-core = { index = "nvidia" }
+isaaclab = { index = "nvidia" }
+
+[dependency-groups]
+dev = ["isaaclab-biped-rl[dev]"]
+vis = ["isaaclab-biped-rl[vis]"]
+imitation = ["isaaclab-biped-rl[imitation]"]
+training = ["isaaclab-biped-rl[training]"]
+all = ["isaaclab-biped-rl[all]"]
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "nvidia"
+url = "https://pypi.nvidia.com"
+explicit = true

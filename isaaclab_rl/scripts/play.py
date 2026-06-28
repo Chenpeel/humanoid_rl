@@ -30,7 +30,7 @@ Jiyuan 机器人策略评估脚本
     - 支持确定性/随机策略评估
 
 参考:
-- Isaac Lab CLI: isaaclab.sh -p source/standalone/workflows/rsl_rl/play.py
+- uv CLI: uv run --project .. python scripts/play.py
 """
 
 import argparse
@@ -38,7 +38,6 @@ import glob
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 # 添加项目根目录到 Python 路径
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -177,54 +176,6 @@ def parse_args():
         help="视频保存路径 (默认: videos)",
     )
 
-    parser.add_argument(
-        "--ros_bridge",
-        action="store_true",
-        help="启用 Isaac->ROS 舵机桥接（发布 ServoCommand，订阅 ServoState）",
-    )
-
-    parser.add_argument(
-        "--ros_node_name",
-        type=str,
-        default="isaac_ros_bridge",
-        help="ROS 桥接节点名 (默认: isaac_ros_bridge)",
-    )
-
-    parser.add_argument(
-        "--ros_command_topic",
-        type=str,
-        default="/sim/servo_command",
-        help="ROS 命令话题 (默认: /sim/servo_command)",
-    )
-
-    parser.add_argument(
-        "--ros_state_topic",
-        type=str,
-        default="/sim/servo_state",
-        help="ROS 状态话题 (默认: /sim/servo_state)",
-    )
-
-    parser.add_argument(
-        "--ros_speed",
-        type=int,
-        default=100,
-        help="发布舵机命令速度字段（毫秒）(默认: 100)",
-    )
-
-    parser.add_argument(
-        "--ros_publish_every",
-        type=int,
-        default=1,
-        help="每 N 个仿真步发布一次舵机命令（>=1）(默认: 1)",
-    )
-
-    parser.add_argument(
-        "--robot_config",
-        type=str,
-        default="",
-        help="ROS 桥接映射使用的机器人配置文件路径（为空时使用默认 robot_config.yaml）",
-    )
-
     args = parser.parse_args()
     return args
 
@@ -268,13 +219,7 @@ def find_latest_checkpoint(log_dir: str, task: str) -> str:
     return latest_checkpoint
 
 
-def evaluate_policy(
-    env: ManagerBasedRLEnv,
-    runner: OnPolicyRunner,
-    args,
-    ros_bridge: Any | None = None,
-    ankle_mapper: Any | None = None,
-):
+def evaluate_policy(env: ManagerBasedRLEnv, runner: OnPolicyRunner, args):
     """评估策略性能
 
     Args:
@@ -300,14 +245,9 @@ def evaluate_policy(
 
     num_completed_episodes = 0
     step_count = 0
-    ros_publish_failures = 0
 
     print(f"\n[INFO] 开始评估，目标 episode 数: {args.num_episodes}")
     print(f"[INFO] 确定性策略: {args.deterministic}")
-    if ros_bridge is not None:
-        print(f"[INFO] ROS 桥接: 启用（topic: {args.ros_command_topic} -> {args.ros_state_topic}）")
-        if env.num_envs > 1:
-            print(f"[WARN] ROS 桥接仅发送 env[0] 动作，当前 num_envs={env.num_envs}")
 
     # 如果录制视频，限制步数
     if args.video:
@@ -326,20 +266,6 @@ def evaluate_policy(
         # 获取动作
         with torch.no_grad():
             actions = policy(obs, deterministic=args.deterministic)
-
-        if ros_bridge is not None and ankle_mapper is not None:
-            if max(1, int(args.ros_publish_every)) > 0 and step_count % max(1, int(args.ros_publish_every)) == 0:
-                try:
-                    ros_bridge.publish_action(
-                        action=actions[0],
-                        mapper=ankle_mapper,
-                        speed_override=int(args.ros_speed),
-                    )
-                except Exception as exc:
-                    ros_publish_failures += 1
-                    if ros_publish_failures <= 3 or ros_publish_failures % 50 == 0:
-                        print(f"[WARN] ROS 命令发布失败(step={step_count}): {exc}")
-            ros_bridge.spin_once(timeout_sec=0.0)
 
         # 执行动作
         obs, rewards, terminated, truncated, _ = env.step(actions)
@@ -377,7 +303,6 @@ def evaluate_policy(
             "max_reward": episode_rewards.max().item(),
             "mean_length": episode_lengths.mean().item(),
             "total_steps": step_count,
-            "ros_publish_failures": ros_publish_failures,
         }
     else:
         # 视频模式可能没有完成的 episode
@@ -388,7 +313,6 @@ def evaluate_policy(
             "max_reward": 0.0,
             "mean_length": 0.0,
             "total_steps": step_count,
-            "ros_publish_failures": ros_publish_failures,
         }
 
     return stats
@@ -419,110 +343,85 @@ def main():
 
     print(f"\n[INFO] 加载检查点: {checkpoint_path}")
 
-    env = None
-    ros_bridge = None
+    # 创建环境
+    print(f"\n[INFO] 创建环境: {TASK_ENV_MAP[args.task]}")
 
-    try:
-        # 创建环境
-        print(f"\n[INFO] 创建环境: {TASK_ENV_MAP[args.task]}")
+    # 如果需要录制视频，设置 render_mode
+    render_mode = "rgb_array" if args.video else None
 
-        # 如果需要录制视频，设置 render_mode
-        render_mode = "rgb_array" if args.video else None
+    env = gym.make(
+        TASK_ENV_MAP[args.task],
+        num_envs=args.num_envs,
+        headless=False,  # 评估时始终显示 GUI
+        render_mode=render_mode,
+    )
 
-        env = gym.make(
-            TASK_ENV_MAP[args.task],
-            num_envs=args.num_envs,
-            headless=False,  # 评估时始终显示 GUI
-            render_mode=render_mode,
-        )
+    # 如果需要录制视频，包装环境
+    if args.video:
+        log_dir = os.path.dirname(checkpoint_path)
+        video_folder = os.path.join(log_dir, "videos", "play")
+        os.makedirs(video_folder, exist_ok=True)
 
-        # 如果需要录制视频，包装环境
-        if args.video:
-            log_dir = os.path.dirname(checkpoint_path)
-            video_folder = os.path.join(log_dir, "videos", "play")
-            os.makedirs(video_folder, exist_ok=True)
+        video_kwargs = {
+            "video_folder": video_folder,
+            "step_trigger": lambda step: step == 0,  # 从第一步开始录制
+            "video_length": args.video_length,
+            "disable_logger": True,
+        }
 
-            video_kwargs = {
-                "video_folder": video_folder,
-                "step_trigger": lambda step: step == 0,  # 从第一步开始录制
-                "video_length": args.video_length,
-                "disable_logger": True,
-            }
+        print(f"\n[INFO] 启用视频录制")
+        print(f"  - 视频保存路径: {video_folder}")
+        print(f"  - 视频长度: {args.video_length} 步")
 
-            print(f"\n[INFO] 启用视频录制")
-            print(f"  - 视频保存路径: {video_folder}")
-            print(f"  - 视频长度: {args.video_length} 步")
+        env = gym.wrappers.RecordVideo(env, **video_kwargs)
 
-            env = gym.wrappers.RecordVideo(env, **video_kwargs)
+    print(f"[INFO] 环境创建成功")
+    print(f"  - 观测空间: {env.observation_space}")
+    print(f"  - 动作空间: {env.action_space}")
+    print(f"  - 并行环境数: {env.num_envs}")
 
-        print(f"[INFO] 环境创建成功")
-        print(f"  - 观测空间: {env.observation_space}")
-        print(f"  - 动作空间: {env.action_space}")
-        print(f"  - 并行环境数: {env.num_envs}")
+    # 获取 PPO 配置
+    ppo_cfg = TASK_PPO_CFG_MAP[args.task]
 
-        # 获取 PPO 配置
-        ppo_cfg = TASK_PPO_CFG_MAP[args.task]
+    # 创建训练器（用于加载策略）
+    print(f"\n[INFO] 创建 RSL_RL 训练器")
+    runner = OnPolicyRunner(env, ppo_cfg, log_dir=None, device=args.device)
 
-        # 创建训练器（用于加载策略）
-        print(f"\n[INFO] 创建 RSL_RL 训练器")
-        runner = OnPolicyRunner(env, ppo_cfg, log_dir=None, device=args.device)
+    # 加载检查点
+    print(f"[INFO] 加载策略权重")
+    runner.load(checkpoint_path)
 
-        # 加载检查点
-        print(f"[INFO] 加载策略权重")
-        runner.load(checkpoint_path)
+    # 评估策略
+    print("\n" + "=" * 80)
+    print("评估策略")
+    print("=" * 80)
 
-        ankle_mapper = None
-        if args.ros_bridge:
-            from jiyuan_tasks.utils.ros_bridge import IsaacServoRosBridge, create_parallel_ankle_mapper
+    stats = evaluate_policy(env, runner, args)
 
-            print(f"\n[INFO] 初始化 ROS 桥接")
-            ros_bridge = IsaacServoRosBridge(
-                node_name=args.ros_node_name,
-                command_topic=args.ros_command_topic,
-                state_topic=args.ros_state_topic,
-                default_speed=args.ros_speed,
-                auto_start=True,
-            )
-            ankle_mapper = create_parallel_ankle_mapper(robot_config_path=args.robot_config or None)
+    # 打印统计信息
+    print("\n" + "=" * 80)
+    print("评估结果")
+    print("=" * 80)
 
-            if getattr(ankle_mapper, "solver", None) is None:
-                print("[WARN] 未检测到 ROS 运动学求解器，当前不会发布并联脚踝舵机命令")
+    if args.video:
+        print(f"视频录制完成！")
+        log_dir = os.path.dirname(checkpoint_path)
+        video_folder = os.path.join(log_dir, "videos", "play")
+        print(f"视频保存路径: {video_folder}")
+        print(f"录制步数: {stats['total_steps']}")
+    else:
+        print(f"Episode 数量: {args.num_episodes}")
+        print(f"平均奖励: {stats['mean_reward']:.2f} ± {stats['std_reward']:.2f}")
+        print(f"奖励范围: [{stats['min_reward']:.2f}, {stats['max_reward']:.2f}]")
+        print(f"平均 episode 长度: {stats['mean_length']:.1f}")
+        print(f"总步数: {stats['total_steps']}")
 
-        # 评估策略
-        print("\n" + "=" * 80)
-        print("评估策略")
-        print("=" * 80)
+    print("=" * 80)
 
-        stats = evaluate_policy(env, runner, args, ros_bridge=ros_bridge, ankle_mapper=ankle_mapper)
+    # 关闭环境
+    env.close()
 
-        # 打印统计信息
-        print("\n" + "=" * 80)
-        print("评估结果")
-        print("=" * 80)
-
-        if args.video:
-            print(f"视频录制完成！")
-            log_dir = os.path.dirname(checkpoint_path)
-            video_folder = os.path.join(log_dir, "videos", "play")
-            print(f"视频保存路径: {video_folder}")
-            print(f"录制步数: {stats['total_steps']}")
-        else:
-            print(f"Episode 数量: {args.num_episodes}")
-            print(f"平均奖励: {stats['mean_reward']:.2f} ± {stats['std_reward']:.2f}")
-            print(f"奖励范围: [{stats['min_reward']:.2f}, {stats['max_reward']:.2f}]")
-            print(f"平均 episode 长度: {stats['mean_length']:.1f}")
-            print(f"总步数: {stats['total_steps']}")
-
-        if args.ros_bridge:
-            print(f"ROS 发布失败次数: {stats['ros_publish_failures']}")
-
-        print("=" * 80)
-        print("\n评估完成")
-    finally:
-        if ros_bridge is not None:
-            ros_bridge.close()
-        if env is not None:
-            env.close()
+    print("\n评估完成")
 
 
 if __name__ == "__main__":
