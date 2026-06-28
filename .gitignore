@@ -15,9 +15,10 @@ env/
 # uv
 .python-version
 
-# IDE
+# IDE / Project tools
 .vscode/
 .idea/
+.deepseek/
 *.swp
 *.swo
 
